@@ -8,8 +8,14 @@ SITEURL = 'http://cane:8000'
 
 THEME = 'themes/mockingbird'
 TIMEZONE = 'Asia/Yekaterinburg'
+
 DEFAULT_LANG = 'en'
 DEFAULT_PAGINATION = 10
+DEFAULT_CATEGORY = 'Uncategorized'
+DEFAULT_DATE_FORMAT = '%Y-%m-%d %H:%M'
+
+ARTICLE_URL = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
+ARTICLE_SAVE_AS = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
 
 FEED_DOMAIN = SITEURL
 FEED_ATOM = 'feeds/atom.xml'
@@ -23,7 +29,9 @@ LINKS = [
 	('Homepage', 'fraggod.net') ]
 
 
-PLUGINS = ['pelican.plugins.sitemap']
+PLUGINS = [
+	'pelican.plugins.html_rst_directive',
+	'pelican.plugins.sitemap' ]
 
 SITEMAP = dict(
 	format='xml',

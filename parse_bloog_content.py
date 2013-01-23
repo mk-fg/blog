@@ -65,7 +65,6 @@ def main(argv=None):
 			dst.write('\n'.join(filter(None, [
 				'{}\n{}\n'.format(title, '#'*len(title)),
 				':date: {}'.format(published.strftime('%Y-%m-%d %H:%M')),
-				':slug: {}'.format(slug),
 				tags and ':tags: {}'.format(', '.join(tags)),
 				'\n', body ])).encode('utf-8'))
 

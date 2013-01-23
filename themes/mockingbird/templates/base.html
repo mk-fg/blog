@@ -26,13 +26,13 @@
 
                 <li {%- if page_name == "index" %} class="selected"{% endif %}><a href="{{ SITEURL }}">Home</a></li>
                 {% if DISPLAY_PAGES_ON_MENU -%}
-                {% for page in PAGES -%}
-                <li {%- if output_file == page.url %} class="selected"{% endif %}><a href="{{ SITEURL }}/{{ page.url }}">{{ page.title }}</a></li>
+                {% for p in PAGES -%}
+                <li {%- if page and page.url == p.url %} class="selected"{% endif %}><a href="{{ SITEURL }}/{{ p.url }}">{{ p.title }}</a></li>
                 {% endfor -%}
                 {% endif -%}
 
-                <li {%- if page and page.slug == "contacts" %} class="selected"{% endif %}>{{ output_file }}<a href="{{ SITEURL }}/pages/contacts.html">Who</a></li>
-                <li {%- if output_file == "archives.html" %} class="selected"{% endif %}><a href="{{ SITEURL }}/archives.html">Archives</a></li>
+                <li {%- if page and page.slug == "contacts" %} class="selected"{% endif %}><a href="{{ SITEURL }}/pages/contacts.html">Who</a></li>
+                <li {%- if page_name == 'archives' %} class="selected"{% endif %}><a href="{{ SITEURL }}/archives.html">Archives</a></li>
                 {% if FEED_ALL_ATOM -%}
                 <li><a href="{{ SITEURL }}/{{ FEED_ALL_ATOM }}">Feed</a></li>
                 {%- endif %}
