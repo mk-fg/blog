@@ -1,0 +1,386 @@
+cgroups initialization, libcgroup and my ad-hoc replacement for it
+##################################################################
+
+:date: 2011-02-26 20:28
+:tags: python, sysadmin, rate-limiting, systemd
+
+
+| Linux control groups (cgroups) rock.
+| If you've never used them at all, you bloody well should.
+
+| "git gc --aggressive" of a linux kernel tree killing you disk and cpu?
+| Background compilation makes desktop apps sluggish? Apps step on each others'
+  toes? Disk activity totally kills performance?
+
+I've lived with all of the above on the desktop in the (not so distant) past and
+cgroups just make all this shit go away - even forkbombs and super-multithreaded
+i/o can just be isolated in their own cgroup (from which there's no way to
+escape, not with any amount of forks) and scheduled/throttled (cpu
+hard-throttling - w/o cpusets - `seem to be coming soon as well
+<http://thread.gmane.org/gmane.linux.kernel/934338>`_) as necessary.
+
+Some problems with process classification and management of these limits seem to
+exist though.
+
+| `Systemd
+  <http://blog.fraggod.net/2010/11/From-Baselayout-to-Systemd-setup-on-Exherbo>`_
+  does a great job of classification of everything outside of user session
+  (i.e. all the daemons) - any rc/cgroup can be specified right in the unit
+  files or set by default via system.conf.
+| And it also makes all this stuff neat and tidy because cgroup support there is
+  not even optional - it's basic mechanism on which systemd is built, used to
+  isolate all the processes belonging to one daemon or the other in place of
+  hopefully-gone-for-good crappy and unreliable pidfiles. No renegade processes,
+  leftovers, pids mixups... etc, ever.
+
+| Bad news however is that all the cool stuff it can do ends right there.
+| Classification is nice, but there's little point in it from resource-limiting
+  perspective without setting the actual limits, and systemd doesn't do that
+  (`recent thread on systemd-devel
+  <http://thread.gmane.org/gmane.comp.sysutils.systemd.devel/1322>`_).
+| Besides, no classification for user-started processes means that desktop users
+  are totally on their own, since all resource consumption there branches off
+  the user's fingertips. And desktop is where responsiveness actually matters
+  for me (as in "me the regular user"), so clearly something is needed to create
+  cgroups, set limits there and classify processes to be put into these cgroups.
+
+| `libcgroup project <http://libcg.sourceforge.net/>`_ looks like the remedy at
+  first, but since I started using it about a year ago, it's been nothing but
+  the source of pain.
+| First task that stands before it is to actually create cgroups' tree, mount
+  all the resource controller pseudo-filesystems and set the appropriate limits
+  there.
+| libcgroup project has cgconfigparser for that, which is probably the most
+  brain-dead tool one can come up with. Configuration is stone-age pain in the
+  ass, making you clench your teeth, fuck all the DRY principles and write
+  N*100 line crap for even the simpliest tasks with as much punctuation as
+  possible to cram in w/o making eyes water.
+| Then, that cool toy parses the config, giving no indication where you messed
+  it up but the dreaded message like "failed to parse file". Maybe it's not
+  harder to get right by hand than XML, but at least XML-processing tools give
+  some useful feedback.
+
+| Syntax aside, tool still sucks hard when it comes to apply all the stuff
+  there - it either does every mount/mkdir/write w/o error or just gives you the
+  same "something failed, go figure" indication. Something being already mounted
+  counts as failure as well, so it doesn't play along with anything, including
+  systemd.
+| Worse yet, when it inevitably fails, it starts a "rollback" sequence,
+  unmounting and removing all the shit it was supposed to mount/create.
+| After killing all the configuration you could've had, it will fail
+  anyway. strace will show you why, of course, but if that's the feedback
+  mechanism the developers had in mind...
+
+| Surely, classification tools there can't be any worse than that? Wrong, they
+  certainly are.
+| Maybe C-API is where the project shines, but I have no reason to believe that,
+  and luckily I don't seem to have any need to find out.
+
+Luckily, cgroups can be controlled via regular filesystem calls, and thoroughly
+documented (in `Documentation/cgroups
+<http://git.kernel.org/?p=linux/kernel/git/next/linux-next.git;a=tree;f=Documentation/cgroups;hb=HEAD>`_).
+
+Anyways, my humble needs (for the purposes of this post) are:
+
+-  isolate compilation processes, usually performed by "cave" client of
+   paludis package mangler (exherbo) and occasionally shell-invoked make
+   in a kernel tree, from all the other processes;
+-  insulate specific "desktop" processes like firefox and occasional
+   java-based crap from the rest of the system as well;
+-  create all these hierarchies in a freezer and have a convenient
+   stop-switch for these groups.
+
+So, how would I initially approach it with libcgroup? Ok, here's the
+cgconfig.conf:
+
+::
+
+  ### Mounts
+
+  mount {
+    cpu = /sys/fs/cgroup/cpu;
+    blkio = /sys/fs/cgroup/blkio;
+    freezer = /sys/fs/cgroup/freezer;
+  }
+
+  ### Hierarchical RCs
+
+  group tagged/cave {
+    perm {
+      task {
+        uid = root;
+        gid = paludisbuild;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    cpu {
+      cpu.shares = 100;
+    }
+    freezer {
+    }
+  }
+
+  group tagged/desktop/roam {
+    perm {
+      task {
+        uid = root;
+        gid = users;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    cpu {
+      cpu.shares = 300;
+    }
+    freezer {
+    }
+  }
+
+  group tagged/desktop/java {
+    perm {
+      task {
+        uid = root;
+        gid = users;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    cpu {
+      cpu.shares = 100;
+    }
+    freezer {
+    }
+  }
+
+  ### Non-hierarchical RCs (blkio)
+
+  group tagged.cave {
+    perm {
+      task {
+        uid = root;
+        gid = users;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    blkio {
+      blkio.weight = 100;
+    }
+  }
+
+  group tagged.desktop.roam {
+    perm {
+      task {
+        uid = root;
+        gid = users;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    blkio {
+      blkio.weight = 300;
+    }
+  }
+
+  group tagged.desktop.java {
+    perm {
+      task {
+        uid = root;
+        gid = users;
+      }
+      admin {
+        uid = root;
+        gid = root;
+      }
+    }
+
+    blkio {
+      blkio.weight = 100;
+    }
+  }
+
+| Yep, it's huge, ugly and stupid.
+| Oh, and you have to do some chmods afterwards (more wrapping!) to make the
+  "group ..." lines actually matter.
+
+So, what do I want it to look like? This:
+
+.. code-block:: yaml
+
+  path: /sys/fs/cgroup
+
+  defaults:
+    _tasks: root:wheel:664
+    _admin: root:wheel:644
+    freezer:
+
+  groups:
+
+    base:
+      _default: true
+      cpu.shares: 1000
+      blkio.weight: 1000
+
+    tagged:
+      cave:
+        _tasks: root:paludisbuild
+        _admin: root:paludisbuild
+        cpu.shares: 100
+        blkio.weight: 100
+
+      desktop:
+        roam:
+          _tasks: root:users
+          cpu.shares: 300
+          blkio.weight: 300
+        java:
+          _tasks: root:users
+          cpu.shares: 100
+          blkio.weight: 100
+
+It's parseable and readable `YAML <http://en.wikipedia.org/wiki/Yaml>`_, not
+some parenthesis-semicolon nightmare of a C junkie (you may think that because
+of these spaces don't matter there btw... well, think again!).
+
+| After writing `that config-I-like-to-see
+  <http://fraggod.net/static/code/cgroup-tools/cgconf.yaml>`_, I just spent a
+  few hours to write a `script to apply all the rules there
+  <http://fraggod.net/static/code/cgroup-tools/cgconf.py>`_ while providing all
+  the debugging facilities I can think of and wiped my system clean of
+  libcgroup, it's that simple.
+| Didn't had to touch the parser again or debug it either (especially with - god
+  forbid - strace), everything just worked as expected, so I thought I'd dump it
+  here jic.
+
+Configuration file above (`YAML <http://en.wikipedia.org/wiki/Yaml>`_) consists
+of three basic definition blocks:
+
+| "path" to where cgroups should be initialized.
+| Names for the created and mounted rc's are taken right from "groups" and
+  "defaults" sections.
+| Yes, that doesn't allow mounting "blkio" resource controller to "cpu"
+  directory, guess I'll go back to using libcgroup when I'd want to do
+  that... right after seeing the psychiatrist to have my head examined...  if
+  they'd let me go back to society afterwards, that is.
+
+| "groups" with actual tree of group parameter definitions.
+| Two special nodes here - "\_tasks" and "\_admin" - may contain (otherwise the
+  stuff from "defaults" is used) ownership/modes for all cgroup knob-files
+  ("\_admin") and "tasks" file ("\_tasks"), these can be specified as
+  "user[:group[:mode]]" (with brackets indicating optional definition, of
+  course) with non-specified optional parts taken from the "defaults" section.
+| Limits (or any other settings for any kernel-provided knobs there, for that
+  matter) can either be defined on per-rc-dict basis, like this:
+
+.. code-block:: yaml
+
+    roam:
+      _tasks: root:users
+      cpu:
+        shares: 300
+      blkio:
+        weight: 300
+        throttle.write_bps_device: 253:9 1000000
+
+Or just with one line per rc knob, like this:
+
+.. code-block:: yaml
+
+    roam:
+      _tasks: root:users
+      cpu.shares: 300
+      blkio.weight: 300
+      blkio.throttle.write_bps_device: 253:9 1000000
+
+| Empty dicts (like "freezer" in "defaults") will just create cgroup in a named
+  rc, but won't touch any knobs there.
+| And the "\_default" parameter indicates that every pid/tid, listed in a root
+  "tasks" file of resource controllers, specified in this cgroup, should belong
+  to it. That is, act like default cgroup for any tasks, not classified into any
+  other cgroup.
+
+"defaults" section mirrors the structure of any leaf cgroup.  RCs/parameters
+here will be used for created cgroups, unless overidden in "groups" section.
+
+| `Script to process this stuff (cgconf)
+  <http://fraggod.net/static/code/cgroup-tools/cgconf.py>`_ can be run with
+  --debug to dump a shitload of info about every step it takes (and why it does
+  that), plus with --dry-run flag to just dump all the actions w/o actually
+  doing anything.
+| cgconf can be launched as many times as needed to get the job done - it won't
+  unmount anything (what for? out of fear of data loss on a pseudo-fs?), will
+  just create/mount missing stuff, adjust defined permissions and set defined
+  limits without touching anything else, thus it will work alongside with
+  everything that can also be using these hierarchies - systemd, libcgroup,
+  ulatencyd, whatever... just set what you need to adjust in .yaml and it wll be
+  there after run, no side effects.
+| `cgconf.yaml <http://fraggod.net/static/code/cgroup-tools/cgconf.yaml>`_
+  (.yaml, generally speaking) file can be put alongside cgconf or passed via the
+  -c parameter.
+| Anyway, -h or --help is there, in case of any further questions.
+
+That handles the limits and initial (default cgroup for all tasks)
+classification part, but then chosen tasks also need to be assigned to a
+dedicated cgroups.
+
+| libcgroup has pam\_cgroup module and cgred daemon, neither of which can
+  sensibly (re)classify anything within a user session, plus cgexec and
+  cgclassify wrappers to basically do "echo $$ >/.../some\_cg/tasks && exec $1"
+  or just "echo" respectively.
+| These are dumb simple, nothing done there to make them any easier than echo,
+  so even using libcgroup I had to wrap these.
+
+Since I knew exactly which (few) apps should be confined to which groups, I just
+wrote a simple wrapper scripts for each, putting these in a separate dir, in the
+head of PATH. Example:
+
+.. code-block:: sh
+
+    #!/usr/local/bin/cgrc -s desktop/roam/usr/bin/firefox
+
+| `cgrc script <http://fraggod.net/static/code/cgroup-tools/cgrc.py>`_ here is a
+  dead-simple wrapper to parse cgroup parameter, putting itself into
+  corresponding cgroup within every rc where it exists, making special
+  conversion in case not-yet-hierarchical (there's a patchset for that though:
+  http://lkml.org/lkml/2010/8/30/30) blkio, exec'ing the specified binary with
+  all the passed arguments afterwards.
+| All the parameters after cgroup (or "-g ", for the sake of clarity) go to the
+  specified binary. "-s" option indicates that script is used in shebang, so
+  it'll read command from the file specified in argv after that and pass all the
+  further arguments to it.
+| Otherwise cgrc script can be used as "cgrc -g /usr/bin/firefox " or
+  "cgrc. /usr/bin/firefox ", so it's actually painless and effortless to use
+  this right from the interactive shell. Amen for the crappy libcgroup tools.
+
+| Another special use-case for cgroups I've found useful on many occasions is a
+  "freezer" thing - no matter how many processes compilation (or whatever other
+  cgroup-confined stuff) forks, they can be instantly and painlessly stopped and
+  resumed afterwards.
+| `cgfreeze dozen-liner script
+  <http://fraggod.net/static/code/cgroup-tools/cgfreeze.py>`_ addresses this
+  need in my case - "cgfreeze cave" will stop "cave" cgroup, "cgfreeze -u cave"
+  resume, and "cgfreeze -c cave" will just show it's current status, see -h
+  there for details. No pgrep, kill -STOP or ^Z involved.
+
+Guess I'll direct the next poor soul struggling with libcgroup here, instead of
+wasting time explaining how to work around that crap and facing the inevitable
+question "what else is there?" \*sigh\*.
+
+All the mentioned scripts can be found `here
+<http://fraggod.net/static/code/cgroup-tools/>`_.

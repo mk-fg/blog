@@ -1,0 +1,24 @@
+Moar free time!
+###############
+
+:date: 2010-11-12 13:33
+:tags: rl
+
+
+As of today, I'm unemployed once again.
+
+Guess now I'll have time to debug and report a btrfs-systemd crash, read all the
+feeds, fix some long-standing issues on my home servers, update an antique web
+setup, write a few watch-notify scripts there, deploy/update a configuration
+management systems, update/finish/publish a few of my spare-time projects, start
+playing with a lot of new ideas, check out networking tools like connman, wicd,
+nm and a bunch of other cool-stuff oss projects, write a few hooks for plotting
+and graphing stuff in real-time, adapt emacs mail/rss tools, update other elisp
+stuff, emacs itself, a few symbian-to pc event hooks, check out gnustep
+environment, ltu lang articles, pybrain and a few other simple machine-learning
+implementations, some lua-ai for spring, play a lot of games I've missed in past
+few years, read a few dozen books I've already uploaded but never had a time to,
+study linear and geometric algebra...  maybe find a new job, even, before I
+starve?
+
+Nah, nobody in the world have that much time... ;)

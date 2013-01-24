@@ -1,0 +1,102 @@
+Getting rid of dead bittorrent trackers for rtorrent by scrubbing .torrent files
+################################################################################
+
+:date: 2010-06-05 08:33
+:tags: web, p2p, python
+
+
+If you're downloading stuff off the 'net via bt like me, then `TPB
+<http://thepiratebay.org/>`_ is probably quite a familiar place to you.
+
+| Ever since the '09 trial there were a problems with TPB trackers
+  (tracker.thepiratebay.org) - the name gets inserted into every .torrent yet it
+  points to 127.0.0.1.
+| Lately, TPB offshot, tracker.openbittorrent.com suffers from the same problem
+  and actually there's a lot of other trackers in .torrent files that point
+  either at 0.0.0.0 or 127.0.0.1 these days.
+
+| As I use `rtorrent <http://libtorrent.rakshasa.no/>`_, I have an issue with
+  this - rtorrent seem pretty dumb when it comes to tracker filtering so it
+  queries all of them on a round-robin basis, without checking where it's name
+  points to or if it's down for the whole app uptime, and queries take quite a
+  lot of time to timeout, so that means at least two-minute delay in starting
+  download (as there's TPB trackers first), plus it breaks a lot of other things
+  like manual tracker-cycling ("t" key), since it seem to prefer only top-tier
+  trackers and these are 100% down.
+| Now the problem with http to localhost can be solved with the firewall, of
+  course, although it's an ugly solution, and 0.0.0.0 seem to fail pretty fast
+  by itself, but stateless udp is still a problem.
+| Another way to tackle the issue is probably just to use a client that is
+  capable of filtering the trackers by ip address, but that probably means some
+  heavy-duty stuff like azureus or vanilla bittorrent which I've found pretty
+  buggy and also surprisingly heavy in the past.
+
+So the easiest generic solution (which will, of course, work for rtorrent) I've
+found is just to process the .torrent files before feeding them to the leecher
+app. Since I'm downloading these via firefox exclusively, and there I use
+`FlashGot <http://flashgot.net/>`_ (not the standard "open with" interface since
+I also use it to download large files on remote machine w/o firefox, and afaik
+it's just not the way "open with" works) to drop them into an torrent bin via
+script, it's actually a matter of updating the link-receiving script.
+
+| `Bencode <http://en.wikipedia.org/wiki/Bencode>`_ is not a mystery, plus it's
+  pure-py implementation is actually the reference one, since it's a part of
+  original python bittorrent client, so all I basically had to do is to rip
+  bencode.py from it and paste the relevant part into the script.
+| The right way might've been to add dependency on the whole bittorrent client,
+  but it's an overkill for such a simple task plus the api itself seem to be
+  purely internal and probably a subject to change with client releases anyway.
+
+So, to the script itself...
+
+.. code-block:: python
+
+    # URL checker
+    def trak_check(trak):
+        if not trak: return False
+        try: ip = gethostbyname(urlparse(trak).netloc.split(':', 1)[0])
+        except gaierror: return True # prehaps it will resolve later on
+        else: return ip not in ('127.0.0.1', '0.0.0.0')
+
+    # Actual processing
+    torrent = bdecode(torrent)
+    for tier in list(torrent['announce-list']):
+        for trak in list(tier):
+            if not trak_check(trak):
+                tier.remove(trak)
+                # print >>sys.stderr, 'Dropped:', trak
+        if not tier: torrent['announce-list'].remove(tier)
+    # print >>sys.stderr, 'Result:', torrent['announce-list']
+    if not trak_check(torrent['announce']):
+        torrent['announce'] = torrent['announce-list'][0][0]
+    torrent = bencode(torrent)
+
+| That, plus the simple "fetch-dump" part, if needed.
+| No magic of any kind, just a plain "announce-list" and "announce" urls check,
+  dropping each only if it resolves to that bogus placeholder IPs.
+
+I've wanted to make it as light as possible so no logging or optparse/argparse
+stuff I tend cram everywhere I can, and the extra and heavy imports like
+urllib/urllib2 are conditional as well. The only dependency is python (>=2.6)
+itself.
+
+Basic use-case is one of these:
+
+.. code-block:: console
+
+  % brecode.py < /path/to/file.torrent > /path/to/proccessed.torrent
+  % brecode.py http://tpb.org/torrents/myfile.torrent > /path/to/proccessed.torrent
+  % brecode.py http://tpb.org/torrents/myfile.torrent\
+      -r http://tpb.org/ -c "...some cookies..." -d /path/to/torrents-bin/
+
+All the extra headers like cookies and referer are optional, so is the
+destination path (dir, basename is generated from URL). My use-case in FlashGot
+is this: "[URL] -r [REFERER] -c [COOKIE] -d /mnt/p2p/bt/torrents"
+
+And `there's the script itself <http://fraggod.net/oss/bin_scrz/brecode.py>`_.
+
+| Quick, dirty and inconclusive testing showed almost 100 KB/s -> 600 KB/s
+  increase on several different (two successive tests on the same file even with
+  clean session are obviously wrong) popular and unrelated .torrent files.
+| That's pretty inspiring. Guess now I can waste even more time on the TV-era
+  crap than before, oh joy ;)

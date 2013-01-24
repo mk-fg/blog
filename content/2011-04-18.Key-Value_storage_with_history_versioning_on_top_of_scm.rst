@@ -1,0 +1,72 @@
+Key-Value storage with history/versioning on top of scm
+#######################################################
+
+:date: 2011-04-18 02:59
+:tags: scm, sysadmin, python
+
+
+Working with a number of non-synced servers remotely (via `fabric
+<http://fabfile.org/>`_) lately, I've found the need to push updates to a set of
+(fairly similar) files.
+
+| It's a bit different story for each server, of course, like crontabs for a web
+  backend with a lot of periodic maintenance, data-shuffle and cache-related
+  tasks, firewall configurations, common html templates...  well, you get the
+  idea.
+| I'm not the only one who makes the changes there, and without any
+  change/version control for these sets of files, state for each file/server
+  combo is essentially unique and accidental change can only be reverted from a
+  weekly backup.
+| Not really a sensible infrastructure as far as I can tell (or just got used
+  to), but since I'm a total noob here, working for only a couple of weeks,
+  global changes are out of question, plus I've got my hands full with the other
+  tasks as it is.
+
+| So, I needed to change files, keeping the old state for each one in case
+  rollback is necessary, and actually check remote state before updating files,
+  since someone might've introduced either the same or conflicting change while
+  I was preparing mine.
+| Problem of conflicting changes can be solved by keeping some reference (local)
+  state and just applying patches on top of it. If file in question is important
+  enough, having such state is double-handy, since you can pull the remote state
+  in case of changes there, look through the diff (if any) and then decide
+  whether the patch is still valid or not.
+| Problem of rollbacks is solved long ago by various versioning tools.
+
+| Combined, two issues kinda beg for some sort of storage with a history of
+  changes for each value there, and since it's basically a text, diffs and
+  patches between any points of this history would also be nice to have.
+| It's the domain of the SCM's, but my use-case is a bit more complicated then
+  the usual usage of these by the fact that I need to create new revisions
+  non-interactively - ideally via something like a key-value api (set, get,
+  get\_older\_version) with the usual interactive interface to the history at
+  hand in case of any conflicts or complications.
+
+| Being most comfortable with `git <http://git-scm.com/>`_, I looked for
+  non-interactive db solutions on top of it, and the simpliest one I've found
+  was `gitshelve
+  <http://newartisans.com/2008/05/using-git-as-a-versioned-data-store-in-python/>`_.
+  `GitDB <http://packages.python.org/gitdb/>`_ seem to be more powerful, but
+  unnecessary complex for my use-case.
+| Then I just implemented patch (update key by a diff stream) and diff methods
+  (generate diff stream from key and file) on top of gitshelve plus writeback
+  operation, and thus got a fairly complete implementation of what I needed.
+
+Looking at such storage from a DBA perspective, it's looking pretty good -
+integrity and atomicity are assured by git locking, all sorts of replication and
+merging possible in a quite efficient and robust manner via git-merge and
+friends, cli interface and transparency of operation is just superb. Regular
+storage performance is probably far off db level though, but it's not an issue
+in my use-case.
+
+Here's `gitshelve
+<http://newartisans.com/2008/05/using-git-as-a-versioned-data-store-in-python/>`_
+and `state.py <https://fraggod.net/code/static/state.py>`_, as used in my fabric
+stuff. fabric imports can be just dropped there without much problem (I use
+fabric api to vary keys depending on host).
+
+| Pity I'm far more used to git than pure-py solutions like `mercurial
+  <http://mercurial.selenic.com/>`_ or `bazaar <http://bazaar.canonical.com/>`_,
+  since it'd have probably been much cleaner and simplier to implement such
+  storage on top of them - they probably expose python interface directly.
+| Guess I'll put rewriting the thing on top of hg on my long todo list.

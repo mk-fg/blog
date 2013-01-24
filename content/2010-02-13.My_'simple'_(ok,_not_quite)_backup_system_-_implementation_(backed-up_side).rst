@@ -1,0 +1,180 @@
+My "simple" (ok, not quite) backup system - implementation (backed-up side)
+###########################################################################
+
+:date: 2010-02-13 14:29
+:tags: python, unix, sysadmin, ssh
+
+
+As I've already outlined `before
+<http://blog.fraggod.net/2010/2/My-simple-ok-not-quite-backup-system>`_, my idea
+of backups comes down to these points:
+
+- No direct access to backup storage from backed-up machine, no knowledge about
+  backup storage layout there.
+
+- No any-time access from backup machine to backed-up one. Access should be
+  granted on the basis of request from backed-up host, for one connection only.
+
+- Read-only access to filesystem only, no shell or network access.
+
+- Secure transfer channel.
+
+- Incremental, yet independent backups, retaining all fs metadata.
+
+- No extra strain on network (wireless) or local disk space.
+
+- Non-interactive usage (from cron).
+
+- No root involved on any side at any time.
+
+And the idea is to implement these with openssh, rsync and a pair of scripts.
+
+Ok, the process is initiated by backed-up host, which will spawn sshd for single
+secure backup channel, so first thing to do is to invoke of ssh-keygen and get
+the pair of one-time keys from it.
+
+| As an extra precaution, there's no need to write private key to local
+  filesystem, as it's only needed by ssh-client on a remote (backup) host.
+| Funny thing is that ssh-keygen doesn't actually allow that, although it's
+  possible to make it use fifo socket instead of file.
+| FIFO socket implies blocking I/O however, so one more precaution should be
+  taken for script not to hang indefinitely.
+
+A few convenience functions here and there are imported from `fgc
+<http://fraggod.net/svc/git/fgc/>`_ module, but can be replaced by standard
+counterparts (POpen, unlink, etc) without problem - no magic there.
+
+Here we go:
+
+.. code-block:: python
+
+    def unjam(sig, frm):
+        raise RuntimeError, 'no data from ssh-keygen'
+    signal.signal(signal.SIGALRM, unjam)
+
+    os.mkfifo(key)
+    keygen = exe.proc( 'ssh-keygen', '-q',
+        '-t', 'rsa', '-b', '2048', '-N', '', '-f', key )
+
+    signal.alarm(5)
+    key_sub = open(key).read()
+    sh.rm(key, onerror=False)
+    if keygen.wait(): raise RuntimeError, 'ssh-keygen has failed'
+    signal.alarm(0)
+
+Public key can then be used to generate one-time ACL file, aka
+"authorized_hosts" file:
+
+.. code-block:: python
+
+    keygen = open(key_pub, 'r').read().strip(spaces)
+    open(key_pub, 'w').write(
+        'from="{0}" {1}\n'.format(remote_ip, keygen) )
+
+So, we have an ACL file and matching private key. It's time to start sshd:
+
+.. code-block:: python
+
+    sshd = exe.proc( '/usr/sbin/sshd', '-6', '-de', '-p{0}'.format(port),
+        '-oChallengeResponseAuthentication=no', # no password prompt
+        '-oAllowAgentForwarding=no', # no need for this
+        '-oAllowTcpForwarding=no', # no port-forwarding
+        '-oPermitTunnel=no', # no tunneling
+        '-oCompression=no', # minor speedup, since it's handled by rsync
+        '-oForceCommand=/usr/bin/ppy {0} -c'\
+            .format(os.path.realpath(__file__)), # enforce this script checks
+        '-oAuthorizedKeysFile={0}'\
+            .format(os.path.realpath(key_pub)), silent=True )
+
+A bit of an explaination here.
+
+"silent" keyword here just eats verbose stdout/stderr, since it's not needed for
+these purposes.
+
+According to original plan, I use "ForceCommand" to start the same
+initiator-script (but with "-c" parameter), so it will invoke rsync (and rsync
+only) with some optional checks and scheduling priority enforcements.
+
+| Plus, since initial script and sshd are started by ordinary user, we'd need to
+  get dac_read_search capability for rsync to be able to read (and only read)
+  every single file on local filesystem.
+| That's where `ppy binary <http://fraggod.net/prj/ppy/>`_ comes in, launching
+  this script with additional capabilities, defined for the script file.
+| Script itself doesn't need to make the caps effective - just pass as inherited
+  further to rsync binary, and that's where it, and I mean
+  cap_dac_read_search, should be activated and used.
+
+| To that end, system should have aforementioned wrapper (`ppy
+  <http://fraggod.net/prj/ppy/>`_) with permitted-effective caps, to provide
+  them in the first place, python binary with "cap_dac_read_search=i" and
+  rsync with "cap_dac_read_search=ei" (since it doesn't have option to
+  activate caps from it's code).
+| This may look like an awful lot of privileged bits, but it's absolutely not!
+  Inheritable caps are just that - inheritable, they won't get set by this bit
+  by itself.
+| In fact, one can think of whole fs as suid-inheritable, and here inheritance
+  only works for a small fragment of root's power and that only for three files,
+  w/o capability to propagnate anywhere else, if there'd be some exec in a bogus
+  commandline.
+
+Anyway, everything's set and ready for backup host to go ahead and grab local
+fs.
+
+Note that backup of every file isn't really necessary, since sometimes most
+heavy ones are just caches, games or media content, readily available for
+downloading from the net, so I just glance at my fs with xdiskusage tool (which
+is awesome, btw, even for remote servers' df monitoring: "ssh remote du -k / \|
+xdiskusage") to see if it's in need of cleanup and to add largest paths to
+backup-exclude list.
+
+Actually, I thought of dynamically excluding pretty much everything that can be
+easily rebuilt by package manager (`portage
+<http://www.gentoo.org/proj/en/portage/index.xml>`_ in my case), but decided
+that I have space for these, and backing it all up makes "rm -rf", updates or
+compiler errors (since I'm going to try `icc
+<http://www.intel.com/software/products/compilers/clin/>`_) much less scary
+anyway.
+
+Ok, here goes the backup request:
+
+.. code-block:: python
+
+    ssh = exe.proc( 'ssh', remote,
+        '{0}:{1}'.format(os.uname()[1], port), stdin=exe.PIPE )
+    ssh.stdin.write(key_sub)
+    ssh.stdin.write('\n\n\n')
+    ssh.stdin.write(open('/etc/bak_exclude').read())
+    ssh.stdin.close()
+
+    if ssh.wait(): raise RuntimeError, 'Remote call failed'
+
+"remote" here is some unprivileged user on a backup host with backup-grab script
+set as a shell. Pubkey auth is used, so no interaction is required.
+
+| And that actually concludes locally-initiated operations - it's just wait to
+  confirm that the task's completed.
+| Now backup host have the request, to-be-backed-up hostname and port on the
+  commandline, with private key and paths-to-exclude list piped through.
+
+One more thing done locally though is the invocation of this script when backup
+host will try to grab fs, but it's simple and straightforward as well:
+
+.. code-block:: python
+
+    cmd = os.getenv('SSH_ORIGINAL_COMMAND')
+    if not cmd: parser.error('No SSH_ORIGINAL_COMMAND in ENV')
+    if not re.match(
+            r'^(ionice -c\d( -n\d)? )?rsync --server', cmd ):
+        parser.error('Disallowed command: {0}'.format(cmd))
+    try: cmd, argz = cmd.split(' ', 1)
+    except ValueError: argz = ''
+    os.execlp(cmd, os.path.basename(cmd), *argz.split())
+
+Rsync takes control from here and reads fs tree, checking files and their
+attributes against previous backups with it's handy rolling-checksums, creating
+hardlinks on match and transferring only mismatching pieces, if any, but more on
+that later, in the next post about implementation of the other side of this
+operation.
+
+Full version of this script can be found `here
+<http://fraggod.net/oss/bin_scrz/fs_backup.py>`_.

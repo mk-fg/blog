@@ -1,0 +1,145 @@
+Proper(-ish) way to start long-running systemd service on udev event (device hotplug)
+#####################################################################################
+
+:date: 2012-06-16 12:26
+:tags: sysadmin, systemd, udev
+
+
+| I use a smartcard token which requires long-running (while device is plugged)
+  handler process to communicate with the chip.
+| Basically, udev has to start a daemon process when the device get plugged.
+
+| Until recently, udev didn't mind doing that via just RUN+="/path/to/binary
+  ...", but in recent merged systemd-udevd versions this behavior was
+  deprecated:
+
+::
+
+    RUN
+    ...
+    Starting daemons or other long running processes is not appropriate for
+    udev; the forked processes, detached or not, will be unconditionally killed
+    after the event handling has finished.
+
+I think it's for the best - less accumulating cruft and unmanageable pids forked
+from udevd, but unfortunately it also breaks existing udev rule-files, the ones
+which use RUN+="..." to do just that.
+
+One of the most obvious breakage for me was the smartcard failing, so decided to
+fix that. Documentation on the whole migration process is somewhat lacking
+(hence this post), even though docs on all the individual pieces are there
+(which are actually awesome).
+
+| Main doc here is systemd.device(5) for the reference on the udev attributes
+  which systemd recognizes, and of course udev(7) for a generic syntax
+  reference.
+| Also, there's `this entry
+  <http://0pointer.de/blog/projects/socket-activation2.html>`_ on Lennart's
+  blog.
+
+In my case, when device (usb smartcard token) get plugged, ifdhandler process
+should be started via openct-control (`OpenCT sc middleware
+<https://www.opensc-project.org/openct>`_), which then creates unix socket
+through which openct libraries (used in turn by OpenSC PKCS#11 or PCSClite) can
+access the hardware.
+
+So, basically I've had something like this (there are more rules for different
+hw, of course, but for the sake of clarity...):
+
+::
+
+    SUBSYSTEM!="usb", GOTO="openct_rules_end"
+    ACTION!="add", GOTO="openct_rules_end"
+    PROGRAM="/bin/sleep 0.1"
+    SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device",\
+      ENV{ID_VENDOR_ID}=="0529", ENV{ID_MODEL_ID}=="0600",\
+      GROUP="usb",\
+      RUN+="/usr/sbin/openct-control attach usb:$env{PRODUCT} usb $env{DEVNAME}"
+    LABEL="openct_rules_end"
+
+Instead of RUN here, ENV{SYSTEMD_WANTS} can be used to start a properly-handled
+service, but note that some hardware parameters are passed from udev properties
+and in general systemd unit can't reference these.
+
+I.e. if just ENV{SYSTEMD_WANTS}="openct-handler.service" (or more generic
+smartcard.target) is started, it won't know which device to pass to
+"openct-control attach" command.
+
+One way might be storing these parameters in some dir, where they'll be picked
+by some path unit, a bit more hacky way would be scanning usb bus in the
+handler, and yet another one (which I decided to go along with) is to use
+systemd unit-file templating to pass these parameters.
+
+openct-handler\@.service:
+
+.. code-block:: ini
+
+    [Unit]
+    Requires=openct.service
+
+    [Service]
+    Type=forking
+    GuessMainPID=false
+    ExecStart=/bin/sh -c "exec openct-control attach %I"
+
+Note that it requires openct.service, which is basically does "openct-control
+init" once per boot to setup paths and whatnot:
+
+.. code-block:: ini
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/usr/sbin/openct-control init
+    ExecStop=/usr/sbin/openct-control shutdown
+
+    [Install]
+    WantedBy=multi-user.target
+
+| Another thing to note is that "sh" used in the handler.
+| It's intentional, because just %I will be passed by systemd as a single
+  argument, while it should be three of them after "attach".
+
+Finally, udev rules file for the device:
+
+::
+
+    SUBSYSTEM!="usb", GOTO="openct_rules_end"
+    ACTION!="add", GOTO="openct_rules_end"
+    SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device",\
+      ENV{ID_VENDOR_ID}=="0529", ENV{ID_MODEL_ID}=="0600",\
+      GROUP="usb", TAG+="systemd",\
+      ENV{SYSTEMD_WANTS}="openct-handler@\
+      usb:$env{ID_VENDOR_ID}-$env{ID_MODEL_ID}-$env{ID_REVISION}\
+      \x20usb\x20-dev-bus-usb-$env{BUSNUM}-$env{DEVNUM}.service"
+    LABEL="openct_rules_end"
+
+(I highly doubt newline escaping in ENV{SYSTEMD\_WANTS} above will work
+- added them just for readability, so pls strip these in your mind to a single
+line without spaces)
+
+Systemd escaping in the rule above is described in systemd.unit(5) and produces
+a name - and start a service - like this one:
+
+::
+
+  openct-handler@usb:0529-0600-0100\x20usb\x20-dev-bus-usb-002-003.service
+
+Which then invokes:
+
+::
+
+  sh -c "exec openct-control attach\
+    usb:0529/0600/0100 usb /dev/bus/usb/002/003"
+
+And it forks ifdhandler process, which works with smartcard from then on.
+
+ifdhandler seem to be able to detect unplugging events and exits gracefully, but
+otherwise BindTo= unit directive can be used to stop the service when udev
+detects that device is unplugged.
+
+Note that it might be more obvious to just do RUN+="systemctl start
+whatever.service", but it's a worse way to do it, because you don't bind that
+service to a device in any way, don't produce the "whatever.device" unit and
+there are lot of complications due to systemctl being a tool for the user, not
+the API proper.

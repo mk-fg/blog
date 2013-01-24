@@ -1,0 +1,268 @@
+Home-brewed NAS gluster with sensible replication
+#################################################
+
+:date: 2010-08-15 09:13
+:tags: sysadmin, nfs, caching, replication
+
+
+Hardware
+~~~~~~~~
+
+| I'd say "every sufficiently advanced user is indistinguishable from a
+  sysadmin" (yes, it's a play on famous Arthur C Clarke's quote), and it doesn't
+  take much of "advanced" to come to a home-server idea.
+| And I bet the main purpose for most of these aren't playground, p2p client or
+  some http/ftp server - it's just a storage. Serving and updating the stored
+  stuff is kinda secondary.
+| And I guess it's some sort of nature law that any storage runs outta free
+  space sooner or later. And when this happens, just buying more space seem to
+  be a better option than cleanup because a) "hey, there's dirt-cheap 2TB
+  harddisks out there!" b) you just get used to having all that stuff at
+  packet's reach.
+
+| Going down this road I found myself out of connectors on the motherboard
+  (which is fairly spartan `D510MO miniITX
+  <http://www.intel.com/products/desktop/motherboards/D510MO/D510MO-overview.htm>`_)
+  and the slots for an extension cards (the only PCI is used by dual-port nic).
+| So I hooked up two harddisks via usb, but either the usb-sata controllers or
+  usb's on the motherboard were faulty and controllers just hang with both leds
+  on, vanishing from the system. Not that it's a problem - just mdraid'ed them
+  into raid1 and when one fails like that, I just have to replug it and start
+  raid recovery, never losing access to the data itself.
+
+| Then, to extend the storage capacity a bit further (and to provide a backup to
+  that media content) I just bought +1 miniITX unit.
+| Now, I could've mouned two NFS'es from both units, but this approach has
+  several disadvantages:
+
+-  Two mounts instead of one. Ok, not a big deal by itself.
+- I'd have to manage free space on these by hand, shuffling subtrees between
+  them.
+- I need replication for some subtrees, and that complicates the previous point
+  a bit further.
+- Some sort of HA would be nice, so I'd be able to shutdown one replica and
+  switch to using another automatically.
+
+| The obvious improvement would be to use some distributed network filesystem,
+  and pondering on the possibilities I've decided to stick with the glusterfs
+  due to it's flexible yet very simple "layer cake" configuration model.
+| Oh, and the most important reason to set this whole thing up - it's just fun ;)
+
+The Setup
+~~~~~~~~~
+
+Ok, what I have is:
+
+- Node1
+
+  - physical storage (raid1) "disk11", 300G, old and fairly "valuable" data
+    (well, of course it's not "valuable", since I can just re-download it all
+    from p2p, but I'd hate to do that)
+
+  - physical disk "disk12", 150G, same stuff as disk11
+
+- Node2
+
+  - physical disk "disk2", 1.5T, blank, to-be-filled
+
+What I want is one single network storage, with db1 (disk11 + disk12) data
+available from any node (replicated) and new stuff which won't fit onto this
+storage should be writen to db2 (what's left of disk2).
+
+With glusterfs there are several ways to do this:
+
+
+Scenario 1: fully network-aware client.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. html::
+
+  <img align="right" src="|filename|images/gluster_sc1.png">
+
+That's actually the simpliest scenario - glusterfsd.vol files on "nodes" should
+just export local disks and client configuration ties it all together.
+
+Pros:
+
+- Fault tolerance. Client is fully aware of the storage hierarchy, so if one
+  node with db1 is down, it will just use the other one.
+
+- If the bandwidth is better than disk i/o, reading from db1 can be potentially
+  faster (dunno if glusterfs allows that, actually), but that's not the case,
+  since "client" is one of the laptops and it's a slow wifi link.
+
+Cons:
+
+- Write performance is bad - client has to push data to both nodes, and that's a
+   big minus with my link.
+
+
+Scenario 2: server-side replication.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. html::
+
+  <img align="right" src="|filename|images/gluster_sc2_1.png">
+  <img align="right" src="|filename|images/gluster_sc2_2.png">
+
+Here, "nodes" export local disks for each other and gather local+remote db1 into
+cluster/replicate and then export this already-replicated volume. Client just
+ties db2 and one of the replicated-db1 together via nufa or distribute layer.
+
+Pros:
+
+- Better performance.
+
+Cons:
+
+- Single point of failure, not only for db2 (which is natural, since it's not
+  replicated), but for db1 as well.
+
+
+Scenario 3: server-side replication + fully-aware client.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. html::
+
+  <img align="right" src="|filename|images/gluster_sc3.png">
+
+db1 replicas are synced by "nodes" and client mounts all three volumes (2 x db1,
+1 x db2) with either cluster/unify layer and nufa scheduler (listing both db1
+replicas in "local-volume-name") or cluster/nufa.
+
+| That's the answer to obvious question I've asked myself after implementing
+  scenario 2: "why not get rid of this single\_point\_of\_failure just by using
+  not single, but both replicated-db1 volumes in nufa?"
+| In this case, if node1 goes down, client won't even notice it! And if that
+  happens to node2, files from db2 just disappear from hierarchy, but db1 will
+  still remain fully-accessible.
+
+But there is a problem: cluster/nufa has no support for multiple
+local-volume-name specs. cluster/unify has this support, but requires it's ugly
+"namespace-volume" hack. The solution would be to aggregate both db1's into a
+distribute layer and use it as a single volume alongside db2.
+
+With aforementioned physical layout this seem to be just the best all-around
+case.
+
+Pros:
+
+-  Best performance and network utilization.
+
+Cons:
+
+-  None?
+
+
+Implementation
+^^^^^^^^^^^^^^
+
+So, scenarios 2 and 3 in terms of glusterfs, with the omission of different
+performance, lock layers and a few options, for the sake of clarity:
+
+**node1 glusterfsd.vol:**
+
+::
+
+    ## db1: replicated node1/node2
+    volume local-db1
+        type storage/posix
+        option directory /srv/storage/db1
+    end-volume
+    # No client-caches here, because ops should already come aggregated
+    # from the client, and the link between servers is much fatter than the client's
+    volume node2-db1
+        type protocol/client
+        option remote-host node2
+        option remote-subvolume local-db1
+    end-volume
+    volume composite-db1
+        type cluster/replicate
+        subvolumes local-db1 node2-db1
+    end-volume
+    ## db: linear (nufa) db1 + db2
+    ## export: local-db1 (for peers), composite-db1 (for clients)
+    volume export
+        type protocol/server
+        subvolumes local-db1 composite-db1
+    end-volume
+
+**node2 glusterfsd.vol:**
+
+::
+
+    ## db1: replicated node1/node2
+    volume local-db1
+        type storage/posix
+        option directory /srv/storage/db1
+    end-volume
+    # No client-caches here, because ops should already come aggregated
+    # from the client, and the link between servers is much fatter than the client's
+    volume node1-db1
+        type protocol/client
+        option remote-host node1
+        option remote-subvolume local-db1
+    end-volume
+    volume composite-db1
+        type cluster/replicate
+        subvolumes local-db1 node1-db1
+    end-volume
+    ## db2: node2
+    volume db2
+        type storage/posix
+        option directory /srv/storage/db2
+    end-volume
+    ## db: linear (nufa) db1 + db2
+    ## export: local-db1 (for peers), composite-db1 (for clients)
+    volume export
+        type protocol/server
+        subvolumes local-db1 composite-db1
+    end-volume
+
+**client (replicated to both nodes):**
+
+::
+
+    volume node1-db1
+        type protocol/client
+        option remote-host node1
+        option remote-subvolume composite-db1
+    end-volume
+    volume node2-db1
+        type protocol/client
+        option remote-host node2
+        option remote-subvolume composite-db1
+    end-volume
+    volume db1
+        type cluster/distribute
+        option remote-subvolume node1-db1 node2-db1
+    end-volume
+    volume db2
+        type protocol/client
+        option remote-host node2
+        option remote-subvolume db2
+    end-volume
+    volume db
+        type cluster/nufa
+        option local-volume-name db1
+        subvolumes db1 db2
+    end-volume
+
+| Actually there's one more scenario I thought of for non-local clients - same
+  as 2, but pushing nufa into glusterfsd.vol on "nodes", thus making client
+  mount single unified volume on a single host via single port in a single
+  connection.
+| Not that I really need this one, since all I need to mount from external
+  networks is just music 99.9% of time, and `NFS + FS-Cache
+  <http://blog.fraggod.net/2010/2/Listening-to-music-over-the-net-with-authentication-and-cache>`_
+  offer more advantages there, although I might resort to it in the future, when
+  music won't fit to db1 anymore (doubt that'll happen anytime soon).
+
+| P.S.
+| Configs are fine, but the most important thing for setting up glusterfs are
+  these lines:
+
+.. code-block:: console
+
+    node# /usr/sbin/glusterfsd --debug --volfile=/etc/glusterfs/glusterfsd.vol
+    client# /usr/sbin/glusterfs --debug --volfile-server=somenode /mnt/tmp

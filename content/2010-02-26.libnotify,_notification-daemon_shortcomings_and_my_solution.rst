@@ -1,0 +1,106 @@
+libnotify, notification-daemon shortcomings and my solution
+###########################################################
+
+:date: 2010-02-26 16:44
+:tags: python, desktop, unix, notification, rate-limiting
+
+
+Everyone who uses OSS desktop these days probably seen `libnotify
+<http://www.galago-project.org/>`_ magic in action - small popup windows that
+appear at some corner of the screen, announcing events from other apps.
+
+| libnotify itself, however, is just a convenience lib for dispatching these
+  notifications over dbus, so the latter can pass it app listening on this
+  interface or even start it beforehand.
+| Standard app for rendering such messages is notification-daemon, which is
+  developed alongside with libnotify, but there are drop-in replacements like
+  `xfce4-notifyd <http://spuriousinterrupt.org/projects/xfce4-notifyd>`_ or `e17
+  notification module <http://www.enlightenment.org/>`_.  In dbus rpc mechanism
+  call signatures are clearly defined and visible, so it's pretty easy to
+  implement replacement for aforementioned daemons, plus vanilla
+  notification-daemon has introspection calls and dbus itself can be easily
+  monitored (via dbus-monitor utility) which make it's implementation even more
+  transparent.
+|
+| Now, polling every window for updates manually is quite inefficient - new
+  mail, xmpp messages, IRC chat lines, system events etc sometimes arrive every
+  few seconds, and going over all the windows (and by that I mean workspaces
+  where they're stacked) just to check them is a huge waste of time, especially
+  when some (or even most, in case of IRC) of these are not really important.
+| Either response time or focus (and, in extreme case, sanity) has to be
+  sacrificed in such approach. Luckily, there's another way to monitor this
+  stuff - small pop-up notifications allow to see what's happening right away,
+  w/o much attention-switching or work required from an end-user.
+|
+| But that's the theory.
+
+| In practice, I've found that enabling notifications in IRC or jabber is pretty
+  much pointless, since you'll be swarmed by these as soon as any real activity
+  starts there. And w/o them it's a stupid wasteful poll practice, mentioned
+  above.
+|
+| Notification-daemon has no tricks to remedy the situation, but since the whole
+  thing is so abstract and transparent I've had no problem making my own fix.
+
+.. html::
+
+  <a href="|filename|images/notification_proxy_digest.jpg">
+  <img align="right"
+    src="|filename|images/notification_proxy_digest.jpg"
+    style="width: 250px;" title="Notification digest" alt="Notification digest">
+  </a>
+
+Solution I came up with is to batch the notification messages into a digests as
+soon as there are too many of them, displaying such digest pop-ups with some
+time interval, so I can keep a grip on what's going on just by glancing at these
+as they arrive, switching my activities if something there is important enough.
+
+| Having played with schedulers and network shaping/policing before, not much
+  imagination was required to devise a way to control the message flow rate.
+| I chose `token-bucket algorithm <http://en.wikipedia.org/wiki/Token_bucket>`_
+  at first, but since prolonged flood of I-don't-care-about activity have
+  gradually decreasing value, I didn't want to receive digests of it every N
+  seconds, so I batched it with a gradual digest interval increase and
+  `leaky-bucket <http://en.wikipedia.org/wiki/Leaky_bucket>`_ mechanism, so
+  digests won't get too fat over these intervals.
+| Well, the result exceeded my expectations, and now I can use libnotify freely
+  even to indicate that some rsync just finished in a terminal on another
+  workspace. Wonder why such stuff isn't built into existing notification
+  daemons...
+
+| Then, there was another, even more annoying issue: notifications during
+  fullscreen apps! WTF!?
+| Wonder if everyone got used to this ugly flickering in fullscreen mplayer,
+  huge lags in GL games like SpringRTS or I'm just re-inventing the wheel here,
+  since it's done in gnome or kde (knotify, huh?), but since I'm not gonna use
+  either one I just added `fullscreen-app check
+  <http://fraggod.net/svc/git/fgc/tree/fgc/wm.py#n99>`_ before notification
+  output, queueing them to digest if that is the case.
+
+| Ok, a few words about implementation.
+| Token bucket itself is based on `activestate recipe
+  <http://code.activestate.com/recipes/511490/>`_ with some heavy improvements
+  to adjust flow on constant under/over-flow, plus with a bit more pythonic
+  style and features, take a look `here
+  <http://fraggod.net/svc/git/fgc/tree/fgc/fc.py#n64>`_. Leaky bucket
+  implemented by `this class
+  <http://fraggod.net/svc/git/fgc/tree/fgc/fc.py#n34>`_.
+| Aside from that it's just dbus magic and a `quite extensive CLI interface
+  <http://fraggod.net/svc/git/fg_overlay/tree/x11-misc/notification-daemon/files/notification-proxy#n20>`_
+  to control the filters.
+
+| Main dbus magic, however, lies outside the script, since dbus calls cannot be
+  intercepted and the scheduler can't get'em with notification-daemon already
+  listening on this interface.
+| Solution is easy, of course - scheduler can `replace the real daemon
+  <http://fraggod.net/svc/git/fg_overlay/tree/x11-misc/notification-daemon/files/org.freedesktop.Notifications.service>`_
+  and proxy mangled calls to it as necessary. It takes `this sed line
+  <http://fraggod.net/svc/git/fg_overlay/tree/x11-misc/notification-daemon/notification-daemon-0.4.0-r3.ebuild#n41>`_
+  for notification-daemon as well, since interface is hard-coded there.
+
+| `Grab the script here
+  <http://fraggod.net/oss/projects/notification-proxy.py>`_.
+| Needs `fgc module <http://fraggod.net/svc/git/fgc/>`_, but it's just a hundred
+  lines on meaningful code.
+
+One more step to making linux desktop more comfortable. Oh, joy ;)

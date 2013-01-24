@@ -1,0 +1,190 @@
+Further improvements for notification-daemon
+############################################
+
+:date: 2010-12-09 03:58
+:tags: python, desktop, unix, notification, rate-limiting, lisp
+
+
+It's been a while since I `augmented libnotify / notification-daemon stack
+</2010/2/libnotify-notification-daemon-shortcomings-and-my-solution>`_ to better
+suit my (maybe not-so-) humble needs, and it certainly was an improvement, but
+there's no limit to perfection and since then I felt the urge to upgrade it
+every now and then.
+
+| One early fix was to let messages with priority=critical through without
+  delays and aggregation. I've learned it the hard way when my laptop shut down
+  because of drained battery without me registering any notification about it.
+| Other good candidates for high priority seem to be real-time messages like
+  `emms <http://www.gnu.org/software/emms/>`_ track updates and network
+  connectivity loss events which either too important to ignore or just don't
+  make much sense after delay.  Implementation here is straightforward - just
+  check urgency level and pass these unhindered to notification-daemon.
+
+| Another important feature which seem to be missing in reference daemon is the
+  ability to just cleanup the screen of notifications. Sometimes you just need
+  to dismiss them to see the content beneath, or you just read them and don't
+  want them drawing any more attention.
+| The only available interface for that seem to be CloseNotification method,
+  which can only close notification message using it's id, hence only useful
+  from the application that created the note. Kinda makes sense to avoid apps
+  stepping on each others toes, but since id's in question are sequential, it
+  won't be much of a problem to an app to abuse this mechanism anyway.
+| Proxy script, sitting in the middle of dbus communication as it is, don't have
+  to guess these ids, as can just keep track of them.
+| So, to clean up the occasional notification-mess I extended the
+  CloseNotification method to accept 0 as a "special" id, closing all the
+  currently-displayed notifications.
+
+Binding it to a key is just a matter of (a bit inelegant, but powerful)
+dbus-send tool invocation:
+
+.. code-block:: console
+
+    % dbus-send --type=method_call\
+       --dest=org.freedesktop.Notifications\
+       /org/freedesktop/Notifications\
+       org.freedesktop.Notifications.CloseNotification uint32:0
+
+| Expanding the idea of occasional distraction-free needs, I found the idea of
+  the ability to "plug" the notification system - collecting the notifications
+  into the same digest behind the scenes (yet passing urgent ones, if this
+  behavior is enabled) - when necessary quite appealing, so I just added a flag
+  akin to "fullscreen" check, forcing notification aggregation regardless of
+  rate when it's set.
+
+| Of course, some means of control over this flag was necessary, so another
+  extension of the interface was to add "Set" method to control
+  notification-proxy options. Method was also useful to occasionally toggle
+  special "urgent" messages treatment, so I empowered it to do so as well by
+  making it accept a key-value array of parameters to apply.
+| And since now there is a plug, I also found handy to have a complimentary
+  "Flush" method to dump last digested notifications.
+| Same handy dbus-send tool comes to rescue again, when these need to be toggled
+  or set via cli:
+
+.. code-block:: console
+
+    % dbus-send --type=method_call\
+       --dest=org.freedesktop.Notifications\
+       /org/freedesktop/Notifications\
+       org.freedesktop.Notifications.Set\
+       dict:string:boolean:plug_toggle,true
+
+| In contrast to cleanup, I occasionally found myself monitoring low-traffic IRC
+  conversations entirely through notification boxes - no point switching the
+  apps if you can read the whole lines right there, but there was a catch of
+  course - you have to immediately switch attention from whatever you're doing
+  to a notification box to be able to read it before it times out and
+  disappears, which of course is a quite inconvenient.
+| Easy solution is to just override "timeout" value in notification boxes to
+  make them stay as long as you need to, so one more flag for the "Set" method
+  to handle plus one-liner check and there it is.
+| Now it's possible to read them with minimum distraction from the current
+  activity and dismiss via mentioned above extended CloseNotification method.
+
+| As if the above was not enough, sometimes I found myself willing to read and
+  react to the stuff from one set of sources, while temporarily ignoring the
+  traffic from the others, like when you're working at some hack, discussing it
+  (and the current implications / situation) in parallel over jabber or irc,
+  while heated discussion (but interesting none the less) starts in another
+  channel.
+
+| Shutting down the offending channel in `ERC
+  <http://www.emacswiki.org/emacs/ERC>`_, leaving `BNC
+  <http://en.wikipedia.org/wiki/BNC_%28software%29>`_ to monitor the
+  conversation or just supress notifications with some ERC command would
+  probably be the right way to handle that, yet it's not always that simple,
+  especially since every notification-enabled app then would have to implement
+  some way of doing that, which of course is not the case at all.
+
+| Remedy is in the customizable filters for notifications, which can be a simple
+  set of regex'es, dumped into some specific dot-file, but even as I started to
+  implement the idea, I could think of several different validation scenarios
+  like "match summary against several regexes", "match message body", "match
+  simple regex with a list of exceptions" or even some counting and more complex
+  logic for them.
+
+| Idea of inventing yet another perlish (poorly-designed, minimal, ambiguous,
+  write-only) DSL for filtering rules didn't struck me as an exactly bright one,
+  so I thought for looking for some lib implementation of clearly-defined and
+  thought-through syntax for such needs, yet found nothing designed purely for
+  such filtering task (could be one of the reasons why every tool and daemon
+  hard-codes it's own DSL for that \*sigh\*).
+
+| On that note I thought of some generic yet easily extensible syntax for such
+  rules, and came to realization that simple SICP-like subset of scheme/lisp
+  with regex support would be exactly what I need.
+| Luckily, there are plenty implementations of such embedded languages in
+  python, and since I needed a really simple and customizabe one, I've decided
+  to stick with extended 90-line "`lis.py <http://norvig.com/lis.py>`_\ ",
+  described by Peter Norvig `here <http://norvig.com/lispy.html>`_ and `extended
+  here <http://norvig.com/lispy2.html>`_. Out goes unnecessary file-handling,
+  plus regexes and some minor fixes and the result is "make it into whatever you
+  need" language.
+| Just added a stat and mtime check on a dotfile, reading and compiling the
+  matcher-function from it on any change. Contents may look like this:
+
+.. code-block:: scheme
+
+    (define-macro define-matcher (lambda
+      (name comp last rev-args)
+      `(define ,name (lambda args
+        (if (= (length args) 1) ,last
+          (let ((atom (car args)) (args (cdr args)))
+          (,comp
+            (~ ,@(if rev-args '((car args) atom) '(atom (car args))))
+            (apply ,name (cons atom (cdr args))))))))))
+
+    (define-matcher ~all and #t #f)
+    (define-matcher all~ and #t #t)
+    (define-matcher ~any or #f #f)
+    (define-matcher any~ or #f #t)
+    (lambda (summary body)
+      (not (and
+        (~ "^erc: #\S+" summary)
+        (~ "^\*\*\* #\S+ (was created on|modes:) " body))
+        (all~ summary "^erc: #pulseaudio$" "^mail:")))
+
+| Which kinda shows what can you do with it, making your own syntax as you go
+  along (note that stuff like "and" is also a macro, just defined on a higher
+  level).
+| Even with weird macros I find it much more comprehensible than rsync filters,
+  apache/lighttpd rewrite magic or pretty much any pseudo-simple magic set of
+  string-matching rules I had to work with.
+| I considered using python itself to the same end, but found that it's syntax
+  is both more verbose and less flexible/extensible for such goal, plus it
+  allows to do far too much for a simple filtering script which can potentially
+  be evaluated by process with elevated privileges, hence would need some sort
+  of sandboxing anyway.
+
+| In my case all this stuff is bound to convenient key shortcuts via `fluxbox wm
+  <http://www.fluxbox.org/>`_:
+
+::
+
+    # Notification-proxy control
+    Print :Exec dbus-send --type=method_call\
+        --dest=org.freedesktop.Notifications\
+        /org/freedesktop/Notifications org.freedesktop.Notifications.Set\
+        dict:string:boolean:plug_toggle,true
+    Shift Print :Exec dbus-send --type=method_call\
+        --dest=org.freedesktop.Notifications\
+        /org/freedesktop/Notifications org.freedesktop.Notifications.Set\
+        dict:string:boolean:cleanup_toggle,true
+    Pause :Exec dbus-send --type=method_call\
+        --dest=org.freedesktop.Notifications\
+        /org/freedesktop/Notifications\
+        org.freedesktop.Notifications.CloseNotification\
+        uint32:0
+    Shift Pause :Exec dbus-send --type=method_call\
+        --dest=org.freedesktop.Notifications\
+        /org/freedesktop/Notifications\
+        org.freedesktop.Notifications.Flush
+
+Pretty sure there's more room for improvement in this aspect, so I'd have to
+extend the system once again, which is fun all by itself.
+
+Resulting (and maybe further extended) `script is here
+<http://fraggod.net/oss/projects/notification-proxy.py>`_, now linked against `a
+bit revised lis.py scheme implementation
+<http://fraggod.net/svc/git/fgc/tree/fgc/scheme.py>`_.

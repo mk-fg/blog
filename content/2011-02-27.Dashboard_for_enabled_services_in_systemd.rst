@@ -1,0 +1,159 @@
+Dashboard for enabled services in systemd
+#########################################
+
+:date: 2011-02-27 07:02
+:tags: python, sysadmin, unix, systemd
+
+
+Systemd does a good job at monitoring and restarting services. It also keeps
+track of "failed" services, which you can easily see in systemctl output.
+
+| Problem for me is that services that should be running at the machine don't
+  always "fail".
+| I can stop them and forget to start again, .service file can be broken (like,
+  reload may actually terminate the service), they can be accidentally or
+  deliberately killed or just exit with 0 code due to some internal event, just
+  because they think that's okay to stop now.
+| Most often such "accidents" seem to happen on boot - some services just
+  perform sanity checks, see that some required path or socket is missing and
+  exit, sometimes with code 0.
+| As a good sysadmin, you take a peek at systemctl, see no failures there and
+  think "ok, successful reboot, everything is started", and well, it's not, and
+  systemd doesn't reveal that fact.
+
+| What's needed here is kinda "dashboard" of what is enabled and thus should be
+  running with clear indication if something is not. Best implementation of such
+  thing I've seen in openrc init system, which comes with baselayout-2 on Gentoo
+  Linux ("unstable" or "~" branch atm, but guess it'll be stabilized one day):
+
+.. code-block:: console
+
+  root@damnation:~# rc-status -a
+  Runlevel: shutdown
+    killprocs  [ stopped ]
+    savecache  [ stopped ]
+    mount-ro   [ stopped ]
+  Runlevel: single
+  Runlevel: nonetwork
+    local      [ started ]
+  Runlevel: cryptinit
+    rsyslog    [ started ]
+    ip6tables  [ started ]
+  ...
+    twistd     [ started ]
+    local      [ started ]
+  Runlevel: sysinit
+    dmesg      [ started ]
+    udev       [ started ]
+    devfs      [ started ]
+  Runlevel: boot
+    hwclock    [ started ]
+    lvm        [ started ]
+  ...
+    wdd        [ started ]
+    keymaps    [ started ]
+  Runlevel: default
+    rsyslog    [ started ]
+    ip6tables  [ started ]
+  ...
+    twistd     [ started ]
+    local      [ started ]
+  Dynamic Runlevel: hotplugged
+  Dynamic Runlevel: needed
+    sysfs      [ started ]
+    rpc.pipefs [ started ]
+  ...
+    rpcbind    [ started ]
+    rpc.idmapd [ started ]
+  Dynamic Runlevel: manual
+
+| Just "grep -v started" and you see everything that's "stopped", "crashed",
+  etc.
+| I `tried to raise issue on systemd-devel
+  <http://thread.gmane.org/gmane.comp.sysutils.systemd.devel/1334>`_, but looks
+  like I'm the only one who cares about it, so I went ahead to write my own tool
+  for the job.
+
+| Implementation uses extensive dbus interface provided by systemd to get a set
+  of all the .service units loaded by systemd, then gets "enabled" stuff from
+  symlinks on a filesystem. Latter are easily located in places
+  /{etc,lib}/systemd/system/\*/\*.service and systemd doesn't seem to keep track
+  of these, using them only at boot-time.
+| Having some experience using rc-status tool from openrc I also fixed the main
+  annoyance it has - there's no point to show "started" services, ever! I always
+  cared about "not enabled" or "not started" only, and shitload of "started"
+  crap it dumps is just annoying, and has to always be grepped-out.
+
+So, meet the systemd-dashboard tool:
+
+.. code-block:: console
+
+  root@damnation:~# systemd-dashboard -h
+  usage: systemd-dashboard [-h] [-s] [-u] [-n]
+
+  Tool to compare the set of enabled systemd services against currently running
+  ones. If started without parameters, it'll just show all the enabled services
+  that should be running (Type != oneshot) yet for some reason they aren't.
+
+  optional arguments:
+   -h, --help  show this help message and exit
+   -s, --status Show status report on found services.
+   -u, --unknown Show enabled but unknown (not loaded) services.
+   -n, --not-enabled Show list of services that are running but are not
+     enabled directly.
+
+Simple invocation will show what's not running while it should be:
+
+.. code-block:: console
+
+  root@damnation:~# systemd-dashboard
+  smartd.service
+  systemd-readahead-replay.service
+  apache.service
+
+Adding "-s" flag will show what happened there in more detail (by the grace of
+"systemctl status" command):
+
+.. code-block:: console
+
+  root@damnation:~# systemd-dashboard -s
+
+  smartd.service - smartd
+    Loaded: loaded (/lib64/systemd/system/smartd.service)
+    Active: failed since Sun, 27 Feb 2011 11:44:05 +0500; 2s ago
+    Process: 16322 ExecStart=/usr/sbin/smartd --no-fork --capabilities (code=killed, signal=KILL)
+    CGroup: name=systemd:/system/smartd.service
+
+  systemd-readahead-replay.service - Replay Read-Ahead Data
+    Loaded: loaded (/lib64/systemd/system/systemd-readahead-replay.service)
+    Active: inactive (dead)
+    CGroup: name=systemd:/system/systemd-readahead-replay.service
+
+  apache.service - apache2
+    Loaded: loaded (/lib64/systemd/system/apache.service)
+    Active: inactive (dead) since Sun, 27 Feb 2011 11:42:34 +0500; 51s ago
+    Process: 16281 ExecStop=/usr/bin/apachectl -k stop (code=exited, status=0/SUCCESS)
+    Main PID: 5664 (code=exited, status=0/SUCCESS)
+    CGroup: name=systemd:/system/apache.service
+
+Would you've noticed that readahead fails on a remote machine because the kernel
+is missing fanotify and the service apparently thinks "it's okay not to start"
+in this case? What about smartd you've killed a while ago and forgot to restart?
+
+And you can check if you forgot to enable something with "-n" flag, which will
+show all the running stuff that was not explicitly enabled.
+
+Code is under a hundred lines of python with the only dep of `dbus-python
+package <http://dbus.freedesktop.org/releases/dbus-python/>`_. You can grab the
+initial (probably not updated much, although it's probably finished as it is)
+version `from here <http://fraggod.net/static/code/systemd-dashboard.py>`_ or a
+maintained version from `fgtk repo
+<http://fraggod.net/code/fossil/fgtk/login?g=/code/fossil/fgtk/dir>`_ (yes,
+there's an anonymous login form to pass).
+
+If someone will also find the thing useful, I'd appreciate if you'll raise
+awareness to the issue within systemd project - I'd rather like to see such
+functionality in the main package, not hacked-up on ad-hoc basis around it.
+
+**Update (+20d):** issue was noticed and will probably be addressed in
+systemd. Yay!

@@ -1,0 +1,108 @@
+Auto-away for pidgin
+####################
+
+:date: 2010-04-10 06:02
+:tags: python, desktop, im
+
+
+| Lately I've migrated back to `pidgin <http://pidgin.im/>`_ from `gajim
+  <http://www.gajim.org/>`_ through `jabber.el
+  <http://emacs-jabber.sourceforge.net/>`_. The thing which made it necessary
+  was XFire support (via `gfire plugin <http://gfireproject.org/>`_), which I've
+  needed to communicate w/ my `spring <http://springrts.com/>`_ clanmates.
+| I'd have preferred jabber-xfire transport instead, but most projects there
+  look abandoned and I don't really need extensive jabber-features support, so
+  pidgin is fine with me.
+
+| The only thing that's not working there is auto-away support, so it can change
+  my status due to inactivity.
+| Actually it changes the status to "away" but for no reason at all, regardless
+  of idle time, and refuses to set it back to active even when I click it's
+  window and options.
+
+Well, good thing is that pidgin's mature enough to have dbus interface, so as
+the most problems in life, this one can be solved with python ;)
+
+| First thing to check is `pidgin dbus interface
+  <http://developer.pidgin.im/wiki/DbusHowto>`_ and figure out how the states
+  work there: you have to create a "state" with the appropriate message or find
+  it among stored ones then set it as active, storing id of the previous one.
+
+| Next thing is to determine a way to get idle time.
+| Luckily, X keeps track of activity and I've already used `xprintidle
+  <http://www.dtek.chalmers.se/%7Ehenoch/text/xprintidle.html>`_ with jabber.el,
+  so it's not a problem.
+| Not quite a native py solution, but it has workaround for `one bug
+  <https://bugs.freedesktop.org/buglist.cgi?quicksearch=6439>`_ and is much more
+  liteweight than code using py-xlib.
+
+| From there it's just an endless sleep/check loop with occasional dbus calls.
+| One gotcha there is that pidgin can die or be closed, so the loop has to deal
+  with this as well.
+
+All there is...
+
+Get idle time:
+
+.. code-block:: python
+
+    def get_idle():
+      proc = Popen(['xprintidle'], stdout=PIPE)
+      idle = int(proc.stdout.read().strip()) // 1000
+      proc.wait()
+      return idle
+
+Simple dbus client code:
+
+.. code-block:: python
+
+    pidgin = dbus.SessionBus().get_object(
+      'im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject' )
+    iface = dbus.Interface(pidgin, 'im.pidgin.purple.PurpleInterface')
+
+Get initial (available) status:
+
+.. code-block:: python
+
+    st = iface.PurpleSavedstatusGetCurrent()
+    st_type = iface.PurpleSavedstatusGetType(st)
+    st_msg = iface.PurpleSavedstatusGetMessage(st)
+
+Create away/na statuses:
+
+.. code-block:: python
+
+    st_away = iface.PurpleSavedstatusNew('', status.away)
+    iface.PurpleSavedstatusSetMessage(
+      st_away, 'AFK (>{0}m)'.format(optz.away // 60) )
+    st_na = iface.PurpleSavedstatusNew('', status.xaway)
+    iface.PurpleSavedstatusSetMessage(
+      st_na, 'AFK for quite a while (>{0}m)'.format(optz.na // 60) )
+
+And the main loop:
+
+.. code-block:: python
+
+    while True:
+      idle = get_idle()
+      if idle > optz.away:
+        if idle > optz.na:
+          iface.PurpleSavedstatusActivate(st_na)
+          log.debug('Switched status to N/A (idle: {0})'.format(idle//60))
+        else:
+          iface.PurpleSavedstatusActivate(st_away)
+          log.debug('Switched status to away (idle: {0})'.format(idle//60))
+        sleep(optz.poll)
+      else:
+        if iface.PurpleSavedstatusGetType(
+            iface.PurpleSavedstatusGetCurrent() ) in (status.away, status.xaway):
+          iface.PurpleSavedstatusActivate(st)
+          log.debug('Restored original status (idle: {0})'.format(idle//60))
+        sleep(optz.away)
+
+Bonus of such approach is that any other checks can be easily added -
+fullscreen-video-status, for example, or emacs-dont-disturb status. I bet there
+are other plugins for this purposes, but I'd prefer few lines of clean py to
+some buggy .so anytime ;)
+
+`Here's the full code <http://fraggod.net/oss/projects/status_watcher.py>`_.

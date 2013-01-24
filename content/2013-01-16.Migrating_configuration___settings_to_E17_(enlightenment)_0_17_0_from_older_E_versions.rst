@@ -1,0 +1,115 @@
+Migrating configuration / settings to E17 (enlightenment) 0.17.0 from older E versions
+######################################################################################
+
+:date: 2013-01-16 18:59
+:tags: desktop
+
+
+It's a documented feature that `0.17.0 release
+<http://www.enlightenment.org/p.php?p=news/show&l=en&news_id=77>`_ (even if late
+pre-release version was used before) throws existing configuration out of the
+window.
+
+| I'm not sure what warranted such a drastic usability bomb, but it's not
+  actually as bad as it seems - like 95% of configuration (and 100% of
+  \*important\* parts of it) can be just re-used (even if you've already started
+  new version!) with just a little bit of extra effort (thanks to ppurka in #e
+  for pointing me in the right direction here).
+| So wasn't looking forward to restore all the keyboard bindings, for one thing
+  (that's why I actually did the update just one week ago or so).
+
+E is a bit special (at least among wm's, fairly sure some de's do similar things
+as well) in that it keeps it's settings on disk compiled and compressed (with
+`eet <http://docs.enlightenment.org/auto/eet/>`_) - but it's much easier to work
+with than it might sound like.
+
+So, to get the bits of config migrated, one just has to pull the old (pre-zero)
+config out, then start zero-release e to generate new config, decompile both of
+these, pull compatible bits from old into the new one, then compile it and put
+back into "~/.e/e/config"
+
+Before zero update, config can be found in "~/.e/e/config/standard/e.cfg"
+
+If release version was started already and dropped the config, then old one
+should be "~/.e/e/config/standard/e.1.cfg" (or any different number instead of
+"1" there).
+
+Note that "standard" there is a profile name, if it might be called differently,
+check "~/.e/e/config/profile.cfg" (profile name should be readable there, or use
+"eet -x ~/.e/e/config/profile.cfg config").
+
+"eet -d ~/.e/e/config/standard/e.cfg config" should produce perfectly readable
+version of the config to stdout.
+
+Below is how I went about the whole process.
+
+Make a repository to track changes (will help if workflow might have merge-test
+steps than one):
+
+.. code-block:: console
+
+    % mkdir e_config_migration
+    % cd e_config_migration
+    % git init
+
+Before zero update:
+
+.. code-block:: console
+
+    % cp ~/.e/e/config/standard/e.cfg e_pre_zero
+    % eet -d e_pre_zero config > e_pre_zero.cfg
+
+Start E-release (wipes the config, produces a "default" new one there).
+
+.. code-block:: console
+
+    % cp ~/.e/e/config/standard/e.cfg e_zero
+    % eet -d e_zero config > e_zero.cfg
+    % git add e_*
+    % git commit -m "Initial pre/post configurations"
+    % emacs e_pre_zero.cfg e_zero.cfg
+
+Then copy all the settings that were used in any way to e_zero.cfg.
+
+I copied pretty much all the sections with relevant stuff, checking that the
+keys in them are the same - and they were, but I've used 0.17.0alpha8 before
+going for release, so if not, I'd just try "filling the blanks", or, failing
+that, just using old settings as a "what has to be setup through settings-panel"
+reference.
+
+To be more specific - "xkb" options/layouts (have 2 of them setup),
+shelves/gadgets (didn't have these, and was lazy to click-remove existing ones),
+"remembers" (huge section, copied all of it, worked!), all "bindings" (pain to
+setup these).
+
+After all these sections, there's a flat list of "value" things, which turned
+out to contain quite a lot of hard-to-find-in-menus parameters, so here's what I
+did:
+
+-  copy that list (~200 lines) from old config to some file - say,
+   "values.old", then from a new one to e.g. "values.new".
+-  sort -u values.old > values.old.sorted
+   sort -u values.new > values.new.sorted
+-  diff -uw values.{old,new}.sorted
+
+| Should show everything that might need to be changed in the new config with
+  descriptive names and reveal all the genuinely new parameters.
+| Just don't touch "config\_version" value, so E won't drop the resulting
+  config.
+
+After all the changes:
+
+.. code-block:: console
+
+    % eet -e e_zero config e_zero.cfg 1
+    % git commit -a -m Merged-1
+    % cp e_zero ~/.e/e/config/standard/e.cfg
+    % startx
+
+New config worked for me for all the changes I've made - wasn't sure if I can
+copy \*that\* much from the start, but it turned out that almost no
+reconfiguration was necessary.
+
+Caveat is, of course, that you should know what you're doing here, and be ready
+to handle issues / rollback, if any, that's why putting all these changes in git
+might be quite helpful.

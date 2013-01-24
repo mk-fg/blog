@@ -1,0 +1,41 @@
+Terms of Service - Didn't Read
+##############################
+
+:date: 2012-09-16 19:32
+:tags: policy, documentation, social
+
+
+Right now I was working on python-skydrive module and further integration of `MS
+SkyDrive <http://skydrive.live.com/>`_ into `tahoe-lafs
+<http://tahoe-lafs.org/>`_ as a cloud backend, to keep the stuff you really care
+about safe.
+
+And even if you don't trust SkyDrive to keep stuff safe, you still have to
+register your app with these guys, especially if it's an open module, because
+"You are solely and entirely responsible for all uses of Live Connect occurring
+under your Client ID." and it's unlikely that a generic python interface author
+will vouch for all it's uses like that.
+
+What do "register app" mean? Agreeing to `yet another "Terms of Service"
+<http://msdn.microsoft.com/en-US/library/live/ff765012>`_, of course!
+
+Do anyone ever reads these?
+
+| What the hell "You may only use the Live SDK and Live Connect APIs to create
+  software." sentence means there?
+| Did you know that "You are solely and entirely responsible for all uses of
+  Live Connect occurring under your Client ID." (and that's an app-id, given out
+  to the app developers, not users)?
+| How many more of such "interesting" stuff is there?
+
+I hardly care enough to read, but `there's an app <http://tos-dr.info/>`_ for
+exactly that, and it's relatively well-known by now.
+
+| What might be not as well-known, is that there's now a `campaign on IndieGoGo
+  <http://www.indiegogo.com/terms-of-service-didnt-read>`_ to keep the thing
+  alive and make it better.
+| Please consider supporting the movement in any way, even just by spreading the
+  word, right now, it's really one of the areas where filtering-out of all the
+  legalese crap and noise is badly needed.
+
+http://www.indiegogo.com/terms-of-service-didnt-read

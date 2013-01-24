@@ -1,0 +1,106 @@
+PyParsing vs Yapps
+##################
+
+:date: 2013-01-21 04:15
+:tags: python
+
+
+As I've been decompiling dynamic E config `in the past
+<http://blog.fraggod.net/2013/1/Migrating-configuration-settings-to-E17-enlightenment-0170-from-older-E-versions>`_
+anyway, wanted to back it up to git repo along with the rest of them.
+
+| Quickly stumbled upon a problem though - while E doesn't really modify it
+  without me making some conscious changes, it reorders (or at least eet
+  produces such) sections and values there, making straight dump to git a bit
+  more difficult.
+| Plus, I have a `pet project <http://desktop-aura.sourceforge.net/>`_ to update
+  background, and it also introduces transient changes, so some pre-git
+  processing was in order.
+
+e.cfg looks like this:
+
+::
+
+    group "E_Config" struct {
+      group "xkb.used_options" list {
+        group "E_Config_XKB_Option" struct {
+          value "name" string: "grp:caps_toggle";
+        }
+      }
+      group "xkb.used_layouts" list {
+        group "E_Config_XKB_Layout" struct {
+          value "name" string: "us";
+    ...
+
+Simple way to make it "canonical" is just to order groups/values there
+alphabetically, blanking-out some transient ones.
+
+That needs a parser, and while regexps aren't really suited to that kind of
+thing, pyparsing should work:
+
+.. code-block:: python
+
+    number = pp.Regex(r'[+-]?\d+(\.\d+)?')
+    string = pp.QuotedString('"') | pp.QuotedString("'")
+    value_type = pp.Regex(r'\w+:')
+    group_type = pp.Regex(r'struct|list')
+
+    value = number | string
+    block_value = pp.Keyword('value')\
+      + string + value_type + value + pp.Literal(';')
+
+    block = pp.Forward()
+    block_group = pp.Keyword('group') + string\
+      + group_type + pp.Literal('{') + pp.OneOrMore(block) + pp.Literal('}')
+    block << (block_group | block_value)
+
+    config = pp.StringStart() + block + pp.StringEnd()
+
+Fun fact: this parser doesn't work.
+
+Bails with some error in the middle of the large (~8k lines) real-world config,
+while working for all the smaller pet samples.
+
+I guess some buffer size must be tweaked (kinda unusual for python module
+though), maybe I made a mistake there, or something like that.
+
+So, yapps2-based parser:
+
+::
+
+    parser eet_cfg:
+      ignore: r'[ \t\r\n]+'
+      token END: r'$'
+      token N: r'[+\-]?[\d.]+'
+      token S: r'"([^"\\]*(\\.[^"\\]*)*)"'
+      token VT: r'\w+:'
+      token GT: r'struct|list'
+
+      rule config: block END {{ return block }}
+
+      rule block: block_group {{ return block_group }}
+        | block_value {{ return block_value }}
+      rule block_group:
+        'group' S GT r'\{' {{ contents = list() }}
+        ( block {{ contents.append(block) }} )*
+        r'\}' {{ return Group(S, GT, contents) }}
+
+      rule value: S {{ return S }} | N {{ return N }}
+      rule block_value: 'value' S VT value ';' {{ return Value(S, VT, value) }}
+
+Less verbose (even with more processing logic here) and works.
+
+Embedded in a python code (doing the actual sorting), it all looks like `this
+<http://fraggod.net/static/code/e_config_sorter.g>`_ (might be useful to work
+with E configs, btw).
+
+yapps2 actually generates `quite readable code
+<http://fraggod.net/static/code/e_config_sorter.py>`_ from it, and it was just
+simplier (and apparently more bugproof) to write grammar rules in it.
+
+ymmv, but it's a bit of a shame that pyparsing seem to be the about the only
+developed parser-generator of such kind for python these days.
+
+Had to package yapps2 runtime to install it properly, applying some community
+patches (from debian package) in process and replacing some scary cli code
+from 2003. `Here's a fork <https://github.com/mk-fg/yapps>`_.

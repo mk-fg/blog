@@ -1,0 +1,28 @@
+A new toy to play with - TI Launchpad with MSP430 MCU
+#####################################################
+
+:date: 2012-08-16 09:02
+:tags: hardware
+
+
+A friend gave me this thing to play with (and eventually adapt to his purposes).
+
+.. html::
+
+  <a href="|filename|images/launchpad.jpg">
+  <img
+    style="width: 550px;"
+    src="|filename|images/launchpad.jpg"
+    title="Launchpad box and contents"
+    alt="Launchpad box and contents">
+  </a>
+
+What's interesting here is that TI seem to give these things out for free.
+
+Seriously, a box with a debug/programmer board and two microcontroller chips
+(`which are <http://www.ti.com/product/msp430g2553>`_ basically your
+programmable computer with RAM, non-volatile flash memory, lots of interfaces,
+temp sensor, watchdog, etc that can be powered from 2 AA cells), to any part of
+the world with FedEx for a beer's worth - $5.
+
+Guess it's time to put a computer into every doorknob indeed.

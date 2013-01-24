@@ -49,9 +49,18 @@ table {
 
 /* Mockingbird Theme by Nevan Scott nevanscott.com */
 
+@font-face {
+  font-family: 'Luxi Sans'; font-style: normal; font-weight: normal;
+  src: local('Luxi Sans'), local('LuxiSans'), url('luxisr.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DejaVu Sans Mono'; font-style: normal; font-weight: normal;
+  src: local('DejaVu Sans Mono'), local('DejaVuSansMono'), url('DejaVuSansMono.ttf') format('truetype');
+}
+
 body {
-	font-family: Georgia, serif;
-	font-size: 16px;
+	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif;
+	font-size: 14px;
 	line-height: 1.5em;
 	color: #444;
 	}
@@ -61,16 +70,33 @@ body {
 	padding: 0 20px;
 	}
 
+div.post ul {
+	margin: 1em 0;
+	list-style: disc;
+}
+div.post ul li {
+	margin-left: 1.2em;
+}
+div.post img {
+	margin: 1em;
+}
+
 a {
 	text-decoration: none;
 	color: #000;
 	}
-p a {
+p a,
+div.post ul a,
+div.line-block a {
 	text-decoration: underline;
-	}
+}
+p strong,
+div.post ul strong,
+div.line-block strong {
+	font-weight: bold;
+}
 
 h1, h2, h3, h4, h5, h6 {
-	font-family: sans-serif;
 	font-weight: bold;
 	}
 h1, h2, h3 {
@@ -78,7 +104,7 @@ h1, h2, h3 {
 	line-height: 1em;
 	margin: 1em 0;
 	}
-p, h4, h5, h6 {
+p, h4, h5, h6, div.line-block {
 	margin: 1.5em 0;
 	}
 blockquote {
@@ -91,13 +117,13 @@ blockquote {
 	color: #DDD;
 	float: left;
 	clear: both;
-	width: 160px;
+	width: 150px;
 	font-size: 1.5em;
 	line-height: 1em;
 	margin: 0 20px 1em 0;
 	}
 .post {
-	margin: 0 0 4em 180px;
+	margin: 0 0 4em 170px;
 	}
 .post.archives {
 	margin-bottom: 1.5em;
@@ -115,7 +141,6 @@ blockquote {
 	border-radius: 5px;
 	}
 .info {
-	font-family: sans-serif;
 	text-align: right;
 	color: #CCC;
 	}
@@ -162,7 +187,7 @@ div.codehilite {
 .post pre, .page pre {
 	padding: .5em;
 	font-size: 12px;
-	font-family: Monospace;
+	font-family: 'DejaVu Sans Mono',monospace;
 	line-height: 1.1em;
 	}
 
@@ -236,7 +261,6 @@ form.inline_edit {
 	}
 
 .pages {
-	font-family: sans-serif;
 	line-height: 2.5em;
 	margin: 2em 0 3em;
 	background-color: #EEE;
@@ -281,7 +305,6 @@ form.inline_edit {
 	}
 
 #footer {
-	font-family: sans-serif;
 	line-height: 2.5em;
 	text-align: center;
 	color: #CCC;

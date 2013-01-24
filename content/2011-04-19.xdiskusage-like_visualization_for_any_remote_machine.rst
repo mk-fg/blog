@@ -1,0 +1,63 @@
+xdiskusage-like visualization for any remote machine
+####################################################
+
+:date: 2011-04-19 14:57
+:tags: sysadmin, coffeescript, web
+
+
+| `xdiskusage(1) <http://xdiskusage.sourceforge.net/>`_ is a simple and useful
+  tool to visualize disk space usage (a must-have thing in any admin's
+  toolkit!).
+| Probably the best thing about it is that it's built on top of "du" command, so
+  if there's a problem with free space on a remote X-less server, just "ssh
+  user\@host 'du -k' \| xdiskusage" and in a few moments you'll get the idea
+  where the space has gone to.
+
+| Lately though I've had problems building fltk, and noticed that xdiskusage is
+  the only app that uses it on my system, so I just got rid of both, in hopes
+  that I'll be able to find some lite gtk replacement (don't have qt either).
+| Maybe I do suck at googling (or just giving up too early), but `filelight
+  <http://www.methylblue.com/filelight/>`_ (kde util), `baobab
+  <http://www.marzocca.net/linux/baobab/>`_ (gnome util) and `philesight
+  <http://zevv.nl/play/code/philesight/>`_ (ruby) are pretty much the only
+  alternatives I've found. First one drags in half of the kde, second one - half
+  of gnome, and I don't really need ruby in my system either.
+| And for what? xdiskusage seem to be totally sufficient and much easier to
+  interpret (apparently it's a lot easier to compare lengths than angles for me)
+  than stupid round graphs that filelight and it's ruby clone produce, plus it
+  looks like a no-brainer to write.
+| There are some CLI alternatives as well, but this task is definitely outside
+  of CLI domain.
+
+So I wrote `this tool <http://fraggod.net/static/code/du/>`_. Real source is
+actually `coffeescript <http://jashkenas.github.com/coffee-script/>`_, `here
+<http://fraggod.net/static/code/du/du.coffee>`_, JS is compiled from it.
+
+.. html::
+
+  <a href="|filename|images/web_du.jpg">
+  <img src="|filename|images/web_du.jpg"
+    style="width: 550px;" title="it's just like xdiskusage" alt="it's just like xdiskusage">
+  </a>
+
+| Initially I wanted to do this in python, but then took a break to read some
+  reddit and blogs, which just happened to push me in the direction of a
+  web. Good thing they did, too, as it turned out to be simple and
+  straightforward to work with graphics there these days.
+| I didn't use (much-hyped) html5 canvas though, since svg seem to be much more
+  fitting in html world, plus it's much easier to make it interactive (titles,
+  events, changes, etc).
+
+| Aside from the intended stuff, tool also shows performance shortcomings in
+  firefox and opera browsers - they both are horribly slow on pasting large text
+  into textarea (or iframe with "design mode") and just slow on rendering
+  svg. Google chrome is fairly good at both tasks.
+| Not that I'll migrate all my firefox addons/settings and habits to chrome
+  anytime soon, but it's certainly something to think about.
+
+| Also, JS calculations can probably be made hundred-times faster by caching
+  size of the traversed subtrees (right now they're recalculated gozillion times
+  over, and that's basically all the work).
+| I was just too lazy to do it initially and textarea pasting is still a lot
+  slower than JS, so it doesn't seem to be a big deal, but guess I'll do that
+  eventually anyway.

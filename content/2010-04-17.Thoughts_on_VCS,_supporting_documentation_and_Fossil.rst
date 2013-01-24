@@ -1,0 +1,128 @@
+Thoughts on VCS, supporting documentation and Fossil
+####################################################
+
+:date: 2010-04-17 17:22
+:tags: scm, fossil, documentation, desktop, web
+
+
+| I'm a happy `git <http://git-scm.com/>`_ user for several years now, and the
+  best thing about it is that I've learned how VCS-es, and git in particular,
+  work under the hood.
+| It expanded (and in most aspects probably formed) my view on the time-series
+  data storage - very useful knowledge for wide range of purposes from log or
+  configuration storage to snapshotting, backups and filesystem
+  synchronisation. Another similar revelation in this area was probably `rrdtool
+  <http://oss.oetiker.ch/rrdtool/>`_, but still on much smaller scale.
+
+| Few years back, I've kept virtually no history of my actions, only keeping my
+  work in `CVS <http://en.wikipedia.org/wiki/Concurrent_Versions_System>`_/`SVN
+  <http://subversion.apache.org/>`_, and even that was just for ease of
+  collaboration.
+| Today, I can easily trace, sync and transfer virtually everything that changes
+  and is important in my system - the code I'm working on, all the configuration
+  files, even auto-generated ones, tasks' and thoughts' lists, state-description
+  files like lists of installed packages (local sw state) and gentoo-portage
+  tree (global sw state), even all the logs and binary blobs like rootfs in
+  rsync-hardlinked backups for a few past months.
+
+Git is a great help in these tasks, but what I feel lacking there is a
+first - common timeline (spanning both into the past and the future) for
+all these data series, and second - documentation.
+
+Solution to the first one I've yet to find.
+
+| Second one is partially solved by commit-msgs, inline comments and even this
+  blog for the past issues and simple todo-lists (some I keep in plaintext, some
+  in tudu app) for the future.
+| Biggest problem I see here is the lack of consistency between all these:
+  todo-tasks end up as dropped lines in the git-log w/o any link to the past
+  issues or reverse link to the original idea or vision, and that's just the
+  changes.
+
+Documentation for anything more than local implementation details and it's
+history is virtually non-existant and most times it takes a lot of effort and
+time to retrace the original line of thought, reasoning and purpose behind the
+stuff I've done (and why I've done it like that) in the past, often with the
+considerable gaps and eventual re-invention of the wheels and pitfalls I've
+already done, due to faulty biological memory.
+
+So, today I've decided to scour over the available project and task management
+software to find something that ties the vcs repositories and their logs with
+the future tickets and some sort of expanded notes, where needed.
+
+| Starting point was actually the `trac <http://trac.edgewall.org/>`_, which
+  I've used quite extensively in the past and present, and is quite fond of it's
+  outside simplicity yet fully-featured capabilities as both wiki-engine and
+  issue tracker. Better yet, it's py and can work with vcs.
+| The downside is that it's still a separate service and web-based one at that,
+  meaning that it's online-only, and that the content is anchored to the server
+  I deploy it to (not to mention underlying vcs). Hell, it's centralized and
+  laggy, and ever since git's branching and merging ideas of decentralized work
+  took root in my brain, I have issue with that.
+
+It just looks like a completely wrong approach for my task, yet I thought that I
+can probably tolerate that if there are no better options and then I've stumbled
+upon `Fossil VCS
+<http://www.fossil-scm.org/index.html/doc/tip/www/index.wiki>`_.
+
+| The name actually rang a bell, but from a `9p
+  <http://plan9.bell-labs.com/plan9/index.html>`_ universe, where it's a name
+  for a vcs-like filesystem which was (along with venti, built on top of it) one
+  of two primary reasons I've even looked into `plan9
+  <http://plan9.bell-labs.com/plan9/index.html>`_ (the other being its 9p/styx
+  protocol).
+| Similary-named VCS haven't disappointed me as well, at least conceptually. The
+  main win is in the integrated ticket system and wiki, providing just the thing
+  I need in a distributed versioned vcs environment.
+
+Fossil's overall `design principles
+<http://www.fossil-scm.org/index.html/doc/tip/www/pop.wiki>`_ and `concepts
+<http://www.fossil-scm.org/index.html/doc/tip/www/concepts.wiki>`_ (plus `this
+<http://www.fossil-scm.org/index.html/doc/tip/www/theory1.wiki>`_) are
+well-documented on `it's site
+<http://www.fossil-scm.org/index.html/doc/tip/www/index.wiki>`_ (which is a just
+a fossil repo itself), and the catch-points for me were:
+
+- Tickets and wiki, of course. Can be edited locally, synced,
+  distributed, have local settings and appearance, based on `tcl-ish
+  domain-specific
+  language <http://www.sqliteconcepts.org/THManual.pdf>`_.
+- Distributed nature, yet rational position of authors on
+  centralization and synchronization topic.
+- All-in-one-static-binary approach! Installing hundreds of git
+  binaries to every freebsd-to-debian-based system, was a pain, plus
+  I've ended up with 1.4-1.7 version span and some features (like "add
+  -p") depend on a whole lot of stuff there, like perl and damn lot of
+  it's modules. Unix-way is cool, but that's really more portable and
+  distributed-way-friendly.
+- Repository in a single package, and not just a binary blob, but a
+  freely-browsable `sqlite db <http://sqlite.org/>`_. It certainly is a
+  hell lot more convenient than path with over nine thousand blobs with
+  sha1-names, even if the actual artifact-storage here is built
+  basically the same way. And the performance should be actually better
+  than the fs - with just index-selects BTree-based sqlite is as fast
+  as filesystem, but keeping different indexes on fs is by
+  sym-/hardlinking, and that's a pain that is never done right on fs.
+- As simple as possible internal blobs' format.
+- Actual symbolics and terminology. Git is a faceless tool, Fossil have
+  some sort of a style, and that's nice ;)
+
+Yet there are some things I don't like about it:
+
+- HTTP-only sync. In what kind of twisted world that can be better than
+  ssh+pam or direct access? Can be fixed with a wrapper, I guess, but
+  really, wtf...
+- SQLite container around generic artifact storage. Artifacts are pure
+  data with a single sha1sum-key for it, and that is simple, solid and
+  easy to work with anytime, but wrapped into sqlite db it suddenly
+  depends on this db format, libs, command-line tool or language
+  bindings, etc. All the other tables can be rebuilt just from these
+  blobs, so they should be as accessible as possible, but I guess
+  that'd violate whole single-file design concept and would require a
+  lot of separate management code, a pity.
+
+But that's nothing more than a few hours' tour of the docs and basic hello-world
+tests, guess it all will look different after I'll use it for a while, which I'm
+intend to do right now.  In the worst case it's just a distributed issue
+tracker + wiki with cli interface and great versioning support in one-file
+package (including webserver) which is more than I can say about trac, anyway.

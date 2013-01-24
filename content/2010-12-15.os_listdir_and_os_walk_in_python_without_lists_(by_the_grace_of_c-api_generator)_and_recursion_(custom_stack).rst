@@ -1,0 +1,88 @@
+os.listdir and os.walk in python without lists (by the grace of c-api generator) and recursion (custom stack)
+#############################################################################################################
+
+:date: 2010-12-15 19:11
+:tags: unix, python
+
+
+As I got around to update some older crap in the my shared codebase (I mean
+mostly `fgc <http://fraggod.net/svc/git/fgc/>`_ by that), I've noticed that I
+use `os.walk <http://docs.python.org/library/os.html#os.walk>`_ (although in
+most cases indirectly) in quite a few places, and it's implementation leaves a
+few things to be desired:
+
+| First of all, it's recursive, so it has to mirror fs nesing via python call
+  stack, creating a frame objects for every level.
+| I've yet to see (or... I'd rather not see it, ever!) path structure deep
+  enough to cause OOM problems or depleting stack-depth though, but I suppose fs
+  limitations should be well above python's here.
+
+| Second thing is that it uses os.listdir, which, contrary to glibc/posix design
+  of opendir(3), returns a list with all nodes in the given path.
+| Most modern filesystems have fairly loose limits on a number of nodes in a
+  single path, and I actually tested how they handle creation and stat
+  hits/misses for a paths with millions of entries (to check index-paths
+  performance benefits) and the only filesystems with radically degrading
+  performance in such cases were venerable ext2 (on linux, via jbd driver), ufs2
+  (on freeBSD) and similar, so it's not altogether impossible to stumble upon
+  such path with os.walk and get a 1e6+ element list.
+
+And another annoyance I've found there is it's weird interface - in
+nearly all cases I need to get nodes just one-by-one, so I'd be able to
+work with such pipeline with itertools or any other iterable-oriented
+stuff, but string and two lists is definitely not what I need in any
+case.
+
+One good thing about the current os.walk I can see though, is that it shouldn't
+hold the dentry in cache any longer than necessary for a single scan, plus then
+it goes on to probe all the inodes there, which should be quite cache-friendly
+behavior, not taking into acount further usage of these entries.
+
+Anyway, to put my mind at ease on the subject, and as a kind of exercise, I
+thought I'd fix all these issues.
+
+At the lowest level, that's os.listdir, which I thought I'd replace with a
+simple generator. Alas, generators in py c-api aren't very simple, but certainly
+nothing to be afraid of either. Most (and probably the only) helpful info on the
+subject (with non-native C ppl in mind) was `this answer on stack overflow
+<http://stackoverflow.com/questions/1815812/how-to-create-a-generator-iterator-with-the-python-c-api/1816961#1816961>`_,
+giving the great sample code.
+
+| In my case half of the work was done with opendir(3) in the initialization
+  function, and the rest is just readdir(3) with '.' and '..' filtering and
+  to-unicode conversion with PyObject struct holding the DIR pointer. Code can
+  be found `here <http://fraggod.net/svc/git/fgc/tree/os_ext.c>`_.
+| Hopefully, it will be another working example of a more complex yet thin c-api
+  usage to augment the python, if not the most elegant or
+  killer-feature-implementing kind.
+
+Recursion, on the other hand, can be solved entirely in python, all that's
+needed is to maintain the custom processing stack, mirroring the natural
+recursion pattern. "Depth" ordering control can be easily implemented by making
+stack double-edged (as `collections.deque
+<http://docs.python.org/library/collections.html#collections.deque>`_) and the
+rest is just a simple logic excercise.
+
+| Whole python-side implementation is in `fgc.sh module here
+  <http://fraggod.net/svc/git/fgc/tree/fgc/sh.py>`_, just look for "def walk" in
+  the source.
+| End-result is efficient iteration and simple clean iterable interface.
+
+| For some use-cases though, just a blind generator is suboptimal, including
+  quite common ones like filtering - you don't need to recurse into some (and
+  usually the most crowded) paths' contents if the filter already blocks the
+  path itself.
+| And thanks to python's `coroutine-like generators
+  <http://docs.python.org/release/2.5.4/whatsnew/pep-342.html>`_, it's not only
+  possible, but trivial to implement - just check yield feedback value for the
+  path, determining the further direction on it's basis (`fgc.sh.crawl
+  <http://fraggod.net/svc/git/fgc/tree/fgc/sh.py>`_ function, along with the
+  regex-based filtering).
+
+| Don't get me wrong though, the whole thing doesn't really solve any real
+  problem, thus is little more than a puritan excercise aka brainfart, although
+  of course I'd prefer this implementation over the one in stdlib anyday.
+| Oh, and don't mind the title, I just wanted to give more keywords to the
+  eye-of-google, since generators with python c-api aren't the most elegant and
+  obvious thing, and google don't seem to be very knowledgeable on the subject
+  atm.

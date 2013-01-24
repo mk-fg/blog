@@ -1,0 +1,132 @@
+MooseFS usage experiences
+#########################
+
+:date: 2010-12-07 22:22
+:tags: sysadmin, nfs, replication
+
+
+| It's been three months since I've `replaced gluster with moose
+  </2010/9/Distributed-fault-tolerant-fs-take-2-MooseFS>`_ and I've had a few
+  questions about it's performance so far.
+| Info on the subject in the internets is a bit scarce, so here goes my
+  case. Keep in mind however that it's not a stress-benchmark of any kind and
+  actually rather degenerate use-case, since loads aren't pushing hardware to
+  any limits.
+
+Guess I can say that it's quite remarkable in a way that it's really
+unremarkable - I just kinda forgot it's there, which is probably the best thing
+one can expect from a filesystem.
+
+| My setup is 4 physical nodes at most, with 1.3 TiB of data in fairly large
+  files (3361/52862 dirs/files, calculated average is about 250 MiB for a file).
+| Spanned fs hosts a storage for distfiles, media content, vm images and pretty
+  much anything that comes in the compressed form and worth keeping for further
+  usage. Hence the access to files is highly sequential in most cases (as in
+  reading gzip, listening to mp3, watching a movie, etc).
+| OS on the nodes is gentoo/exherbo/fedora mix and is a subject to constant
+  software updates, breakages and rebuilds. Naturally, mfs is proven to be quite
+  resilent in these conditions, since it doesn't depend on boost or other
+  volatile crap and just consists of several binaries and configuration files,
+  which work fine even with defaults right out of the box.
+| One node is a "master", eating 100 MiB RAM (115 VSZ) on the few-month average
+  (according to atop logs). Others have metalogger slaves which cost virtually
+  nothing (<3 MiB VSZ), so it's not a big deal to keep metadata fully-replicated
+  just in case.
+| Chunkservers have 500 GiB - 3 TiB space on btrfs. These usually hang on 10 MiB
+  RAM, occasional 50-100 MiB in VSZ, though it's not swapped-out, just unused.
+| Cpu usage for each is negligible, even though mfsmaster + mfsmount +
+  mfschunkserver node is Atom D510 on miniITX board.
+
+| mfsmount maintains persistent connection to master and on-demand to
+  chunkservers.
+
+| It doesn't seem to mind if some of them are down though, so I guess it's
+  perfectly possible to upload files via mfsmount to one (the only accessible)
+  node and they'll be replicated to others from there (more details on that
+  below), although I'm unsure what will happen when you'll try to retrieve
+  chunks, stored exclusively on inaccessible nodes (guess
+| it's easy enough to test, anyway).
+
+| I use only one mfsmount on the same machine as master, and re-export (mostly
+  for reading) it over NFS, SFTP, WebDAV and plain HTTP to other machines.
+| Re-export is there because that way I don't need access to all machines in
+  cluster, which can be in a separate network (i.e. if I access fs from work),
+  plus stuff like NFS comes out of the box (no need for separate client) and
+  have a nice FS-Cache support, which saves a lot of bandwidth, webdav/sftp
+  works for ms-os machines as well and server-based replication saves more
+  precious bandwidth all by itself.
+
+| FS bandwidth in my case in constant ~1 MiB read 24/7 plus any on-demand
+  reading on speeds, which are usually slower than any single hdd (over slower
+  network links like 100 Mbps LAN and WiFi), and using only a few threads as
+  well, so I'm afraid I can't give any real-world stress results here.
+
+| On a local bulk-copy operations to/from mfs mount though, disk always seem to
+  be a bottleneck, with all other parameters far below any possible limitations,
+  but in my case it's a simple "wd green" low-speed/noise high-capacity disks or
+  seagate/hitachi disks with AAM threshold set to lowest level via "hdparm -M"
+  (works well for sound, but
+| I never really cared about how it affects speed to check).
+
+Chunkservers' storage consists of idexed (AA/AABCD...) paths, according
+to chunk names, which can be easily retreived from master. They rely on
+fs scanning to determine which chunks they have, so I've been able to
+successfully merge two nodes into one w/o storing the chunks on
+different filesystems/paths (which is also perfectly possible).
+
+Chunkservers talk to each other on p2p-basis (doesn't imply that they don't need
+connection to master, but bandwidth there doesn't seem to be an issue at all) to
+maintain requested replication goal and auto-balance disk space between
+themselves, so the free percentage tries to be equal on all nodes (w/o
+compromising the goal, of course), so with goal=2 and 4 nodes I have 30% space
+usage on backend-fs on both 500 GiB node and 3 TiB one.
+
+Balancing seem to be managed by every chunkserver in background (not quite sure
+if I've seen it in any docs, but there's a "chunk testing" process, which seem
+to imply that, and can be tuned btw), according to info about chunk and other
+currently-available nodes' space utilization from master.
+
+Hence, adding/removing nodes is a bliss - just turn it on/off, no configuration
+changes for other nodes are necessary - master sees the change (new/lost
+connection) and all the chunkservers start relocating/getting the chunks to
+restore the balance and maintain the requested goal. In a few hours everything
+will be balanced again.
+
+| Whole approach seem superior to dumb round-robin of the chunks on creation or
+  rehashing and relocating every one of them on single node failure, and
+  suggests that it might be easy to implement custom replication and balancing
+  scheme just by rsync'ing chunks between nodes as necessary (i.e. to make most
+  of small ssd buffer, putting most-demanded files' chunks there).
+| And indeed I've utilized that feature twice to merge different nodes and
+  filesystems, although the latter is not really necessary, since chunkserver
+  can work with several storage paths on different filesystems, but it's just
+  seem irrational to keep several btrfs trees these days, as they can even span
+  to multiple devices.
+
+| But the best part, enabling me not to look further for alternatives, is the
+  simple fact that I've yet to see any problem in the stability department - it
+  still just works. mfsmount never refused to give or receive a file, node
+  daemons never crashed or came back up with a weird inconsistency (which I
+  don't think is easy to produce with such simple setup/design, anyway).
+| Connection between nodes has failed quite often - sometimes my
+  NIC/switch/cables went to 30% packet loss for no apparent reason, sometimes
+  I've messed up openswan and ipsec or some other network setup, shut down and
+  hard-rebooted the nodes as necessary, but such failures were always
+  unnoticeable here, without any need to restart anything on the mfs level -
+  chunkservers just reconnect, forget obsolete chunks and keep going about their
+  business.
+
+| Well, there \*was\* one exception: one time I've managed to hard-reboot a
+  master machine and noticed that mfsmaster has failed to start.
+| Problem was missing metadata.mfs file in /var/lib, which I believe is created
+  on mfsmaster stop and checkpointed every hour to .back file, so, knowing there
+  was no changes to fs in the last few minutes, I just removed the .back suffix
+  and everything started just fine.
+| Doing it The Right Way would've involved stopping any of the metalogger nodes
+  (or signaling it somehow) and retreiving this file from there, or just
+  starting master on that node, updating the mfsmaster ns entry, since they're
+  identical.
+
+Of course, it's just a commodity hardware and lighter loads, but it's still way
+above other stuff I've tried here in virtually every aspect, so thumbs up for
+`moose <http://www.moosefs.org/>`_.

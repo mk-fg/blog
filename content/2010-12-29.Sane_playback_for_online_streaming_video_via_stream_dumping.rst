@@ -1,0 +1,62 @@
+Sane playback for online streaming video via stream dumping
+###########################################################
+
+:date: 2010-12-29 11:09
+:tags: desktop, python, caching, web
+
+
+| I rarely watch footage from various conferences online, usually because I have
+  some work to do and video takes much more dedicated time than the same thing
+  just written on a webpage, making it basically a waste of time, but sometimes
+  it's just fun.
+| Watching familiar "desktop linux complexity" holywar right on the stage of
+  "Desktop on the Linux..." presentation of 27c3 (`here's the dump
+  <http://c3.ex23.de/saal2-2010-12-27_20-04-47.wmv>`_, available atm, better one
+  should probably appear in the `Recordings section
+  <https://events.ccc.de/congress/2010/wiki/Conference_Recordings>`_) certainly
+  was, and since there are few other interesting topics on schedule (like DJB's
+  talk about high-speed network security) and I have some extra time, I decided
+  not to miss the fun.
+
+Problem is, "watching stuff online" is even worse than just "watching stuff" -
+either you pay attention or you just miss it, so I set up recording as a sort of
+"fs-based cache", at the very least to watch the recorded streams right as they
+get written, being able to pause or rewind, should I need to do so.
+
+| Natural tool to do the job is mplayer, with it's "-streamdump" flag.
+| It works well up until some network (remote or local) error or just mplayer
+  glitch, which seem to happen quite often.
+| That's when mplayer crashes with funny "Core dumped ;)" line and if you're
+  watching the recorded stream atm, you'll certainly miss it at the time,
+  noticing the fuckup when whatever you're watching ends aburptly and the
+  real-time talk is already finished.
+| Somehow, I managed to forget about the issue and got bit by it soon enough.
+
+So, mplayer needs to be wrapped in a while loop, but then you also need
+to give dump files unique names to keep mplayer from overwriting them,
+and actually do several such loops for several streams you're recording
+(different halls, different talks, same time), and then probably because
+of strain on the streaming servers mplayer tend to reconnect several
+times in a row, producing lots of small dumps, which aren't really good
+for anything, and you'd also like to get some feedback on what's
+happening, and... so on.
+
+Well, I just needed a better tool, and it looks like there aren't much simple
+non-gui dumpers for video+audio streams and not many libs to connect to http
+video streams from python, existing one being vlc bindings, which isn't probably
+any better than mplayer, provided all I need is just to dump a stream to a file,
+without any reconnection or rotation or multi-stream handling mechanism.
+
+| To cut the story short I ended up writing a bit more complicated eventloop
+  script to control several mplayer instances, aggregating (and marking each
+  accordingly) their output, restarting failed ones, discarding failed dumps and
+  making up sensible names for the produced files.
+| It was a quick ad-hoc hack, so I thought to implement it straight through
+  signal handling and poll loop for the output, but thinking about all the async
+  calls and state-tracking it'd involve I quickly reconsidered and just used
+  twisted to shove all this mess under the rug, ending up with quick and simple
+  100-liner.
+| `Script code <http://fraggod.net/oss/projects/streamrip.py>`_,
+  `twisted <http://twistedmatrix.com/>`_ is required.
+
+And now, back to the ongoing talks of day 3.

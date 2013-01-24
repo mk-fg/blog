@@ -1,0 +1,138 @@
+Listening to music over the 'net with authentication and cache
+##############################################################
+
+:date: 2010-02-17 18:09
+:tags: unix, nfs, caching, ssh
+
+
+Having seen people really obsessed with the music, I don't consider myself to be
+much into it, yet I've managed to accumulate more than 70G of it, and
+counting. That's probably because I don't like to listen to something on a loop
+over and over, so, naturally, it's quite a bother to either keep the collection
+on every machine I use or copy the parts of it just to listen and replace.
+
+| Ideal solution for me is to mount whole hoard right from home server, and
+  mounting it over the internet means that I need some kind of authentication.
+| Since I also use it at work, encryption is also nice, so I can always pass
+  this bandwith as something work-friendly and really necessary, should it
+  arouse any questions.
+| And while bandwith at work is pretty much unlimited, it's still controlled, so
+  I wouldn't like to overuse it too much, and listening to oggs, mp3 and flacs
+  for the whole work-day can generate traffic of 500-800 megs, and that's quite
+  excessive to that end, in my own estimation.
+
+The easiest way for me was trusty sshfs - it's got the best authentication, nice
+performance and encryption off-the-shelf with just one simple command. Problem
+here is the last aforementioned point - sshfs would generate as much bandwith as
+possible, caching content only temporarily in volatile RAM.
+
+Persistent caching seem to be quite easy to implement in userspace with either
+fuse layer over network filesystem or something even simplier (and more hacky),
+like aufs and inotify, catching IN_OPEN events and pulling files in question to
+intermediate layer of fs-union.
+
+| Another thing I've considered was fs-cache in-kernel mechanism, which appeared
+  in the main tree since around 2.6.30, but the bad thing about was that while
+  being quite efficient, it only worked for NFS or AFS.
+| Second was clearly excessive for my purposes, and the first one I've come to
+  hate for being extremely ureliable and limiting. In fact, NFS never gave me
+  anything but trouble in the past, yet since I haven't found any decent
+  implementations of the above ideas, I'd decided to give it (plus fs-cache) a
+  try.
+
+| Setting up nfs server is no harder than sharing dir on windows - just write a
+  line to /etc/exports and fire up nfs initscript. Since nfs4 seems superior
+  than nfs in every way, I've used that version.
+| Trickier part is authentication. With nfs' "accept-all" auth model and
+  kerberos being out of question, it has to be implemented on some transport
+  layer in the middle.
+| Luckily, ssh is always there to provide a secure authenticated channel and nfs
+  actually supports tcp these days. So the idea is to start nfs on localhost on
+  server and use ssh tunnel to connecto to it from the client.
+
+Setting up tunnel was quite straightforward, although I've put together a simple
+script to avoid re-typing the whole thing and to make sure there aren't any dead
+ssh processes laying around.
+
+.. code-block:: bash
+
+  #!/bin/sh
+  PID="/tmp/.$(basename $0).$(echo "$1.$2" | md5sum | cut -b-5)"
+  touch "$PID"
+  flock -n 3 3<"$PID" || exit 0
+  exec 3>"$PID"
+  ( flock -n 3 || exit 0
+    exec ssh\
+     -oControlPath=none\
+     -oControlMaster=no\
+     -oServerAliveInterval=3\
+     -oServerAliveCountMax=5\
+     -oConnectTimeout=5\
+     -qyTnN $3 -L "$1" "$2" ) &
+  echo $! >&3
+  exit 0
+
+That way, ssh process is daemonized right away. Simple locking is also
+implemented, based on tunnel and ssh destination, so it might be put as a
+cronjob (just like "ssh_tunnel 2049:127.0.0.1:2049 user\@remote") to keep the
+link alive.
+
+Then I've put a line like this to /etc/exports:
+
+::
+
+  /var/export/leech 127.0.0.1/32(ro,async,no_subtree_check,insecure)
+
+| ...and tried to "mount -t nfs4 localhost:/ /mnt/music" on the remote.
+| Guess what? "No such file or dir" error ;(
+
+| Ok, nfs3-way to "mount -t nfs4 localhost:/var/export/leech /mnt/music" doesn't
+  work as well. No indication of why it is whatsoever.
+|
+| Then it gets even better - "mount -t nfs localhost:/var/export/leech
+  /mnt/music" actually works (locally, since nfs3 defaults to udp).
+| Completely useless errors and nothing on the issue in manpages was quite
+  weird, but prehaps I haven't looked at it well enough.
+
+Gotcha was in the fact that it wasn't allowed to mount nfs4 root, so tweaking
+exports file like this...
+
+::
+
+  /var/export/leech 127.0.0.1/32(ro,async,no_subtree_check,insecure,fsid=0)
+  /var/export/leech/music 127.0.0.1/32(ro,async,no_subtree_check,insecure,fsid=1)
+
+...and "mount -t nfs4 localhost:/music /mnt/music" actually solved the issue.
+
+Why can't I use one-line exports and why the fuck it's not on the first (or
+any!) line of manpage escapes me completely, but at least it works now even from
+remote. Hallelujah.
+
+| Next thing is the cache layer. Luckily, it doesn't look as crappy as nfs and
+  tying them together can be done with a single mount parameter. One extra thing
+  needed, aside from the kernel part, here, is cachefilesd.
+| Strange thing it's not in gentoo portage yet (since it's kinda necessary for
+  kernel mechanism and quite aged already), but there's an `ebuild in b.g.o
+  <http://bugs.gentoo.org/show_bug.cgi?id=275014>`_ (now mirrored to my overlay,
+  as well).
+
+| Setting it up is even simplier.
+| Config is well-documented and consists of five lines only, the only relevant
+  of which is the path to fs-backend, oh, and the last one seem to need
+  user_xattr support enabled.
+
+fstab lines for me were these:
+
+::
+
+  /dev/dump/nfscache /var/fscache ext4 user_xattr
+  localhost:/music /mnt/music nfs4 ro,nodev,noexec,intr,noauto,user,fsc
+
+First two days got me 800+ megs in cache and from there it was even better
+bandwidth-wise, so, all-in-all, this nfs circus was worth it.
+
+| Another upside of nfs was that I could easily share it with workmates just by
+  binding ssh tunnel endpoint to a non-local interface - all that's needed from
+  them is to issue the mount command, although I didn't came to like to
+  implementation any more than I did before.
+| Wonder if it's just me, but whatever...

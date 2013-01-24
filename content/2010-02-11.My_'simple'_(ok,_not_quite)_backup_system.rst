@@ -1,0 +1,185 @@
+My "simple" (ok, not quite) backup system
+#########################################
+
+:date: 2010-02-11 22:58
+:tags: unix, sysadmin
+
+
+There's saying: "there are two kinds of sysadmins - the ones that aren't making
+backups yet, and the ones that already do". I'm not sure if the essence of the
+phrase wasn't lost in translation (ru->eng), but the point is that it's just a
+matter of time, 'till you start backing-up your data.
+
+Luckily for me, I've got it quite fast, and consider making backups on a daily
+basis is a must-have practice for any developer/playground machine or
+under-development server. It saved me on a countless occasions, and there were
+quite a few times when I just needed to check if everything in my system is
+still in place and were there before.
+
+Here I'll try to describe my sample backup system operation and the reasons for
+building it like that.
+
+Ok, what do I need from the backup ecosystem?
+
+- Obviously, it'd be a bother to backup each machine manually every day, so
+  there's a cron.
+
+- Backing up to the same machine obviously isn't a good idea, so the backup has
+  to be transferred to remote system, preferrably several ones, in different
+  environments.
+
+- Another thing to consider is the size of such backups and efficient method of
+  storage, transfer and access to them.
+
+- Then there's a security issue - full fs read capabilities are required to
+  create the backup, and that can be easily abused.
+
+First two points suggest that you either need privileged remote access to the
+machine (like root ssh, which is a security issue) or make backups (local fs
+replicas) locally then transfer them to remote with unprivileged access (just to
+these backups).
+
+Local backups make third point (space efficiency) more difficult, since you
+either have to make full backups locally (and transferring them, at the very
+least, is not-so-efficient at all) or keep some metadata about the state of all
+the files (like "md5deep -r /", but with file metadata checksums as well), so
+you can efficiently generate increments.
+
+Traditional hacky way to avoid checksumming is to look at inode mtimes only, but
+that is unreliable, especially so, since I like to use stuff like "cp -a" and
+"rsync -a" (synchronises timestamps) on a daily basis and play with timestamps
+any way I like to.
+
+Space efficiency usually achieved via incremental archives. Not really my thing,
+since they have terrible accessibility - tar (and any other streaming formats
+like cpio) especially, `dar <http://dar.linux.free.fr/>`_ less so, since it has
+random access and file subset merge features, but still bad at keeping
+increments (reference archive have to be preserved, for one thing) and is not
+readily-browseable - you have to unpack it to some tmp path before doing
+anything useful with files. There's also `SquashFS
+<http://squashfs.sourceforge.net/>`_, which is sorta "browsable archive", but it
+has not increment-tracking features at all ;(
+
+| Another way to preserve space is to forget about these archive formats and
+  just use filesystem to store backed-up tree. Compression is also an option
+  here with ZFS or Btrfs or some FUSE layer like `fusecompress
+  <http://www.miio.net/fusecompress/>`_, keeping increments is also simple with
+  either hardlinks or snapshots.
+| Obviously, accessibility (and simplicity, btw) here is next to nothing, and
+  you can use diff, rsync and rest of the usual tools to do anything you want
+  with it, which I see as a great feat. And should you need to transfer it in a
+  container - just tar it right to the medium in question.
+| Of course, I liked this way a lot more than the archives, and decided to stick
+  with it.
+
+| So, at this point the task was refined to just rsync from backed-up
+  machine to backup storage.
+| Since I have two laptops which mightn't always be accessible to backup host
+  and should be able to initiate backup when I need to without much effort, it's
+  best if the backups are initiated from backed-up machine.
+
+That said...
+
+- I don't want to have any kind of access to backup storage from this machine or
+  know anything about backup storage layout, so direct rsync to storage is out
+  of question.
+
+- At the same time, I don't need any-time root - or any other kind of - access
+  to local machine form backup host, I only need it when I do request a backup
+  locally (or local cron does it for me).
+
+- In fact, even then, I don't need backup host to have anything but read-only
+  access to local filesystem. This effectively obsoletes the idea of
+  unprivileged access just-to-local-backups, since they are the same read-only
+  (...replicas of...) local filesystem, so there's just no need to make them.
+
+Obvious tool for the task is rsync-pull, initiated from backup host (and
+triggered by backed-up host), with some sort of one-time pass, given by the
+backed-up machine.
+
+And local rsync should be limited to read-only access, so it can't be used by
+backup-host imposter to zero or corrupt local rootfs. Ok, that's quite a
+paranoid scenario, especially if you can identify backup host by something like
+ssh key fingerprint, but it's still a good policy.
+
+Ways to limit local rsync to read-only, but otherwise unrestricted, access I've
+considered were:
+
+- Locally-initiated rsync with parameters, passed from backup host, like "rsync
+  -a / host:/path/to/storage". Not a good option, since that requres parameter
+  checking and that's proven to be error-prone soul-sucking task (just look at
+  the sudo or suid-perl), plus it'd need some one-time and restricted access
+  mechanism on backup host.
+
+- Local rsyncd with one-time credentials. Not a bad way. Simple, for one thing,
+  but the link between the hosts can be insecure (wireless) and rsync protocol
+  does not provide any encryption for the passed data - and that's the whole
+  filesystem piped through. Also, there's no obvious way to make sure it'd
+  process only one connection (from backup host, just to read fs once) -
+  credentials can be sniffed and used again.
+
+- Same as before, but via locally-initiated reverse-ssh tunnel to rsyncd.
+
+- One-shot local sshd with rsync-only command restriction, one-time generated
+  keypair and remote ip restriction.
+
+Last two options seem to be the best, being pretty much the same thing,
+with the last one more robust and secure, since there's no need to
+tamper with rsyncd and it's really one-shot.
+
+| Caveat however, is how to give rsync process read-only access. Luckily,
+  there's dac_read_search posix capability, which allows just that - all
+  that's needed is to make it inheritable-effective for rsync binary in
+  question, which can be separate statically-linked one, just for these backup
+  purposes.
+| Separate one-shot sshd also friendly to nice/ionice setting and traffic
+  shaping (since it's listening on separate port), which is quite crucial for
+  wireless upload bandwidth since it has a major impact on interactive
+  connections - output pfifo gets swarmed by ssh-data packets and every other
+  connection actions (say, ssh session keypress) lag until it's packets wait in
+  this line... but that's a bit unrelated note (see `LARTC
+  <http://lartc.org/howto/lartc.qdisc.html>`_ if you don't know what it's all
+  about, mandatory).
+
+And that actually concludes the overall plan, which comes to these
+steps:
+
+- Backed-up host:
+
+  - Generates ssh keypair (ssh-keygen).
+
+  - Starts one-shot sshd ("-d" option) with authorization only for generated
+    public key, command ("ForceCommand" option), remote ip ("from=" option) and
+    other (no tunneling, key-only auth, etc) restrictions.
+
+  - Connects (ssh, naturally) to backup host's unprivileged user or restricted
+    shell and sends it's generated (private) key for sshd auth, waits.
+
+- Backup host:
+
+  - Receives private ssh key from backed-up host.
+  - rsync backed-up-host:/ /path/to/local/storage
+
+Minor details:
+
+- ssh pubkey authentication is used to open secure channel to a backup host,
+  precluding any mitm attacks, non-interactive cron-friendly.
+
+- sshd has lowered nice/ionice and bandwidth priority, so it won't interfere
+  with host operation in any way.
+
+- Backup host receives link destination for rsync along with the private key, so
+  it won't have to guess who requested the backup and which port it should use.
+
+- ForceCommand can actually point to the same "backup initiator" script, which
+  will act as a shell with full rsync command in SSH_ORIGINAL_COMMAND env var,
+  so additional checks or privilege manipulations can be performed immediately
+  before sync.
+
+- Minimal set of tools used: openssh, rsync and two (fairly simple) scripts on
+  both ends.
+
+| Phew... and I've started writing this just as an example usage of posix
+  capabilities for `previous entry
+  <http://blog.fraggod.net/2010/2/POSIX-capabilities-for-python>`_.
+| Guess I'll leave implementation details for the next one.

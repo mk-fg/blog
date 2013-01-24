@@ -1,0 +1,60 @@
+Notification-daemon in python
+#############################
+
+:date: 2011-08-14 09:12
+:tags: python, desktop, unix, notification, rate-limiting
+
+
+| I've delayed update of the whole libnotify / notification-daemon /
+  notify-python stack for a while now, because notification-daemon got too
+  GNOME-oriented around 0.7, making it a lot more simplier, but sadly dropping
+  lots of good stuff I've used there.
+| Default nice-looking theme is gone in favor of black blobs (although colors
+  are probably subject to gtkrc); it's one-note-at-a-time only, which makes
+  reading them intolerable; configurability was dropped as well, guess blobs
+  follow some gnome-panel settings now.
+| Older notification-daemon versions won't build with newer libnotify.
+| Same problem with notify-python, which seem to be unnecessary now, since it's
+  functionality is accessible via introspection and `PyGObject
+  <http://live.gnome.org/PyGObject>`_ (part known as `PyGI
+  <http://live.gnome.org/PyGI>`_ before merge - gi.repositories.Notify).
+
+| Looking for more-or-less drop-in replacements I've found `notipy
+  <https://github.com/the-isz/notipy>`_ project, which looked like what I
+  needed, and the best part is that it's python - no need to filter notification
+  requests in a proxy anymore, eliminating some associated complexity.
+| Project has a bit different goals however, them being simplicity, less deps
+  and concept separation, so I incorporated (more-or-less) notipy as a simple
+  NotificationDisplay class into notification-proxy, making it into
+  `notification-thing <http://fraggod.net/static/code/notification-thing.py>`_
+  (first name that came to mind, not that it matters).
+
+| All the rendering now is in python using PyGObject (gi) / gtk-3.0 toolkit,
+  which seem to be a good idea, given that I still have no reason to keep Qt in
+  my system, and gtk-2.0 being obsolete.
+
+| Exploring newer Gtk stuff like `css styling
+  <http://developer.gnome.org/gtk3/3.1/GtkCssProvider.html>`_ and honest
+  auto-generated interfaces was fun, although the whole mess seem to be much
+  harder than expected. Simple things like adding a border, margins or some
+  non-solid background to existing widgets seem to be very complex and totally
+  counter-intuitive, unlike say, doing the same (even in totally cross-browser
+  fashion) with html. I also failed to find a way to just draw what I want on
+  arbitrary widgets, looks like it was removed (in favor of GtkDrawable) on
+  purpose.
+| My (uneducated) guess is that gtk authors geared toward "one way to do one
+  thing" philosophy, but unlike Python motto, they've to ditch the "one
+  \*obvious\* way" part. But then, maybe it's just me being too lazy to read
+  docs properly.
+
+| `Source link <http://fraggod.net/static/code/notification-thing.py>`_.
+| All the previous features like `filtering
+  <http://blog.fraggod.net/2010/12/Further-improvements-on-notification-daemon>`_
+  and `rate-limiting
+  <http://blog.fraggod.net/2010/2/libnotify-notification-daemon-shortcomings-and-my-solution>`_
+  are there.
+
+Looking over `Desktop Notifications
+Spec <http://developer.gnome.org/notification-spec/>`_ in process, I've
+noticed that there are more good ideas that I'm not using, so guess I
+might need to revisit local notification setup in the near future.

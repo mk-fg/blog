@@ -1,0 +1,122 @@
+Music collection updates feed via musicbrainz and last.fm
+#########################################################
+
+:date: 2010-05-08 14:10
+:tags: web
+
+
+| From time to time I accidentally bump into new releases from the artists/bands
+  I listen to. Usually it happens on the web, since I don't like random radio
+  selections much, and quite a wide variety of stuff I like seem to ensure that
+  my `last.fm <http://last.fm/>`_ radio is a mess.
+| So, after accidentally seeing a few new albums for my collection, I've decided
+  to remedy the situation somehow.
+
+Naturally, subscribing to something like an unfiltered flow of new music
+releases isn't an option, but no music site other than last.fm out there knows
+the acts in my collection to track updates for those, and last.fm doesn't seem
+to have the functionality I need - just to list new studio releases from the
+artists I listened to beyond some reasonable threshold, or I just haven't been
+able to find it.
+
+| I thought of two options.
+| First is writing some script to submit my watch-list to some music site, so
+  it'd notify me somehow about updates to these.
+| Second is to query the updates myself, either through some public-available
+  APIs like last.fm, cddb, musicbrainz or even something like public atom feeds
+  from a music portals. It seemed like a pretty obvious idea, btw, yet I've
+  found no already-written software to do the job.
+
+First one seemed easier, but not as entertaining as the second, plus I have
+virtually no knowledge to pick a site which will be best-suited for that (and
+I'd hate to pick a first thing from the google), and I'd probably have to
+post-process what this site feeds me anyway. I've decided to stick with the
+second way.
+
+| The main idea was to poll list of releases for every act in my collection, so
+  the new additions would be instantly visible, as they weren't there before.
+| Such history can be kept in some db, and an easy way to track such flow would
+  be just to dump db contents, ordered by addition timestamp, to an atom feed.
+
+Object-db to a web content is a typical task for a web framework, so I chose to
+use `django <http://djangoproject.com/>`_ as a basic template for the task.
+
+| Obtaining list of local acts for my collection is easy, since I prefer not to
+  rely on tags much (although I try to have them filled with the right data as
+  well), I keep a strict "artist/year_album/num\_-_track" directory tree, so
+  it takes one readdir with minor post-processing for the names - replace
+  underscores with spaces, "..., The" to "The ...", stuff like that.
+| Getting a list of an already-have releases then is just one more listing for
+  each of the artists' dir.
+
+| To get all existing releases, there's cddb, musicbrainz and last.fm and co
+  readily available.
+| I chose to use `musicbrainz db <http://musicbrainz.org/>`_ (at least as the
+  first source), since it seemed the most fitting to my purposes, shouldn't be
+  as polluted as last.fm (which is formed arbitrarily from the tags ppl have in
+  the files, afaik) and have clear studio-whateverelse distinction.
+| There's handy `official py-api
+  <http://musicbrainz.org/doc/python-musicbrainz2>`_ readily available, which I
+  query by name for the act, then query it (if found) for available releases
+  ("release" term is actually from there).
+
+The next task is to compare two lists to drop the stuff I already have (local
+albums list) from the fetched list.
+
+| It'd also be quite helpful to get the release years, so all the releases which
+  came before the ones in the collection can be safely dropped - they certainly
+  aren't new, and there should actually be lots of them, much more than truly
+  new ones. Mbz-db have "release events" for that, but I've quickly found that
+  there's very little data in that section of db, alas. I wasn't happy about
+  dropping such an obviously-effective filter so I've hooked much fatter last.fm
+  db to query for found releases, fetching release year (plus some descriptive
+  metadata), if there's any, and it actually worked quite nicely.
+| Another thing to consider here is a minor name differences - punctuation,
+  typos and such. Luckily, python has a nice `difflib
+  <http://docs.python.org/library/difflib.html>`_ right in the stdlib, which can
+  compare the strings to get the fuzzy (to a defined threshold) matches, easy.
+
+After that comes db storage, and there's not much to implement but a simple
+ORM-model definition with a few unique keys and the django will take care of the
+rest.
+
+The last part is the data representation.
+
+| No surprises here either, django has `syndication feed framework module
+  <http://docs.djangoproject.com/en/dev/ref/contrib/syndication/#ref-contrib-syndication>`_,
+  which can build db-to-feed mapping in a three lines of code, which is almost
+  too easy and non-challenging, but oh well...
+| Another great view into db data is the `django admin module
+  <http://docs.djangoproject.com/en/dev/ref/contrib/admin/#ref-contrib-admin>`_,
+  allowing pretty filtering, searching and ordering, which is nice to have
+  beside the feed.
+
+One more thing I've thought of is the caching - no need to strain free databases
+with redundant queries, so the only non-cached data from these are the lists of
+the releases which should be updated from time to time, the rest can be kept in
+a single "seen" set of id's, so it'd be immediately obvious if the release was
+processed and queried before and is of no more interest now.
+
+To summarize: the tools are `django <http://djangoproject.com/>`_,
+`python-musicbrainz2 <http://musicbrainz.org/doc/python-musicbrainz2>`_ and
+`pylast <http://code.google.com/p/pylast/>`_; `last.fm <http://last.fm/>`_ and
+`musicbrainz <http://musicbrainz.org/>`_ - the data sources (although I might
+extend this list); direct result - `this feed
+<http://fraggod.net/feeds/music/>`_.
+
+| Gave me several dozens of a great new releases for several dozen acts (out of
+  about 150 in the collection) in the first pass, so I'm stuffed with a new yet
+  favorite music for the next few months and probably any forseeable future (due
+  to cron-based updates-grab).
+| Problem solved.
+
+| `Code is here <http://fraggod.net/oss/projects/mbz_feed.tar.gz>`_, local acts'
+  list is provided by a simple generator that should be easy to replace for any
+  other source, while the rest is pretty simple and generic.
+| Feed (feeds.py) is hooked via django URLConf (urls.py) while the cron-updater
+  script is bin/forager.py. Generic settings like cache and api keys are in the
+  forager-app settings.py. Main processing code reside in models.py (info update
+  from last.fm) and mbdb.py (release-list fetching). admin.py holds a bit of
+  pretty-print settings for django admin module, like which fields should be
+  displayed, made filterable, searchable or sortable. The rest are basic django
+  templates.

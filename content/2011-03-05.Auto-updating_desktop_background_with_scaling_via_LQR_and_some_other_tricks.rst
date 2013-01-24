@@ -1,0 +1,17 @@
+Auto-updating desktop background with scaling via LQR and some other tricks
+###########################################################################
+
+:date: 2011-03-05 12:44
+:tags: python, bash, desktop
+
+
+Got around to publish my (pretty-sophisticated at this point) background updater
+script.
+
+Check it out, if you keep a local image collection, as a sample of how to
+batch-process images in most perversive ways using gimp and python or if you've
+never heard of "liquid rescale" algorithm:
+
+-  `Sourceforge project for the whole
+   thing <http://desktop-aura.sourceforge.net/>`_
+-  `GIMP plugin in the registry <http://registry.gimp.org/node/25103>`_

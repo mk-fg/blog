@@ -1,0 +1,28 @@
+Exherbo / paludis fossil syncer
+###############################
+
+:date: 2010-04-25 09:00
+:tags: scm, exherbo, fossil
+
+
+| So far I like `exherbo <http://www.exherbo.org/>`_ way of package management and
+  base system layout.
+| I haven't migrated my desktop environment to it yet, but I expect it shouldn't
+  be a problem, since I don't mind porting all the stuff I need either from
+  gentoo or writing exheres for all I need from scratch.
+
+| First challenge I've faced though was due to my late addiction to `fossil scm
+  <http://www.fossil-scm.org/>`_, which doesn't seem to neither be in any of
+  exherbo repos listed in unavailable meta-repository, nor have a syncer for
+  `paludis <http://paludis.pioto.org/>`_, so I wrote my own dofossil syncer and
+  created the repo.
+| Syncer should support both fossil+http:// and fossil+file:// protocols and
+  tries to rebuild repository data from artifacts' storage, should it encounter
+  any errors in process.
+
+Repository, syncer and some instructions are `here
+<http://fraggod.net/svc/fossil/fg_exheres>`_.
+
+Thought I'd give google some keywords, should someone be looking for the same
+thing, although I'd probably try to push it into paludis and/or "unavailable"
+repo, when (and if) I'll get a bit more solid grasp on exherbo concepts.

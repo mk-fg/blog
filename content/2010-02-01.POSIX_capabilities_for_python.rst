@@ -1,0 +1,109 @@
+POSIX capabilities for python
+#############################
+
+:date: 2010-02-01 06:19
+:tags: python, unix
+
+
+I bet everyone who did any sysadmin tasks for linux/\*bsd/whatever, stumbled
+upon the need to elevate privileges for some binary or script.
+
+And most of the time if there's any need for privileges at all, it's for the
+ones that only root has: changing uid/gid on files, full backup, moving stuff
+owned by root/other-uids, signaling daemons, network tasks, etc.
+
+Most of these tasks require only a fragment of root's power, so capabilities(7)
+is a nice way to get what you need without compromising anything. Great feat of
+caps is that they aren't inherited on exec, which seem to beat most of
+vulnerabilities for scripts, which don't usually suffer from C-like code
+shortcomings, provided the interpreter itself is up-to-date.
+
+However, I've found that support for capabilities in linux (gentoo in my case,
+but that seem to hold true for other distros) is quite lacking.  While they've
+been around for quite a while, even simpliest ping util still has suid bit
+instead of single cap\_net\_\*, daemons get root just to bind a socket on a
+privileged port and service scripts just to send signal some pid.
+
+For my purposes, I needed to backup FS with rsync, synchronize data between
+laptops and control autofs/mounts, all that from py scripts, and using full root
+for any of these tasks isn't necessary at all.
+
+First problem is to give limited capabilities to a script.
+
+One way to get them is to get everything from sudo or suid bit (aka get root),
+then drop everything that isn't needed, which is certainly better than having
+root all the time, but still excessive, since I don't need full and inheritable
+root at any point.
+
+Another way is to inherit caps from cap-enabled binary. Just like suid, but you
+don't need to get all of them, they won't have to be inheritable and it doesn't
+have to be root-or-nothing. This approach looks a way nicer than the first one,
+so I decided to stick with it.
+
+For py script, it means that the interpreter has to inherit some caps from
+something else, since it wouldn't be wise to give caps to all py scripts
+indiscriminatively. "some_caps=i" (according to libcap text representation
+format, see cap_to_text(3)) or even "all=i" are certainly better.
+
+To get caps from nothing, a simple C wrapper would suffice, but I'm a bit too
+lazy to write one for every script I run so I wrote one that gets all the caps
+and drops them to the subset that script file's inherited set. More on this (a
+bit unrelated) subject `here <http://fraggod.net/prj/ppy/>`_.
+
+That leads to the point there py code starts with some permitted, but not
+immediately effective, set of capabilities.
+
+Tinkering with caps in C is possible via `libcap
+<http://www.friedhoff.org/posixfilecaps.html>`_ and `libcap-ng
+<http://people.redhat.com/sgrubb/libcap-ng/>`_, and the only module for py seem
+to be cap-ng bindings. And they do suck.
+
+Not only it's a direct C calls translation, but the interface is sorely lacking
+as well. Say, you need something extremely simple: to remove cap from some set,
+to activate permitted caps as effective or copy them to inherited set... well,
+no way to do that, what a tool. Funny thing, libcap can't do that in any obvious
+way either!
+
+So here goes my solution - dumped whole cap-manipulation interface of both libs
+apart from dump-restore from/to string functions, wrote simple `py-C interface
+<http://fraggod.net/svc/git/fgc/tree/strcaps.c>`_ to it and wrapped them in
+python OO interface - `Caps class
+<http://fraggod.net/svc/git/fgc/tree/fgc/caps.py>`_.
+
+And the resulting high-level py code to make permitted caps effective goes like
+this:
+
+.. code-block:: python
+
+    Caps.from_process().activate().apply()
+
+To make permitted caps inheritable:
+
+.. code-block:: python
+
+    caps.propagnate().apply()
+
+And the rest of the ops is just like this:
+
+.. code-block:: python
+
+    caps['inheritable'].add('cap_dac_read_search')
+    caps.apply()
+
+Well, friendly enough for me, and less than hundred lines of py code (which does
+all the work apart from load-save) for that.
+
+While the code is part of a larger toolkit (`fgc
+<http://fraggod.net/svc/git/fgc/>`_), it doesn't depend on any other part of
+it - just C module and py wrapper.
+
+Of course, I was wondering why no-one actually wrote something like this before,
+but looks like not many people actually use caps at all, even though it's worth
+it, supported by the fact that while I've managed to find the `bug in .32 and
+.33-rc\* kernel <http://bugzilla.kernel.org/show_bug.cgi?id=14913>`_, preventing
+prehaps one of the most useful caps (cap_dac_read_search) from working ;(
+
+Well, whatever.
+
+Guess I'll write more about practical side and my application of this stuff next
+time.

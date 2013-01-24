@@ -1,0 +1,67 @@
+Backup of 5 million tiny files and paths
+########################################
+
+:date: 2011-05-08 11:57
+:tags: sysadmin, unix, python
+
+
+| I think in ideal world this shouldn't be happening, it really is a job for a
+  proper database engine.
+| Some filesystems (reiserfs, `pomegranate
+  <https://github.com/macan/Pomegranate/wiki>`_) are fairly good at dealing with
+  such use-cases though, but not the usual tools for working with fs-based data,
+  which generally suck all the time and resources on such a mess.
+
+| In my particular case, there's a (mostly) legacy system, which keeps such
+  tons-of-files db with ~5M files, taking about 5G of space, which have to be
+  backed-up somehow. Every file can be changed, added or unlinked, total
+  consistency between parts (like snapshotting the same point in time for every
+  file) is not necessary. Contents are (typically) php serializations (yuck!).
+
+| Tar and rsync are prime example of tools that aren't quite fit for the task -
+  both eat huge amounts of RAM (gigs) and time to do this, especially when you
+  have to make these backups incremental, and ideally this path should be
+  backed-up every single day.
+| Both seem to build some large and not very efficient list of existing files in
+  memory and then do a backup against that. Both aren't really good at capturing
+  the state - increments either take a huge amounts of space/inodes (with rsync
+  --link-dest) or loose info on removed entries (tar).
+
+| Nice off-the-shelf alternatives are `dar <http://dar.linux.free.fr/>`_, which
+  is not a fs-to-stream packer, but rather squashfs-like image builder with the
+  ability to make proper incremental backups, and of course `mksquashfs
+  <http://squashfs.sourceforge.net/>`_ itself, which supports append these days.
+
+| These sound nice, but somehow I failed to check for "append" support in
+  squashfs (although I remember hearing about it before), plus there's still
+  doesn't seem to be a way to remove paths.
+| dar seem to be good enough solution, and I'll probably get back to it, but as
+  I was investigating "the right way" to do such backups, first thing that
+  naturally came to mind (probably because even `fs developers suggest that
+  <https://bugs.launchpad.net/ubuntu/+source/linux/+bug/317781/comments/54>`_),
+  is to cram all this mess into a single db, and I wanted to test it via
+  `straightforward fs - berkdb (btree) implementation
+  <http://fraggod.net/static/code/bdb_backup.py>`_.
+
+| Results turned out to be really good - 40min to back all this stuff up from
+  scratch and under 20min to do an incremental update (mostly comparing the
+  timestamps plus adding/removing new/unlinked keys).  Implementation on top of
+  berkdb also turned out to be fairly straightorward (just 150 lines total!)
+  with just a little bit of optimization magic to put higter-level paths before
+  the ones nested inside (by adding \\0 and \\1 bytes before basename for
+  file/dir).
+
+| I still need to test it against dar and squashfs when I'll have more time (as
+  if that will ever happen) on my hands, but even such makeshift python
+  implementation (which includes full "extract" and "list" functionality though)
+  proven to be sufficient and ended up in a daily crontab.
+| So much for the infamous "don't keep the files in a database!" argument, btw,
+  wonder if original developers of this "db" used this hype to justify this
+  mess...
+
+Obligatory `proof-of-concept code link
+<http://fraggod.net/static/code/bdb_backup.py>`_.
+
+**Update:**\ tried mksquashfs, but quickly pulled a plug as it started to eat
+more than 3G of RAM - sadly unfit for the task as well. dar also ate ~1G and
+been at it for a few hours, guess no tool cares about such fs use-cases at all.

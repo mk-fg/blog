@@ -1,0 +1,174 @@
+My "simple" (ok, not quite) backup system - implementation (backup host)
+########################################################################
+
+:date: 2010-02-14 09:51
+:tags: python, unix, sysadmin, ssh, rsync
+
+
+According to the `general plan
+<http://blog.fraggod.net/2010/2/My-simple-ok-not-quite-backup-system>`_, with
+`backed-up side scripts in place
+<http://blog.fraggod.net/2010/2/My-simple-ok-not-quite-backup-system-implementation-backed-up-side>`_,
+some backup-grab mechanism is needed on the backup host.
+
+So far, sshd provides secure channel and authentication, launching control
+script as a shell, backed-up side script provides hostname:port for one-shot ssh
+link on the commandline, with private key to this link and backup-exclusion
+paths list piped in.
+
+All that's left to do on this side is to read the data from a pipe and start
+rsync over this link, with a few preceding checks, like a free space check, so
+backup process won't be strangled by its abscence and as many as possible
+backups will be preserved for as long as possible, removing them right before
+receiving new ones.
+
+Historically, this script also works with any specified host, interactively
+logging into it as root for rsync operation, so there's bit of interactive
+voodoo involved, which isn't relevant for the remotely-initiated backup case.
+
+Ssh parameters for rsync transport are passed to rsync itself, since it starts
+ssh process, via "--rsh" option. Inside the script,these are accumulated in
+bak_src_ext variable
+
+| Note that in case then this script is started as a shell, user is not a root,
+  yet it needs to store filesystem metadata like uids, gids, acls, etc.
+| To that end, rsync can employ user_xattr's, although it looks extremely
+  unportable and inproper to me, since nothing but rsync will translate them
+  back to original metadata, so rsync need to be able to change fs metadata
+  directly, and to that end there's posix capabilities.
+
+I use `custom module
+<http://blog.fraggod.net/2010/2/POSIX-capabilities-for-python>`_ for capability
+manipulation, as well as `other convenience modules
+<http://fraggod.net/svc/git/fgc/>`_ here and there, their purpose is quite
+obvious and replacing these with stdlib functions should be pretty
+straightforward, if necessary.
+
+Activating the inherited capabilities:
+
+.. code-block:: python
+
+    bak_user = os.getuid()
+    if bak_user:
+        from fgc.caps import Caps
+        import pwd
+        os.putenv('HOME', pwd.getpwuid(bak_user).pw_dir)
+        Caps.from_process().activate().apply()
+
+But first things first - there's data waiting on commandline and stdin.  Getting
+the hostname and port...
+
+.. code-block:: python
+
+    bak_src = argz[0]
+    try: bak_src, bak_src_ext = bak_src.split(':')
+    except: bak_src_ext = tuple()
+    else: bak_src_ext = '-p', bak_src_ext
+
+...and the key / exclusions:
+
+.. code-block:: python
+
+    bak_key = bak_sub('.key_{0}'.format(bak_host))
+    password, reply = it.imap(
+        op.methodcaller('strip', spaces), sys.stdin.read().split('\n\n\n', 1) )
+    open(bak_key, 'w').write(password)
+    sh.chmod(bak_key, 0400)
+    bak_src_ext += '-i', os.path.realpath(bak_key)
+
+Then, basic rsync invocation options can be constructed:
+
+.. code-block:: python
+
+    sync_optz = [ '-HaAXz',
+        ('--skip-compress='
+            r'gz/bz2/t\[gb\]z/tbz2/lzma/7z/zip/rar'
+            r'/rpm/deb/iso'
+            r'/jpg/gif/png/mov/avi/ogg/mp\[34g\]/flv/pdf'),
+        '--super',
+        '--exclude-from={0}'.format(bak_exclude_server),
+        '--rsync-path=ionice -c3 rsync',
+        '--rsh=ssh {0}'.format(' '.join(bak_src_ext)) ]
+
+Excluded paths list here is written to a local file, to keep track which paths
+were excluded in each backup.  "--super" option is actually necessary if local
+user is not root, rsync drops all the metadata otherwise.  "HaAX" is like
+"preserve all" flags - Hardlinks, ownership/modes/times ("a" flag), Acl's,
+eXtended attrs.  "--rsh" here is the ssh command, with parameters, determined
+above.
+
+Aside from that, there's also need to specify hardlink destination path, which
+should be a previous backup, and that traditionnaly is the domain of ugly
+perlisms - regexps.
+
+.. code-block:: python
+
+    bakz_re = re.compile(r'^([^.].*)\.\d+-\d+-\d+.\d+$') # host.YYYY-mm-dd.unix_time
+    bakz = list( bak for bak in os.listdir(bak_root)
+     if bakz_re.match(bak) ) # all backups
+    bakz_host = sorted(it.ifilter(op.methodcaller(
+        'startswith', bak_host ), bakz), reverse=True)
+
+So, the final sync options come to these:
+
+.. code-block:: python
+
+    src = '{0}:/'.format(src)
+    sync_optz = list(dta.chain( sync_optz, '--link-dest={0}'\
+            .format(os.path.realpath(bakz_host[0])), src, bak_path ))\
+        if bakz_host else list(dta.chain(sync_optz, src, bak_path))
+
+The only interlude is to cleanup backup partition if it gets too crowded:
+
+.. code-block:: python
+
+    ## Free disk space check / cleanup
+    ds, df = sh.df(bak_root)
+    min_free = ( max(min_free_avg( (ds-df) / len(bakz)), min_free_abs*G)
+        if min_free_avg and bakz else min_free_abs*G )
+
+    def bakz_rmq():
+        '''Iterator that returns bakz in order of removal'''
+        bakz_queue = list( list(bakz) for host,bakz in it.groupby(sorted(bakz),
+            key=lambda bak: bakz_re.match(bak).group(1)) )
+        while bakz_queue:
+            bakz_queue.sort(key=len)
+            bakz_queue[-1].sort(reverse=True)
+            if len(bakz_queue[-1]) <= min_keep: break
+            yield bakz_queue[-1].pop()
+
+    if df < min_free:
+        for bak in bakz_rmq():
+            log.info('Removing backup: {0}'.format(bak))
+            sh.rr(bak, onerror=False)
+            ds, df = sh.df(bak_root)
+            if df >= min_free: break
+        else:
+            log.fatal( 'Not enough space on media:'
+                    ' {0:.1f}G, need {1:.1f}G, {2} backups min)'\
+                .format( op.truediv(df, G),
+                    op.truediv(min_free, G), min_keep ), crash=2 )
+
+And from here it's just to start rsync and wait 'till the job's done.
+
+This thing works for months now, and saved my day on many occasions, but the
+most important thing here I think is the knowledge that the backup is there
+should you need one, so you never have to worry about breaking your system or
+losing anything important there, whatever you do.
+
+`Here <http://fraggod.net/oss/bin_scrz/fs_backup_grab.py>`_'s the full script.
+
+| Actually, there's more to the story, since just keeping backups on single
+  local harddisk (raid1 of two disks, actually) isn't enough for me.
+| Call this paranoia, but setting up system from scratch and restoring all the
+  data I have is a horrible nightmare, and there are possibility of fire,
+  robbery, lighting, voltage surge or some other disaster that can easily take
+  this disk(s) out of the picture, and few gigabytes of space in the web come
+  almost for free these days - there are p2p storages like wuala, dropbox,
+  google apps/mail with their unlimited quotas...
+
+| So, why not upload all this stuff there and be absolutely sure it'd
+  never go down, whatever happens? Sure thing.
+| Guess I'll write a note on the topic as much to document it for myself as for
+  the case someone might find it useful as well, plus the ability to link it
+  instead of explaining ;)

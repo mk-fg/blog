@@ -1,0 +1,36 @@
+Drop-in ccrypt replacement for bournal
+######################################
+
+:date: 2010-06-13 13:35
+:tags: bash, encryption, desktop
+
+
+| There's one great app - `bournal <http://becauseinter.net/bournal/>`_ ("when
+  nobody cares what you have to say!"). Essentialy it's a bash script, providing
+  a simple interface to edit and encrypt journal entries.
+| Idea behind it is quite opposite of blogging - keep your thoughts as far away
+  from everyone as possible. I've used the app for quite a while, ever since
+  I've noticed it among freshmeat release announcements. It's useful to keep
+  some thoughts or secrets (like keys or passwords) somewhere, aside from the
+  head, even if you'd never read these again.
+
+Anyway, encryption there is done by the means of `ccrypt utility
+<http://ccrypt.sourceforge.net/>`_, which is sorta CLI for `openssl
+<http://www.openssl.org/>`_. I don't get the rationale behind using it instead
+of openssl directly (like "openssl enc ..."), and there are actually even better
+options, like `gnupg <http://www.gnupg.org/>`_, which won't need a special logic
+to keep separate stream-cipher password, like it's done in bournal.
+
+| So today, as I needed bournal on exherbo laptop, I've faced the need to get
+  ccrypt binary just for that purpose again. Worse yet, I have to recall and
+  enter a password I've used there, and I don't actually need it to just encrypt
+  an entry... as if assymetric encryption, gpg-agent, smartcards and all the
+  other cool santa helpers don't exist yet.
+| I've decided to hack up my "ccrypt" which will use all-too-familiar gpg and
+  won't ask me for any passwords my agent or scd already know, and in an hour or
+  so, I've succeeded.
+
+| And `here goes <http://fraggod.net/oss/bin_scrz/ccrypt>`_ - ccrypt, relying
+  only on "gpg -e -r $EMAIL" and "gpg -d". EMAIL should be in the env, btw.
+| It actually works as ccencrypt, ccdecrypt, ccat as well, and can do recursive
+  ops just like vanilla ccrypt, which is enough for bournal.

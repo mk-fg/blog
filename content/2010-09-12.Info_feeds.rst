@@ -1,0 +1,50 @@
+Info feeds
+##########
+
+:date: 2010-09-12 10:54
+:tags: web, syndication
+
+
+Thanks to `feedjack <http://fraggod.net/svc/fossil/feedjack>`_, I'm able to keep
+in sync with 120 feeds (many of them, like `slashdot <http://slashdot.org/>`_ or
+`reddit <http://www.reddit.com/>`_, being an aggregates as well), as of
+today. Quite a lot of stuff I couldn't even imagine handling a year ago, and a
+good aggregator definitely helps, keeping all the info just one click away.
+
+And every workstation-based (desktop) aggregator I've seen is a fail:
+
+- `RSSOwl <http://www.rssowl.org/>`_. Really nice interface and very
+  powerful. That said, it eats more ram than a firefox!!! Hogs CPU till the
+  whole system stutters, and eats more of it than every other app I use combined
+  (yes, including firefox). Just keeping it in the background costs 20-30% of
+  dualcore cpu. Changing "show new" to "show all" kills the system ;)
+
+- `liferea <http://liferea.sf.net/>`_. Horribly slow, interface hangs on any
+  action (like fetching feed "in the background"), hogs cpu just as RSSOwl and
+  not quite as feature-packed.
+
+- `Claws-mail's RSSyl
+  <http://www.claws-mail.org/plugin.php?plugin=rssyl>`_. Quite nice
+  resource-wise and very responsive, unlike dedicated software (beats me
+  why). Pity it's also very limited interface-wise and can't reliably keep track
+  of many of feeds by itself, constantly loosing a few if closed non-properly
+  (most likely it's a claws-mail fault, since it affects stuff like nntp as
+  well).
+
+- Emacs' gnus and newsticker. Good for a feed or two, epic fail in every way
+  with more dozen of them.
+
+- Various terminal-based readers. Simply intolerable.
+
+| Server-based aggregator on the other hand is a bliss - any hoards of stuff as
+  you want it, filtered, processed, categorized and re-exported to any format
+  (same rss, but not a hundred of them, for any other reader works as well) and
+  I don't give a damn about how many CPU-hours it spends doing so (yet it tend
+  to be very few, since processing and storage is done via production-grade
+  database and modules, not some crappy ad-hoc wheel re-invention).
+| And it's simple as a doorknob, so any extra functionality can be added with no
+  effort.
+
+Maybe someday I'll get around to use something like Google Reader, but it's
+still one hell of a mess, and it's no worse than similar web-based services out
+there. So much for the cloud services. \*sigh\*

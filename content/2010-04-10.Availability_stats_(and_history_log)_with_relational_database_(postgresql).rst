@@ -1,0 +1,489 @@
+Availability stats (and history log) with relational database (postgresql)
+##########################################################################
+
+:date: 2010-04-10 14:29
+:tags: sql, sysadmin, web
+
+
+| Last month I've been busy setting up a monitoring system at work.
+| Mostly it's the graphs with dynamic data like cpu/mem/io/net loads and
+  application-specific stats (which I'll probably get around to describing
+  sometime later), for which there is a nice RRD solutions (I've used `cacti
+  <http://www.cacti.net/>`_ + `snmpd <http://www.net-snmp.org/>`_ + `my python
+  extensions <http://sourceforge.net/projects/snmpd-pyagentx/>`_ + `pyrrd
+  <http://code.google.com/p/pyrrd/>`_ + `rrdtool
+  <http://oss.oetiker.ch/rrdtool/>`_ directly), but there was also one specific
+  task of setting up websites' http-availability monitoring, spread on several
+  shared-hosting servers.
+
+| There's about 4k of such websites and the data needed is close to boolean -
+  whether site returns http code below 500 or it's considered "down", but it'd
+  have been nice to know the code it returns.
+| Plus, of course, this responses have to be logged, so availability for any
+  specific period can be calculated (in my case just as 1 - time\_down /
+  time\_total). And these shouldn't include random stuff like 503 "downtime"
+  because the poller got a bad luck on one poll or 500 because apache got a HUP
+  while processing a request (in theory, these shouldn't happen of course,
+  but...).
+| And on top of that, response delay have to be measured as well. And that is
+  data which should be averaged and selected on some non-trivial basis.  Sites'
+  list changes on a daily basis, polled data should be closed to real-time, so
+  it's 5-10 minutes poll interval at most.
+
+| Clearly, it's time-series data yet rrd is unsuitable for the task - neither
+  it's well-suited for complex data analysis, nor it can handle dynamic
+  datasets. Creating a hundred rrds and maintaining the code for their
+  management on fs looks like a world of pain.
+| Plain-log approach looks highly unoptimal, plus it's a lot of processing and
+  logfile-management code.
+| Both approaches also needed some sort of (although trivial) network interface
+  to data as well.
+
+| SQL-based DB engines handle storage and some-criteria-based selection and have
+  an efficient network interface outta the box, so it wasn't much of a hard
+  choice. And the only decent DBs I know out there are PostgreSQL and Oracle,
+  sqlite or MySQL are rather limited solutions and I've never used
+  interbase/firebird.
+| 4k*5min is a lot of values though, tens-hundreds of millions of them
+  actually, and RDBMS become quite sluggish on such amounts of data, so some
+  aggregation or processing was in order and that's what this entry's about.
+
+| First, I've needed to keep one list of domains to check.
+| These came from the individual hosts where they were, well, hosted, so poller
+  can periodically get this list and check all the domains there.
+
+.. code-block:: postgresql
+
+    CREATE TABLE state_hoard.list_http_availability (
+     id serial NOT NULL,
+     target character varying(128) NOT NULL,
+     "domain" character varying(128) NOT NULL,
+     check_type state_hoard.check_type NOT NULL,
+     "timestamp" numeric,
+     source character varying(16),
+     CONSTRAINT state_ha__id PRIMARY KEY (id),
+     CONSTRAINT state_ha__domain_ip_check_type
+     UNIQUE (target, domain, check_type) );
+
+It should probably be extended with other checks later on so there's check_type
+field with enum like this:
+
+.. code-block:: postgresql
+
+    CREATE TYPE state_hoard.check_type AS ENUM ('http', 'https');
+
+Target (IP) and domain (hostname) are separate fields here, since dns data is
+not to be trusted but the http request should have host-field to be processed
+correctly.
+
+Resulting table: |list_http_availability table data|
+
+| List is updated via third-party scripts which shouldn't care for internal db
+  structure even a little bit, so they only need to do insert/delete ops when
+  the list changes, so the db can take care of the rest, thanks to triggers.
+| Replace via delete/insert approach isn't an option here, since other tables
+  are linked vs this one, so update is the way.
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.list_ha_replace()
+     RETURNS trigger AS
+    $BODY$
+    DECLARE
+     updated integer;
+
+    BEGIN
+
+    -- Implicit timestamping
+    NEW.timestamp := COALESCE( NEW.timestamp,
+     EXTRACT('epoch' FROM CURRENT_TIMESTAMP) );
+
+    UPDATE state_hoard.list_http_availability
+     SET timestamp = NEW.timestamp, source = NEW.source
+     WHERE domain = NEW.domain
+     AND target = NEW.target
+     AND check_type = NEW.check_type;
+
+    -- Check if the row still need to be inserted
+    GET DIAGNOSTICS updated = ROW_COUNT;
+    IF updated = 0
+    THEN RETURN NEW;
+    ELSE RETURN NULL;
+    END IF;
+
+    END;
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100;
+
+
+    CREATE TRIGGER list_ha__replace
+     BEFORE INSERT
+     ON state_hoard.list_http_availability
+     FOR EACH ROW
+     EXECUTE PROCEDURE state_hoard.list_ha_replace();
+
+From there I had two ideas on how to use this data and store immediate
+results, from the poller perspective:
+
+-  To replicate the whole table into some sort of "check-list", filling
+   fields there as the data arrives.
+-  To create persistent linked tables with polled data, which just
+   replaced (on unique-domain basis) with each new poll.
+
+While former looks appealing since it allows to keep state in DB, not
+the poller, latter provides persistent availability/delay tables and
+that's one of the things I need.
+
+.. code-block:: postgresql
+
+    CREATE TABLE state_hoard.state_http_availability (
+     check_id integer NOT NULL,
+     host character varying(32) NOT NULL,
+     code integer,
+     "timestamp" numeric,
+     CONSTRAINT state_ha__check_host PRIMARY KEY (check_id, host),
+     CONSTRAINT state_http_availability_check_id_fkey FOREIGN KEY (check_id)
+     REFERENCES state_hoard.list_http_availability (id) MATCH SIMPLE
+     ON UPDATE RESTRICT ON DELETE CASCADE );
+
+    CREATE TABLE state_hoard.state_http_delay (
+     check_id integer NOT NULL,
+     host character varying(32) NOT NULL,
+     delay numeric,
+     "timestamp" numeric,
+     CONSTRAINT state_http_delay_check_id_fkey FOREIGN KEY (check_id)
+     REFERENCES state_hoard.list_http_availability (id) MATCH SIMPLE
+     ON UPDATE NO ACTION ON DELETE CASCADE );
+
+| These can be thought of as an extensions of the main (list_http_availability)
+  table, containing "current state" columns for each polled domain, and when
+  domain is no longer polled, it gets dropped from these tables as well.
+| Poller just gets the list and inserts the values into these, w/o even having
+  permissions to alter the list itself.
+
+| Since these tables are for latest data, duplicate inserts should be
+  handled and timestamps can be generated implicitly.
+| For current-state table it's just a replace on each insert. PostgreSQL doesn't
+  have convenient "replace" statement like MySQL but the triggers can easily
+  compensate for that:
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.state_ha_replace()
+     RETURNS trigger AS
+    $BODY$
+    BEGIN
+
+    -- Drop old record, if any
+    DELETE FROM state_hoard.state_http_availability WHERE check_id = NEW.check_id AND host = NEW.host;
+
+    -- Implicit timestamp setting, if it's omitted
+    NEW.timestamp := COALESCE(NEW.timestamp, EXTRACT('epoch' FROM CURRENT_TIMESTAMP));
+
+    RETURN NEW;
+
+    END;
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100;
+
+    CREATE TRIGGER state_ha__replace
+     BEFORE INSERT
+     ON state_hoard.state_http_availability
+     FOR EACH ROW
+     EXECUTE PROCEDURE state_hoard.state_ha_replace();
+
+| Individual http delays can have quite high entropy, since the http-response
+  processing in poller can't be truly asynchronous with such a number of hosts
+  and in fact it's a single-thread eventloop (twisted) anyway, so values here
+  are kept for some time, so they can be averaged later with a simple group-by.
+| Timestamp-based cleanup is built into the poller itself, so the trigger here
+  only fills implicit timestamps.
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.state_hd_insert()
+     RETURNS trigger AS
+    $BODY$
+    BEGIN
+
+    -- Implicit timestamp setting, if it's omitted
+    NEW.timestamp := COALESCE( NEW.timestamp,
+     EXTRACT('epoch' FROM CURRENT_TIMESTAMP) );
+
+    RETURN NEW;
+
+    END;
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100;
+
+
+    CREATE TRIGGER state_hd__insert
+     BEFORE INSERT
+     ON state_hoard.state_http_delay
+     FOR EACH ROW
+     EXECUTE PROCEDURE state_hoard.state_hd_insert();
+
+After that comes the logging part, and the logged part is http response codes.
+
+| These shouldn't change frequently, so it's only logical to write changes-only
+  log.
+| To grind out random errors I write a longer-than-poll-time (10 minutes,
+  actually) averages to the intermediate table, while keeping track of such
+  errors anyway, but in separate log table.
+
+.. code-block:: postgresql
+
+    CREATE TABLE state_hoard.log_http_availability (
+     "domain" character varying(128) NOT NULL,
+     code integer,
+     "timestamp" numeric NOT NULL,
+     CONSTRAINT log_ha__domain_timestamp PRIMARY KEY (domain, "timestamp") );
+
+Interval for these averages can be acquired via simple rounding, and it's
+convenient to have single function for that, plus the step in retriveable
+form. "Immutable" type here means that the results will be cached for each set
+of parameters.
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.log_ha_step()
+     RETURNS integer AS
+    'SELECT 600;'
+     LANGUAGE 'sql' IMMUTABLE
+     COST 100;
+
+    CREATE OR REPLACE FUNCTION state_hoard.log_ha_discrete_time(numeric)
+     RETURNS numeric AS
+    'SELECT (div($1, state_hoard.log_ha_step()::numeric) + 1) * state_hoard.log_ha_step();'
+     LANGUAGE 'sql' IMMUTABLE
+     COST 100;
+
+| "Averaging" for the logs is actually just dropping errors if there's at least
+  one success in the interval.
+| It's only logical to do this right on insert into the log-table:
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.log_ha_coerce()
+     RETURNS trigger AS
+    $BODY$
+    DECLARE
+     updated integer;
+
+    BEGIN
+
+    -- Implicit timestamp setting, if it's omitted
+    NEW.timestamp := state_hoard.log_ha_discrete_time(
+     COALESCE( NEW.timestamp,
+     EXTRACT('epoch' FROM CURRENT_TIMESTAMP) )::numeric );
+
+    IF NEW.code = 200
+    THEN
+     -- Successful probe overrides (probably random) errors
+     UPDATE state_hoard.log_http_availability
+     SET code = NEW.code
+     WHERE domain = NEW.domain AND timestamp = NEW.timestamp;
+     GET DIAGNOSTICS updated = ROW_COUNT;
+
+    ELSE
+     -- Errors don't override anything
+     SELECT COUNT(*)
+     FROM state_hoard.log_http_availability
+     WHERE domain = NEW.domain AND timestamp = NEW.timestamp
+     INTO updated;
+
+    END IF;
+
+    -- True for first value in a new interval
+    IF updated = 0
+    THEN RETURN NEW;
+    ELSE RETURN NULL;
+    END IF;
+
+    END;
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100;
+
+
+    CREATE TRIGGER log_ha__coerce
+     BEFORE INSERT
+     ON state_hoard.log_http_availability
+     FOR EACH ROW
+       EXECUTE PROCEDURE state_hoard.log_ha_coerce();
+
+The only thing left at this point is to actually tie this intermediate log-table
+with the state-table, and after-insert/update hooks are good place for that.
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.state_ha_log()
+     RETURNS trigger AS
+    $BODY$
+
+    DECLARE
+     domain_var character varying (128);
+     code_var integer;
+
+     -- Timestamp of the log entry, explicit to get the older one, checking for random errors
+     ts numeric := state_hoard.log_ha_discrete_time(EXTRACT('epoch' FROM CURRENT_TIMESTAMP));
+
+    BEGIN
+
+    SELECT domain FROM state_hoard.list_http_availability
+     WHERE id = NEW.check_id INTO domain_var;
+
+    SELECT code FROM state_hoard.log_http_availability
+     WHERE domain = domain_var AND timestamp = ts
+     INTO code_var;
+
+    -- This actually replaces older entry, see log_ha_coerce hook
+    INSERT INTO state_hoard.log_http_availability (domain, code, timestamp)
+     VALUES (domain_var, NEW.code, ts);
+
+    -- Random errors' trapping
+    IF code_var != NEW.code AND (NEW.code > 400 OR code_var > 400) THEN
+     code_var = CASE WHEN NEW.code > 400 THEN NEW.code ELSE code_var END;
+     INSERT INTO state_hoard.log_http_random_errors (domain, code)
+     VALUES (domain_var, code_var);
+    END IF;
+
+    RETURN NULL;
+
+    END;
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100;
+
+
+    CREATE TRIGGER state_ha__log_insert
+     AFTER INSERT
+     ON state_hoard.state_http_availability
+     FOR EACH ROW
+     EXECUTE PROCEDURE state_hoard.state_ha_log();
+
+    CREATE TRIGGER state_ha__log_update
+     AFTER UPDATE
+     ON state_hoard.state_http_availability
+     FOR EACH ROW
+     EXECUTE PROCEDURE state_hoard.state_ha_log();
+
+From here, the log will get populated already, but in a few days it will get
+millions of entries and counting, so it have to be aggregated and the most
+efficient method for this sort of data seem to be in keeping just change-points
+for return codes since they're quite rare.
+
+"Random errors" are trapped here as well and stored to the separate table. They
+aren't frequent, so no other action is taken there.
+
+The log-diff table is just that - code changes.  "code_prev" field is here for
+convenience, since I needed to get if there were any changes for a given period,
+so the rows there would give complete picture.
+
+.. code-block:: postgresql
+
+    CREATE TABLE state_hoard.log_http_availability_diff (
+     "domain" character varying(128) NOT NULL,
+     code integer,
+     code_prev integer,
+     "timestamp" numeric NOT NULL,
+     CONSTRAINT log_had__domain_timestamp PRIMARY KEY (domain, "timestamp") );
+
+Updates to this table happen on cron-basis and generated right inside the db,
+thanks to plpgsql for that.
+
+.. code-block:: postgresql
+
+    LOCK TABLE log_http_availability_diff IN EXCLUSIVE MODE;
+    LOCK TABLE log_http_availability IN EXCLUSIVE MODE;
+
+    INSERT INTO log_http_availability_diff
+     SELECT * FROM log_ha_diff_for_period(NULL, NULL)
+     AS data(domain character varying, code int, code_prev int, timestamp numeric);
+
+    TRUNCATE TABLE log_http_availability;
+
+And the diff-generation code:
+
+.. code-block:: postgresql
+
+    CREATE OR REPLACE FUNCTION state_hoard.log_ha_diff_for_period(ts_min numeric, ts_max numeric)
+     RETURNS SETOF record AS
+    $BODY$
+
+    DECLARE
+     rec state_hoard.log_http_availability%rowtype;
+     rec_next state_hoard.log_http_availability%rowtype;
+     rec_diff state_hoard.log_http_availability_diff%rowtype;
+
+    BEGIN
+
+    FOR rec_next IN
+     EXECUTE 'SELECT domain, code, timestamp
+     FROM state_hoard.log_http_availability'
+     || CASE WHEN NOT (ts_min IS NULL AND ts_max IS NULL) THEN
+     ' WHERE timestamp BETWEEN '||ts_min||' AND '||ts_max ELSE '' END ||
+     ' ORDER BY domain, timestamp'
+    LOOP
+
+     IF NOT rec_diff.domain IS NULL AND rec_diff.domain != rec_next.domain THEN
+     -- Last record for this domain - skip unknown vals and code change check
+     rec_diff.domain = NULL;
+     END IF;
+
+     IF NOT rec_diff.domain IS NULL
+
+     THEN
+     -- Time-skip (unknown values) addition
+     rec_diff.timestamp = state_hoard.log_ha_discrete_time(rec.timestamp + 1);
+     IF rec_diff.timestamp < rec_next.timestamp THEN
+     -- Map unknown interval
+     rec_diff.code = NULL;
+     rec_diff.code_prev = rec.code;
+     RETURN NEXT rec_diff;
+     END IF;
+
+     -- rec.code here should be affected by unknown-vals as well
+     IF rec_diff.code != rec_next.code THEN
+     rec_diff.code_prev = rec_diff.code;
+     rec_diff.code = rec_next.code;
+     rec_diff.timestamp = rec_next.timestamp;
+     RETURN NEXT rec_diff;
+     END IF;
+
+     ELSE
+     -- First record for new domain or whole loop (not returned)
+     -- RETURN NEXT rec_next;
+     rec_diff.domain = rec_next.domain;
+
+     END IF;
+
+     rec.code = rec_next.code;
+     rec.timestamp = rec_next.timestamp;
+
+    END LOOP;
+
+    END;
+
+    $BODY$
+     LANGUAGE 'plpgsql' VOLATILE
+     COST 100
+     ROWS 1000;
+
+| So that's the logging into the database.
+| Not as nice and simple as rrd but much more flexible in the end.
+
+| And since PostgreSQL already `allows to hook up PL/Python
+  <http://www.postgresql.org/docs/8.4/interactive/plpython.html>`_, there's no
+  problem adding a few triggers to the log-diff table to send out notifications
+  in case there's a problem.
+| Whether it's wise to put all the logic into the database like that is a good
+  question though, I'd probably opt for some sort of interface on the database
+  -> outside-world path, so db queries won't have full-fledged scripting
+  language at their disposal and db event handlers would be stored on the file
+  system, where they belong, w/o tying db to the host that way.
+
+.. |list_http_availability table data| image:: |filename|images/http_availability_list.jpg

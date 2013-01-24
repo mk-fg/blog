@@ -1,0 +1,146 @@
+Late adventures with time-series data collection and representation
+###################################################################
+
+:date: 2012-02-28 09:16
+:tags: monitoring, sysadmin, notification, python, unix
+
+
+When something is wrong and you look at the system, most often you'll see
+that... well, it works. There's some cpu, disk, ram usage, some number of
+requests per second on different services, some stuff piling up, something in
+short supply here and there...
+
+And there's just no way of telling what's wrong without answers to the questions
+like "so, what's the usual load average here?", "is the disk always loaded with
+requests 80% of time?", "is it much more requests than usual?", etc, otherwise
+you might be off to some wild chase just to find out that load has always been
+that high, or solve the mystery of some unoptimized code that's been there for
+ages, without doing anything about the problem in question.
+
+Historical data is the answer, and having used `rrdtool
+<http://oss.oetiker.ch/rrdtool/>`_ with stuff like (customized) `cacti
+<http://www.cacti.net/>`_ and `snmpd <http://www.net-snmp.org/>`_ (with `some my
+hacks <http://snmpd-pyagentx.sf.net/>`_ on top) in the past, I was overjoyed
+when I stumbled upon a `graphite project
+<http://graphite.readthedocs.org/en/latest/>`_ at some point.
+
+| From then on, I strived to collect as much metrics as possible, to be able to
+  look at history of anything I want (and lots of values can be a reasonable
+  symptom for the actual problem), without any kind of limitations.
+| carbon-cache does magic by batching writes and carbon-aggregator does a great
+  job at relieving you of having to push aggregate metrics along with a granular
+  ones or sum all these on graphs.
+
+Initially, I started using it with just `collectd <http://collectd.org/>`_ (and
+still using it), but there's a need for something to convert metric names to a
+graphite hierarcy.
+
+After looking over quite a few solutions to collecd-carbon bridge, decided to
+use `bucky <https://github.com/cloudant/bucky>`_, with `a few fixes of my own
+<https://github.com/mk-fg/bucky>`_ and `quite large translation config
+<http://fraggod.net/static/code/bucky_conf.py>`_.
+
+| Bucky can work anywhere, just receiving data from collectd network plugin,
+  understands collectd types and properly translates counter increments to N/s
+  rates. It also includes `statsd daemon <https://github.com/etsy/statsd>`_,
+  which is brilliant at handling data from non-collector daemons and scripts and
+  more powerful `metricsd <https://github.com/kpumuk/metricsd>`_ implementation.
+| Downside is that it's only maintained in forks, has bugs in less-used code
+  (like metricsd), quite resource-hungry (but can be easily scaled-out) and
+  there's kinda-official `collectd-carbon plugin
+  <http://collectd.org/wiki/index.php/Plugin:Carbon>`_ now (although I found it
+  buggy as well, not to mention much less featureful, but hopefully that'll be
+  addressed in future collectd versions).
+
+Some of the problems I've noticed with such collectd setup:
+
+-  Disk I/O metrics are godawful or just doesn't work - collected
+   metrics of read/write either for processes of device are either
+   zeroes, have weird values detached from reality (judging by actual
+   problems and tools like `atop <http://www.atoptool.nl/>`_ and
+   `sysstat <http://sebastien.godard.pagesperso-orange.fr/>`_ provide)
+   or just useless.
+-  Lots of metrics for network and memory (vmem, slab) and from various
+   plugins have naming, inconsistent with linux /proc or documentation
+   names.
+-  Some useful metrics that are in, say, sysstat doesn't seem to work
+   with collectd, like sensor data, nfsv4, some paging and socket
+   counters.
+-  Some metrics need non-trivial post-processing to be useful - disk
+   utilization % time is one good example.
+-  Python plugins leak memory on every returned value. Some plugins
+   (ping, for example) make collectd segfault several times a day.
+-  One of the most useful info is the metrics from per-service cgroup
+   hierarchies, created by
+   `systemd <http://www.freedesktop.org/wiki/Software/systemd>`_ - there
+   you can compare resource usage of various user-space components,
+   totally pinpointing exactly what caused the spikes on all the other
+   graphs at some time.
+-  Second most useful info by far is produced from logs and while
+   collectd has a damn powerful `tail
+   plugin <http://collectd.org/wiki/index.php/Plugin:Tail>`_, I still
+   found it to be too limited or just too complicated to use, while
+   simple log-tailing code does the better job and is actually simplier
+   due to more powerful language than collectd configuration. Same
+   problem with `table
+   plugin <http://collectd.org/wiki/index.php/Plugin:Table>`_ and /proc.
+-  There's still a need for lagre post-processing chunk of code and
+   pushing the values to carbon.
+
+| Of course, I wanted to add systemd cgroup metrics, some log values and missing
+  (and just properly-named) /proc tables data, and initially I wrote a collectd
+  plugin for that.  It worked, leaked memory, occasionally crashed (with
+  collectd itself), used some custom data types, had to have some metric-name
+  post-processing code chunk in bucky...
+| Um, what the hell for, when sending metric value directly takes just "echo
+  some.metric.name $val $(printf %(%s)T -1) >/dev/tcp/carbon\_host/2003"?
+
+So off with collectd for all the custom metrics.
+
+Wrote `a simple "while True: collect_and_send() && sleep(till_deadline);" loop
+<http://fraggod.net/static/code/harvestd.py>`_ in python, along with the cgroup
+data collectors (there are even proper "block io" and "syscall io" per-service
+values!), log tailer and `sysstat data processor
+<http://fraggod.net/static/code/sa_carbon.py>`_ (mainly for disk and network
+metrics which have batshit-crazy values in collectd plugins).
+
+| Another interesting data-collection alternative I've explored recently is
+  `ganglia <http://ganglia.info>`_.
+| Redundant gmond collectors and aggregators, communicating efficiently over
+  multicast are nice. It has support for python plugins, and is very easy to
+  use - pulling data from gmond node network can be done with one telnet or nc
+  command, and it's fairly comprehensible xml, not some binary protocol. Another
+  nice feature is that it can re-publish values only on some significant changes
+  (where you define what "significant" is), thus probably eliminating traffic
+  for 90% of "still 0" updates.
+
+| But as I found out while trying to use it as a collectd replacement
+  (forwarding data to graphite through amqp via `custom scripts
+  <https://github.com/mk-fg/gmond-amqp-graphite>`_), there's a fatal flaw -
+  gmond plugins can't handle dynamic number of values, so writing a plugin that
+  collects metrics from systemd services' cgroups without knowing how many of
+  these will be started in advance is just impossible.
+| Also it has no concept for timestamps of values - it only has "current" ones,
+  making plugins like "sysstat data parser" impossible to implement as well.
+| collectd, in contrast, has no constraint on how many values plugin returns and
+  has timestamps, but with limitations on how far backwards they are.
+
+Pity, gmond looked like a nice, solid and resilent thing otherwise.
+
+I still like the idea to pipe graphite metrics through AMQP (like `rocksteady
+<http://code.google.com/p/rocksteady/>`_ does), routing them there not only to
+graphite, but also to some proper threshold-monitoring daemon like `shinken
+<http://www.shinken-monitoring.org>`_ (basically `nagios
+<http://www.nagios.org/>`_, but distributed and more powerful), with alerts,
+escalations, trending and flapping detection, etc, but most of the `existing
+solutions
+<http://www.protocolostomy.com/2012/02/24/sending-alerts-with-graphite-graphs-from-nagios/>`_
+all seem to use graphite and whisper directly, which seem kinda wasteful.
+
+Looking forward, I'm actually deciding between replacing collectd completely for
+a few most basic metrics it now collects, pulling them from sysstat or just
+/proc directly or maybe integrating my collectors back into collectd as plugins,
+extending collectd-carbon as needed and using collectd threshold monitoring and
+matches/filters to generate and export events to nagios/shinken... somehow first
+option seem to be more effort-effective, even in the long run, but then maybe I
+should just work more with collectd upstream, not hack around it.

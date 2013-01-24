@@ -1,0 +1,85 @@
+Unhosted remoteStorage idea
+###########################
+
+:date: 2012-08-09 06:09
+:tags: web, p2p, social
+
+
+| Having a bit of free time recently, worked a bit on `feedjack
+  <https://github.com/mk-fg/feedjack/>`_ web rss reader / aggregator project.
+| To keep track of what's already read and what's not, historically I've used
+  js + client-side localStorage approach, which has quite a few advantages:
+
+-  Works with multiple clients, i.e. everyone has it's own state.
+-  Server doesn't have to store any data for possible-infinite number of
+   clients, not even session or login data.
+-  Same pages still can be served to all clients, some will just hide
+   unwanted content.
+-  Previous point leads to pages being very cache-friendly.
+-  No need to "recognize" client in any way, which is commonly acheived
+   with authentication.
+-  No interation of "write" kind with the server means much less
+   potential for abuse (DDoS, spam, other kinds of exploits).
+
+Flip side of that rosy picture is that localStorage only works in one browser
+(or possibly several synced instances), which is quite a drag, because one
+advantage of a web-based reader is that it can be accessed from anywhere, not
+just single platform, where you might as well install specialized app.
+
+| To fix that unfortunate limitation, about a year ago I've added ad-hoc storage
+  mechanism to just dump localStorage contents as json to some persistent
+  storage on server, authenticated by special "magic" header from a browser.
+| It was never a public feature, requiring some browser tweaking and being a
+  server admin, basically.
+
+Recently, however, `remoteStorage <http://remotestoragejs.com/>`_ project from
+`unhosted group <http://unhosted.org/>`_ has caught my attention.
+
+| Idea itself and the movement's goals are quite ambitious and otherwise
+  awesome - to return to "decentralized web" idea, using simple already
+  available mechanisms like webfinger for service discovery (reminds of `Thimbl
+  <http://thimbl.net>`_ concept by telekommunisten.net), WebDAV for storage and
+  OAuth2 for authorization (meaning no special per-service passwords or similar
+  crap).
+| But the most interesting thing I've found about it is that it should be
+  actually easier to use than write ad-hoc client syncer and server storage
+  implementation - just put off-the-shelf remoteStorage.js to the page (it even
+  includes "syncer" part to sync localStorage to remote server) and depoy or
+  find any remoteStorage provider and you're all set.
+
+| In practice, it works as advertised, but will have quite significant changes
+  soon (with the release of 0.7.0 js version) and had only ad-hoc
+  proof-of-concept server implementation in python (though there's also
+  `ownCloud <http://owncloud.org/>`_ in php and node.js/ruby versions), so I
+  wrote `django-unhosted <https://github.com/mk-fg/django-unhosted>`_
+  implementation, being basically a glue between simple WebDAV, `oauth2app
+  <https://github.com/hiidef/oauth2app/>`_ and Django Storage API (which `has
+  backends <https://github.com/mk-fg/django-unhosted#storage--webdav>`_ for
+  everything).
+| Using that thing in feedjack now (`here
+  <http://fraggod.net/feeds/blogs_mesh>`_, for example) instead of that hacky
+  json cache I've had with django-unhosted deployed on my server, allowing to
+  also use it with all the `apps with support
+  <https://github.com/unhosted/website/wiki/State-of-the-movement>`_ out there.
+
+| Looks like a really neat way to provide some persistent storage for any webapp
+  out there, guess that's one problem solved for any future webapps I might
+  deploy that will need one.
+| With JS being able to even load and use binary blobs (like images) that way
+  now, it becomes possible to write even unhosted facebook, with only events
+  like status updates still aggregated and broadcasted through some central
+  point.
+
+| I bet there's gotta be something similar, but with facebook, twitter or maybe
+  github backends, but as proven in many cases, it's not quite sane to rely on
+  these centralized platforms for any kind of service, which is especially a
+  pain if implementation there is one-platform-specific, unlike one
+  remoteStorage protocol for any of them.
+| Would be really great if they'd support some protocol like that at some point
+  though.
+
+But aside for short-term "problem solved" thing, it's really nice to see such
+movements out there, even though whole stack of market incentives (which
+`heavily favors
+<http://www.dmytri.info/commercialization-makes-your-online-rights-irrelevant-more-thoughts-from-my-talk-with-ioerror-at-rp12/>`_
+control over data, centralization and monopolies) is against them.

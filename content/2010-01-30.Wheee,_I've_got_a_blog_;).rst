@@ -1,0 +1,54 @@
+Wheee, I've got a blog ;)
+#########################
+
+:date: 2010-01-30 21:06
+
+
+There are times when even almighty google can't give a clear solution to some
+simple-enough problem, and it seem to be happening more frequently so far, so I
+thought I better write it all down somewhere, so here goes...
+
+The idea formed quite a while ago, but I've always either dismissed it as
+useless or was too lazy to implement it.
+
+Not that it's any difficult to start a blog these days, but hosting it on some
+major software platform like blogspot doesn't seem right to me, since I got too
+used to be able to access the code and tweak anything I don't like (yes,
+open-source has got me), and that should be pretty much impossible there.
+
+| Other extreme is writing my own platform from scratch.
+| Not a bad thought altogether, but too much of a wasted effort, especially
+  since I don't really like web development, web design and associated voodoo
+  rituals.
+| Besides, it'd be too buggy anyway ;)
+
+| So, I thought to get my hands on some simple and working out-of-the-box blog
+  engine and fit it to my purposes as needed.
+
+| Since don't like php, 95% of such engines were out of question.
+
+| Surprisingly few platforms are written on py or lisp, and I wasn't fond of the
+  idea of weaving separate cgi/fcgi module into my site.
+| Although it wasn't much of a problem with twisted, since control over request
+  handling there is absolute and expressed in simple py code, I've stumbled upon
+  my long-neglected google-apps account and a `bloog
+  <http://bloog.billkatz.com/>`_ project.
+
+| Having played with gapps about two years ago, I really liked the idea: you get
+  all the flexibility you want without having to care about things like db and
+  some buggy api for it in the app, authorization and bot-protection, content
+  serving mechanism, availability, even page generation, since google has django
+  for it. In a nutshell I got a very simple representation layer between gdb and
+  django, easy to bend in any way I want. As a bonus, bloog is not just simple
+  and stupid tool, but quite nice and uniform restful api with YUI-based client.
+| Two evenings of customization and I'm pretty happy with the result and
+  completely familiar with the inner workings of the thing. Thanks to Bill Katz
+  for sharing it.
+
+All in all, it's an interesting experience. Blogosphere seem to have
+evolved into some kind of sophisticated ecosystem, with it's own
+platforms, resources, syndication rules, etc. While I'm pretty sure I
+won't blend in, at least I can study it a bit.
+
+| So ends the first entry. Quite more of it than I've expected, actually.
+| More to come? I wonder.

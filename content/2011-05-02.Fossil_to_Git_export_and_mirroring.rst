@@ -1,0 +1,102 @@
+Fossil to Git export and mirroring
+##################################
+
+:date: 2011-05-02 14:34
+:tags: fossil, scm, python, sysadmin
+
+
+| The biggest issue I have with `fossil scm <http://fossil-scm.org/>`_ is that
+  it's not `git <http://git-scm.com/>`_ - there are just too many advanced tools
+  which I got used to with git over time, which probably will never be
+  implemented in fossil just because of it's "lean single binary" philosophy.
+| And things get even worse when you need to bridge git-fossil repos - common
+  denominator here is git, so it's either constant "export-merge-import" cycle
+  or some hacks, since fossil doesn't support incremental export to a git repo
+  out of the box (but it does have `support for full import/export
+  <http://www.fossil-scm.org/index.html/doc/trunk/www/inout.wiki>`_), and git
+  doesn't seem to have a plugin to track fossil remotes (yet?).
+
+| I thought of migrating away from fossil, but there's just no substitute
+  (although `quite a lot of attempts to implement that
+  <http://dist-bugs.kitenet.net/software/>`_) for distributed issue tracking and
+  documentation right in the same repository and plain easy to access format
+  with a sensible web frontend for those who don't want to install/learn scm and
+  clone the repo just to file a ticket.
+| None of git-based tools I've been able to find seem to meet this (seemingly)
+  simple criterias, so dual-stack it is then.
+
+| Solution I came up with is real-time mirroring of all the changes in fossil
+  repositories to a git.
+| It's `quite a simple script <http://fraggod.net/static/code/fossil_echo.py>`_,
+  which is
+
+-  watching fossil-path with inotify(7) for IN\_MODIFY events (needs
+   `pyinotify <http://pyinotify.sourceforge.net/>`_ for that)
+-  checking for new revisions in fossil (source) repo against tip of a
+   git
+-  comparing these by timestamps, which are kept in perfect sync (by
+   fossil-export as well)
+-  exporting revisions from fossil as a full artifacts (blobs),
+   importing these into git via git-fast-import
+
+It's also capable to do oneshot updates (in which case it doesn't need anything
+but python-2.7, git and fossil), bootstrapping git mirrors as new fossil repos
+are created and catching-up with their sync on startup.
+
+While the script uses quite a low-level (but standard and documented `here
+<http://fossil-scm.org/index.html/doc/trunk/www/fileformat.wiki>`_ and `there
+<http://www.kernel.org/pub/software/scm/git/docs/git-fast-import.html>`_) scm
+internals, it was actually very easy to write (~200 lines, mostly simple
+processing-generation code), because both scms in question are built upon
+principles of simple and robust design, which I deeply admire.
+
+| `Resulting mirrors of fossil repos <http://fraggod.net/code/git>`_ retain all
+  the metadata like commit messages, timestamps and authors.
+| Limitation is that it only tracks one branch, specified at startup ("trunk",
+  by default), and doesn't care about the tags at the moment, but I'll probably
+  fix the latter when I'll do some tagging next time (hence will have a
+  realworld test case).
+| It's also trivial to make the script do two-way synchronization, since fossil
+  supports "fossil import --incremental" update right from git-fast-export, so
+  it's just a simple pipe, which can be run w/o any special tools on demand.
+
+`Script itself <http://fraggod.net/static/code/fossil_echo.py>`_.
+
+fossil_echo --help:
+
+::
+
+  usage: fossil_echo [-h] [-1] [-s] [-c] [-b BRANCH] [--dry-run] [-x EXCLUDE]
+                        [-t STAT_INTERVAL] [--debug]
+                        fossil_root git_root
+
+  Tool to keep fossil and git repositories in sync. Monitors fossil_root for
+  changes in *.fossil files (which are treated as source fossil repositories)
+  and pushes them to corresponding (according to basename) git repositories.
+  Also has --oneshot mode to do a one-time sync between specified repos.
+
+  positional arguments:
+    fossil_root           Path to fossil repos.
+    git_root              Path to git repos.
+
+  optional arguments:
+    -h, --help            show this help message and exit
+    -1, --oneshot         Treat fossil_root and git_root as repository paths and
+                          try to sync them at once.
+    -s, --initial-sync    Do an initial sync for every *.fossil repository found
+                          in fossil_root at start.
+    -c, --create          Dynamically create missing git repositories (bare)
+                          inside git-root.
+    -b BRANCH, --branch BRANCH
+                          Branch to sync (must exist on both sides, default:
+                          trunk).
+    --dry-run             Dump git updates (fast-import format) to stdout,
+                          instead of feeding them to git. Cancels --create.
+    -x EXCLUDE, --exclude EXCLUDE
+                          Repository names to exclude from syncing (w/o .fossil
+                          or .git suffix, can be specified multiple times).
+    -t STAT_INTERVAL, --stat-interval STAT_INTERVAL
+                          Interval between polling source repositories for
+                          changes, if there's no inotify/kevent support
+                          (default: 300s).
+    --debug               Verbose operation mode.

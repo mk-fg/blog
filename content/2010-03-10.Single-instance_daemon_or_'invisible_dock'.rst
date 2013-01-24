@@ -1,0 +1,175 @@
+Single-instance daemon or "invisible dock"
+##########################################
+
+:date: 2010-03-10 02:41
+:tags: python, desktop
+
+
+| Docks.
+| You always have the touch-sensitive, solid, reliable dock right under your
+  hands - the keyboard, so what's the point of docks?
+
+-  Mouse-user-friendly
+-  Look cool (cairo-dock, kiba-dock, macosx)
+-  Provide control over the launched instances of each app
+
+| Two first points I don't care much about, but the last one sounds really
+  nice - instead of switching to app workspace, you can just push the same
+  hotkey and it'll even be raised for you in case WS is messed up with stacked
+  windows.
+| Kinda excessive to install a full-fledged dock for just that, besides it'd eat
+  screen space and resources for no good reason, so I made my own "dock".
+
+But it's not really a "dock", since it's actually invisible and basically is
+just a wrapper for launched commands to check if last process spawned by
+identical command exists and just bring it to foreground in this case.
+
+| For reliable monitoring of spawned processes there has to be a daemon and
+  wrappers should relay either command (and env) or spawned process info to it,
+  which inplies some sort of IPC.
+| Choosing dbus as that IPC handles the details like watcher-daemon starting and
+  serialization of data and makes the wrapper itself quite liteweight:
+
+.. code-block:: python
+
+    #!/usr/bin/env python
+    # -*- coding: utf-8 -*-
+
+    dbus_iface = 'net.fraggod.SID'
+    dbus_path = '/net/fraggod/SID'
+
+    import os, sys, dbus
+    sid = dbus.SessionBus().get_object(dbus_iface, dbus_path)
+
+    if sys.argv[1][0] != '/':
+        for path in os.getenv('PATH').split(os.pathsep):
+            path = os.path.join(path, sys.argv[1])
+            if os.path.exists(path):
+                sys.argv[1] = path
+                break
+
+    sid.instance_request(sys.argv[1:], dict(os.environ))
+
+And that's it, most of these just resolves binary location via PATH so it can be
+used as unique-index in daemon process right off the pipe.
+
+Daemonized part of the scheme just takes the instance off it's stack, fires up a
+new one or returs back some error message:
+
+.. code-block:: python
+
+    @dbus.service.method( dbus_iface,
+        in_signature='asa{ss}', out_signature='s' )
+    def instance_request(self, argz, env):
+        try:
+            data = self.pop_instance(argz, env)
+            return data if data else ''
+        except Exception, err: return 'ERROR: {0}'.format(err)
+
+    def pop_instance(self, argz, env):
+        ps = argz[0]
+        log.info('InstanceRequest: {0}'.format(argz))
+        if ps[0] != '/': raise TypeError, 'App path must be absolute'
+        ps = os.path.realpath(ps)
+        log.debug('Pulling out "{0}"'.format(ps))
+        try:
+            app = self.apps[ps]
+            log.debug('App "{0}" exists, pulling to fg'.format(ps))
+            app.show()
+        except KeyError:
+            log.debug('No app "{0}", starting'.format(ps))
+            self.apps[ps] = AppInstance(argz, env, self.log)
+            return 'Started'
+
+Dead apps are collected on SIGCHLD and some extra precautions should be taken
+for the case when the signal arrives during the collector code execution, like
+when several apps die simultaneously:
+
+.. code-block:: python
+
+    def reap_apps(self, sig, frm):
+        log.debug('Got app exit signal')
+        try:
+            locked = self.lock.acquire(False)
+            self.lock_req = True # indicates that apps have to be re-checked
+            if not locked:
+                log.debug('Reap is in progress, re-check scheduled')
+                return
+
+            while self.lock_req:
+                self.lock_req = False
+                log.debug('Reaping dead apps')
+                for k,app in self.apps.iteritems():
+                    if app.dead:
+                        del self.apps[k]
+                        log.debug('App "{0}" was released'.format(k))
+
+        finally:
+            if locked: self.lock.release()
+            global loop_interrupt
+            loop_interrupt = True
+            log.debug('Reaper done')
+
+That way, collector should run until signals stop arriving and shouldn't miss
+any app under any circumstances.
+
+AppInstance objects incapsulate all operations concerning each app from starting
+it to focus and waitpid:
+
+.. code-block:: python
+
+    class AppInstance(object):
+        _id = None # for debugging purposes only
+        _ps = _win = None
+
+        def __init__(self, argz, env, logfile=False):
+            log.debug('Creating instance with argz: {0}'.format(argz))
+            self._id = argz[0]
+            self._ps = exe.proc( *argz,
+                preexec_fn=os.setsid, env=env,
+                stdout=logfile, stderr=exe.STDOUT, stdin=False )
+
+        def show(self):
+            if self.windows:
+                for win in self.windows: win.focus()
+            else: log.debug('No window for app "{0}"'.format(self._id))
+
+        @property
+        def windows(self):
+            if self._win is None:
+                self._win = wm.Window.by_pid(self._ps.pid)
+                if self._win: self._win = list(self._win) # all windows for pid
+                else: self._win = False
+            return self._win
+
+        @property
+        def dead(self):
+            return self._ps.wait(0) is not None
+
+WM ops here are from `fgc package <http://fraggod.net/svc/git/fgc/>`_.
+
+| From here all that's left to code is to create dbus-handler instance and get
+  the loop running.
+| I called the daemon itself as "sid" and the wrapper as "sic".
+
+To make dbus aware of the service, short note should be put to
+"/usr/share/dbus-1/services/net.fraggod.SID.service" with path to daemon binary:
+
+.. code-block:: ini
+
+  [D-BUS Service]
+  Name=net.fraggod.SID
+  Exec=/usr/libexec/sid
+
+...plus the hotkeys rebound from "myapp" to just "sic myapp" and the key-dock is
+ready.
+
+Works especially well with WMs that can keep app windows' props between
+launches, so just pressing the relevant keys should launch every app where it
+belongs with correct window parameters and you won't have to do any WM-related
+work at all.
+
+Code: `sic.py <http://fraggod.net/oss/projects/sic.py>`_ `sid.py
+<http://fraggod.net/oss/projects/sid.py>`_
+
+What can be more user-friendly than that? Gotta think about it...

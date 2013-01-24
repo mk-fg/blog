@@ -1,0 +1,118 @@
+Distributed fault-tolerant fs take 2: MooseFS
+#############################################
+
+:date: 2010-09-09 15:39
+:tags: sysadmin, nfs, replication
+
+
+Ok, `almost one month of glusterfs
+<http://blog.fraggod.net/2010/8/Home-brewed-NAS-gluster-with-sensible-replication>`_
+was too much for me to handle. That was an epic fail ;)
+
+| Random errors on start (yeah, just restart nodes a few times and it'll be
+  fine) and during operation (same ESTALE, EIOs for whole mount, half of files
+  just vanishing) seem to be a norm for it. I mean, that's with a perfectly sane
+  and calm conditions - everything works, links stable.
+| A bit complicated configurations like server-side replication seem to be the
+  cause of these, sometimes to the point when the stuff just gives ESTALE in
+  100% cases right from the start w/o any reason I can comprehend. And adding a
+  third node to the system just made things worse and configuration files are
+  even more scary.
+
+Well, maybe I'm just out of luck or too brain-dead for it, whatever.
+
+So, moving on, I've tried (although briefly) `ceph
+<http://ceph.newdream.net/>`_.
+
+Being in mainline kernel, and not just the staging part, I'd expected it to be
+much less work-in-progress, but as it is, it's very raw, to the point that
+x86_64 monitor daemon just crashes upon receiving data from plain x86. Interface
+is a bunch of simple shell scripts, fairly opaque operation, and the whole thing
+is built on such crap as boost.
+
+Managed to get it running with two nodes, but it feels like the end of the
+world - one more kick and it all falls to pieces. Confirmed by the reports all
+over the mailing list and #ceph.
+
+In-kernel and seemingly fast is a good mix though, so I may get back to it
+eventually, but now I'd rather prefer to settle on something that actually
+works.
+
+Next thing in my sight was `tahoe-lafs <http://tahoe-lafs.org/>`_, but it still
+lacks normal posix-fs interface layer, sftp interface being totally unusable on
+1.8.0c3 - no permissions, cp -R fails w/ I/O error, displayed data in
+inconsistent even with locally-made changes, and so on. A pity, whole system
+design looks very cool, with raid5-like "parity" instead of plain chunk
+replication, and it's python!
+
+Thus I ended up with `MooseFS <http://www.moosefs.org/>`_.
+
+| First thing to note here is incredibly simple and yet infinitely more powerful
+  interface that probably sold me the fs right from the start.
+| None of this configuration layers hell of gluster, just a line in hosts (so
+  there's no need to tweak configs at all!) plus a few about what to export
+  (subtrees-to-nets, nfs style) and where to put chunks (any fs as a simple
+  backend key-value storage), and that's about it.
+
+Replication? Piece a cake, and it's configured on per-tree basis, so important
+or compact stuff can have one replication "goal" and some heavy trash in the
+neighbor path have no replication at all. No chance of anything like this with
+gluster and it's not even documented for ceph.
+
+Performance is totally I/O and network bound (which is totally not-the-case with
+tahoe, for instance), so no complaints here as well.
+
+One more amazing thing is how simple and transparent it is:
+
+.. code-block:: console
+
+    fraggod@anathema:~% mfsgetgoal tmp/db/softCore/_nix/os/systemrescuecd-x86-1.5.8.iso
+    tmp/db/softCore/_nix/os/systemrescuecd-x86-1.5.8.iso: 2
+
+.. code-block:: console
+
+    fraggod@anathema:~% mfsfileinfo tmp/db/softCore/_nix/os/systemrescuecd-x86-1.5.8.iso
+    tmp/db/softCore/_nix/os/systemrescuecd-x86-1.5.8.iso:
+     chunk 0: 000000000000CE78_00000001 / (id:52856 ver:1)
+      copy 1: 192.168.0.8:9422
+      copy 2: 192.168.0.11:9422
+     chunk 1: 000000000000CE79_00000001 / (id:52857 ver:1)
+      copy 1: 192.168.0.10:9422
+      copy 2: 192.168.0.11:9422
+     chunk 2: 000000000000CE7A_00000001 / (id:52858 ver:1)
+      copy 1: 192.168.0.10:9422
+      copy 2: 192.168.0.11:9422
+     chunk 3: 000000000000CE7B_00000001 / (id:52859 ver:1)
+      copy 1: 192.168.0.8:9422
+      copy 2: 192.168.0.10:9422
+     chunk 4: 000000000000CE7C_00000001 / (id:52860 ver:1)
+      copy 1: 192.168.0.10:9422
+      copy 2: 192.168.0.11:9422
+
+.. code-block:: console
+
+    fraggod@anathema:~% mfsdirinfo tmp/db/softCore/_nix/os
+    tmp/db/softCore/_nix/os:
+     inodes: 12
+     directories: 1
+     files: 11
+     chunks: 175
+     length: 11532174263
+     size: 11533462528
+     realsize: 23066925056
+
+| And if that's not enough, there's even a cow snaphots, trash bin with a
+  customizable grace period and a special attributes for file caching and
+  ownership, all totally documented along with the architectural details in
+  manpages and on the project site.
+| Code is plain C, no shitload of deps like boost and lib\*whatevermagic\*, and
+  it's really lite. Whole thing feels like a simple and solid design, not some
+  polished turd of a \*certified professionals\*.
+| Yes, it's not truly-scalable, as there's a master host (with optional
+  metalogger failover backups) with fs metadata, but there's no chance it'll be
+  a bottleneck in my setup and comparing to a "no-way" bottlenecks of other
+  stuff, I'd rather stick with this one.
+
+MooseFS has yet to pass the trial of time on my makeshift "cluster", yet none of
+the other setups went (even remotely) as smooth as this one so far, thus I feel
+pretty optimistic about it.

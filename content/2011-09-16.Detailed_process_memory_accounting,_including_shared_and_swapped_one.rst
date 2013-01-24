@@ -1,0 +1,240 @@
+Detailed process memory accounting, including shared and swapped one
+####################################################################
+
+:date: 2011-09-16 18:12
+:tags: unix, sysadmin
+
+
+Two questions:
+
+-  How to tell which pids (or groups of forks) eat most swap right now?
+-  How much RAM one apache/php/whatever really consumes?
+
+Somehow people keep pointing me at "top" and "ps" tools to do this sort of
+things, but there's an obvious problem:
+
+.. code-block:: c
+
+    #include <stdlib.h>
+    #include <unistd.h>
+
+    #define G 1024*1024*1024
+
+    int main (void) {
+        (void *) malloc(2 * G);
+        sleep(10);
+        return 0;
+    }
+
+This code will immediately float to 1st position in top, sorted by "swap" (F p
+<return>), showing 2G even with no swap in the system.
+
+| Second question/issue is also common but somehow not universally recognized,
+  which is kinda obvious when scared admins (or whoever happen to ssh into web
+  backend machine) see N pids of something, summing up to more than total amount
+  of RAM in the system, like 50 httpd processes 50M each.
+| It gets even worse when tools like "atop" helpfully aggregate the numbers
+  ("atop -p"), showing that there are 6 sphinx processes, eating 15G on a
+  machine with 4-6G physical RAM + 4-8G swap, causing local panic and mayhem.
+| The answer is, of course, that sphinx, apache and pretty much anything using
+  worker processes share a lot of memory pages between their processes, and not
+  just because of shared objects like libc.
+
+Guess it's just general ignorance of how memory works in linux (or other
+unix-os'es) of those who never had to write a fork() or deal with malloc's in C,
+which kinda make lots of these concepts look fairly trivial.
+
+| So, mostly out of curiosity than the real need, decided to find a way to
+  answer these questions.
+| proc(5) reveals this data more-or-less via "maps" / "smaps" files, but that
+  needs some post-processing to give per-pid numbers.
+| Closest tools I was able to find were pmap from procps package and `ps_mem.py
+  script <http://www.pixelbeat.org/scripts/ps_mem.py>`_ from coreutils
+  maintainer. Former seem to give only mapped memory region sizes, latter
+  cleverly shows shared memory divided by a number of similar processes,
+  omitting per-process numbers and swap.
+| Oh, and of course there are glorious valgrind and gdb, but both seem to be
+  active debugging tools, not much suitable for normal day-to-day operation
+  conditions and a bit too complex for the task.
+
+So I though I'd write my own tool for the job to put the matter at rest once and
+for all, and so I can later point people at it and just say "see?" (although I
+bet it'll never be that simple).
+
+Idea is to group similar processes (by cmd) and show details for each one, like
+this:
+
+::
+
+    agetty:
+      -stats:
+        private: 252.0 KiB
+        shared: 712.0 KiB
+        swap: 0
+      7606:
+        -stats:
+          private: 84.0 KiB
+          shared: 712.0 KiB
+          swap: 0
+        -cmdline: /sbin/agetty tty3 38400
+        /lib/ld-2.12.2.so:
+          -shared-with: rpcbind, _plutorun, redshift, dbus-launch, acpid, ...
+          private: 8.0 KiB
+          shared: 104.0 KiB
+          swap: 0
+        /lib/libc-2.12.2.so:
+          -shared-with: rpcbind, _plutorun, redshift, dbus-launch, acpid, ...
+          private: 12.0 KiB
+          shared: 548.0 KiB
+          swap: 0
+        ...
+        /sbin/agetty:
+          -shared-with: agetty
+          private: 4.0 KiB
+          shared: 24.0 KiB
+          swap: 0
+        /usr/lib/locale/locale-archive:
+          -shared-with: firefox, redshift, tee, sleep, ypbind, pulseaudio [updated], ...
+          private: 0
+          shared: 8.0 KiB
+          swap: 0
+        [anon]:
+          private: 20.0 KiB
+          shared: 0
+          swap: 0
+        [heap]:
+          private: 8.0 KiB
+          shared: 0
+          swap: 0
+        [stack]:
+          private: 24.0 KiB
+          shared: 0
+          swap: 0
+        [vdso]:
+          private: 0
+          shared: 0
+          swap: 0
+      7608:
+        -stats:
+          private: 84.0 KiB
+          shared: 712.0 KiB
+          swap: 0
+        -cmdline: /sbin/agetty tty4 38400
+        ...
+      7609:
+        -stats:
+          private: 84.0 KiB
+          shared: 712.0 KiB
+          swap: 0
+        -cmdline: /sbin/agetty tty5 38400
+        ...
+
+So it's obvious that there are 3 agetty processes, which ps will report as 796
+KiB RSS:
+
+::
+
+    root 7606 0.0 0.0 3924 796 tty3 Ss+ 23:05 0:00 /sbin/agetty tty3 38400
+    root 7608 0.0 0.0 3924 796 tty4 Ss+ 23:05 0:00 /sbin/agetty tty4 38400
+    root 7609 0.0 0.0 3924 796 tty5 Ss+ 23:05 0:00 /sbin/agetty tty5 38400
+
+| Each of which, in fact, consumes only 84 KiB of RAM, with 24 KiB more shared
+  between all agettys as /sbin/agetty binary, rest of stuff like ld and libc is
+  shared system-wide (shared-with list contains pretty much every process in the
+  system), so it won't be freed by killing agetty and starting 10 more of them
+  will consume ~1 MiB, not ~10 MiB, as "ps" output might suggest.
+| "top" will show ~3M of "swap" (same with "SZ" in ps) for each agetty, which is
+  also obviously untrue.
+
+More machine-friendly (flat) output might remind of sysctl:
+
+::
+
+    agetty.-stats.private: 252.0 KiB
+    agetty.-stats.shared: 712.0 KiB
+    agetty.-stats.swap: 0
+    agetty.7606.-stats.private: 84.0 KiB
+    agetty.7606.-stats.shared: 712.0 KiB
+    agetty.7606.-stats.swap: 0
+    agetty.7606.-cmdline: /sbin/agetty tty3 38400
+    agetty.7606.'/lib/ld-2.12.2.so'.-shared-with: ...
+    agetty.7606.'/lib/ld-2.12.2.so'.private: 8.0 KiB
+    agetty.7606.'/lib/ld-2.12.2.so'.shared: 104.0 KiB
+    agetty.7606.'/lib/ld-2.12.2.so'.swap: 0
+    agetty.7606.'/lib/libc-2.12.2.so'.-shared-with: ...
+    ...
+
+`Script <http://fraggod.net/static/code/ps_mem_details.py>`_. No dependencies
+needed, apart from python 2.7 or 3.X (works with both w/o conversion).
+
+Some optional parameters are supported:
+
+::
+
+    usage: ps_mem_details.py [-h] [-p] [-s] [-n MIN_VAL] [-f] [--debug] [name]
+    Detailed process memory usage accounting tool.
+    positional arguments:
+      name           String to look for in process cmd/binary.
+    optional arguments:
+      -h, --help     show this help message and exit
+      -p, --private  Show only private memory leaks.
+      -s, --swap     Show only swapped-out stuff.
+      -n MIN_VAL, --min-val MIN_VAL
+                Minimal (non-inclusive) value for tracked parameter
+                (KiB, see --swap, --private, default: 0).
+      -f, --flat     Flat output.
+      --debug        Verbose operation mode.
+
+For example, to find what hogs more than 500K swap in the system:
+
+.. code-block:: console
+
+    # ps_mem_details.py --flat --swap -n 500
+    memcached.-stats.private: 28.4 MiB
+    memcached.-stats.shared: 588.0 KiB
+    memcached.-stats.swap: 1.5 MiB
+    memcached.927.-cmdline: /usr/bin/memcached -p 11211 -l 127.0.0.1
+    memcached.927.[anon].private: 28.0 MiB
+    memcached.927.[anon].shared: 0
+    memcached.927.[anon].swap: 1.5 MiB
+    squid.-stats.private: 130.9 MiB
+    squid.-stats.shared: 1.2 MiB
+    squid.-stats.swap: 668.0 KiB
+    squid.1334.-cmdline: /usr/sbin/squid -NYC
+    squid.1334.[heap].private: 128.0 MiB
+    squid.1334.[heap].shared: 0
+    squid.1334.[heap].swap: 660.0 KiB
+    udevd.-stats.private: 368.0 KiB
+    udevd.-stats.shared: 796.0 KiB
+    udevd.-stats.swap: 748.0 KiB
+
+...or what eats more than 20K in agetty pids (should be useful to see which .so
+or binary "leaks" in a process):
+
+.. code-block:: console
+
+    # ps_mem_details.py --private --flat -n 20 agetty
+    agetty.-stats.private: 252.0 KiB
+    agetty.-stats.shared: 712.0 KiB
+    agetty.-stats.swap: 0
+    agetty.7606.-stats.private: 84.0 KiB
+    agetty.7606.-stats.shared: 712.0 KiB
+    agetty.7606.-stats.swap: 0
+    agetty.7606.-cmdline: /sbin/agetty tty3 38400
+    agetty.7606.[stack].private: 24.0 KiB
+    agetty.7606.[stack].shared: 0
+    agetty.7606.[stack].swap: 0
+    agetty.7608.-stats.private: 84.0 KiB
+    agetty.7608.-stats.shared: 712.0 KiB
+    agetty.7608.-stats.swap: 0
+    agetty.7608.-cmdline: /sbin/agetty tty4 38400
+    agetty.7608.[stack].private: 24.0 KiB
+    agetty.7608.[stack].shared: 0
+    agetty.7608.[stack].swap: 0
+    agetty.7609.-stats.private: 84.0 KiB
+    agetty.7609.-stats.shared: 712.0 KiB
+    agetty.7609.-stats.swap: 0
+    agetty.7609.-cmdline: /sbin/agetty tty5 38400
+    agetty.7609.[stack].private: 24.0 KiB
+    agetty.7609.[stack].shared: 0
+    agetty.7609.[stack].swap: 0

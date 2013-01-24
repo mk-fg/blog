@@ -1,0 +1,23 @@
+Phasing out fossil completely
+#############################
+
+:date: 2012-02-07 07:15
+:tags: scm, fossil
+
+
+| Having used git excessively for the last few days decided to ditch `fossil scm
+  <http://www.fossil-scm.org/>`_ at last.
+| All the stuff will be `in git <http://fraggod.net/code/git>`_ and mirorred on
+  the `github <https://github.com/mk-fg/>`_ (maybe later `on bittbucket
+  <https://bitbucket.org/mk_fg>`_ as well).
+
+| Will probably re-import meta stuff (issues, wikis) from there into the main
+  tree, but still can't find nice-enough tool for that.
+| Closest thing seem to be `Artemis <http://www.mrzv.org/software/artemis/>`_,
+  but it's for mercurial, so I'll probably need to port it to git first,
+  shouldn't be too hard.
+
+Also, I'm torn at this point between the thoughts along the lines "selection of
+modern DVCS spoil us" against "damn, why they there is no clear popular +
+works-for-everything thing", but it's probably normal, as I have (or had)
+similar thoughts about lot of technologies.

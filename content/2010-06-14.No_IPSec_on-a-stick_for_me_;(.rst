@@ -1,0 +1,70 @@
+No IPSec on-a-stick for me ;(
+#############################
+
+:date: 2010-06-14 10:41
+:tags: ipsec, unix, encryption
+
+
+Guess being a long user of stuff like `OpenSSH <http://www.openssh.org/>`_,
+`iproute2
+<http://www.linuxfoundation.org/collaborate/workgroups/networking/iproute2>`_
+and `VDE <http://vde.sourceforge.net/>`_ rots your brain - you start thinking
+that building any sort of tunnel is a bliss. Well, it's not. At least not "any
+sort".
+
+| This day I've dedicated to set up some basic IPSec tunnel and at first that
+  seemed an easy task - it's long ago in kernel (`kame <http://www.kame.net/>`_
+  implementation, and it's not the only one for linux), native for IPv6 (which I
+  use in a local network), has quite a lot of publicity (and guides), it's open
+  (and is quite simple, even with IKE magic) and there are at least three major
+  userspace implementations: `openswan <http://www.openswan.org/>`_,
+  `ipsec-tools <http://ipsec-tools.sourceforge.net/>`_ (racoon, kame) and
+  Isakmpd. Hell, it's even supported on Windows. What's more to ask for?
+| Well, prehaps I made a bad decision starting with openswan and "native" kame
+  NETKEY, but my experience wasn't quite a nice one.
+
+I chose openswan because it looks like more extensive implementation than the
+rest, and is supported by folks like Red Hat, plus it is fairly up to date and
+looks constantly developed. Another cherry in it was apparent smartcard support
+via `nss <http://www.mozilla.org/projects/security/pki/nss/>`_ now and `opensc
+<http://www.opensc-project.org/>`_ in the past.
+
+| First alarm bell should've been the fact that openswan actually doesn't
+  compile without `quite extensive patching
+  <http://bugs.gentoo.org/show_bug.cgi?id=301813#c8>`_.
+| Latest version of it in ebuild form (which isn't quite enough for me anyway,
+  since I use exheres these days) is 2.6.23. That's more than half a year old,
+  and even that one is masked in gentoo due to apparent bugs and the ebuild is
+  obviously blind-bumped from some previous version, since it doesn't take
+  things like opensc->nss move (finalized in 2.6.23) into account.
+| Okay, hacking my own ebuild and exheres for it was fun enough, at least I've
+  got a firm grasp of what it's capable of, but seeing pure-Makefile build
+  system and hard-coded paths in such a package was a bit unexpected. Took me
+  some time to deal with include paths, then lib paths, then it turned out to
+  had an `open bug <https://bugs.xelerance.com/issues/1112>`_ which prevents
+  it's build on linux (wtf!?), and then it crashes on install phase due to some
+  ever-crappy XML stuff.
+
+| At least the docs are good enough (even though it's not easy to build them),
+  so I set up an nss db, linked smartcard to it, and got a...  segfault? Right
+  on ipsec showhostkey? Right, there's `this bug
+  <http://www.mail-archive.com/debian-bugs-closed@lists.debian.org/msg282979.html>`_
+  in 2.6.26, although in my case it's probably another one, since the patch
+  doesn't fixes the problem. Great!
+| Ok, gdb showed that it's something like get-nss-password failing (although it
+  should be quite a generic interface, delegated from nss), even with
+  nsspassword in place and nss itself working perfectly.
+
+| Scratch that, simple nss-generated keys (not even certificates) as described
+  in the `most basic tutorial
+  <http://wiki.openswan.org/index.php/Openswan/Configure>`_, and now it's pluto
+  daemon crashing with just a "Jun 14 15:40:25 daemon.err<27>
+  ipsec__plutorun[-]: /usr/lib/ipsec/_plutorun: line 244: 6229 Aborted ..."
+  line in syslog as soon as both ends off tunnel are up.
+| Oh, and of course it messes up the connection between hosts in question, so it
+  wouldn't be too easy to ssh between them and debug the problem.
+
+Comparing to ssh or pretty much any tunneling I've encountered to this point,
+it's still quite a remarkably epic fail. Guess I'll waste a bit more time on
+this crap, since success seems so close, but it's quite amazing how crappy such
+projects can still be these days. Of course, at least it's free, right?

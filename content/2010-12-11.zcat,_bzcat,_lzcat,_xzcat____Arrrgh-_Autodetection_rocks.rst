@@ -1,0 +1,72 @@
+zcat, bzcat, lzcat, xzcat... Arrrgh! Autodetection rocks
+########################################################
+
+:date: 2010-12-11 06:04
+:tags: unix, compression
+
+
+Playing with `dracut <http://sourceforge.net/apps/trac/dracut/wiki>`_ today,
+noticed that it can create lzma-compressed initrd's without problem, but it's
+"lsinitrd" script uses zcat to access initrd data, thus failing for lzma or
+bzip2 compression.
+
+Of course the "problem" is nothing new, and I've bumped against it a zillion
+times in the past, although it looks like today I was a bit less (or more?) lazy
+than usual and tried to seek a solution - some \*cat tool, which would be able
+to read any compressed format without the need to specify it explicitly.
+
+Finding nothing of the /usr/bin persuasion, I noticed that there's a fine
+`libarchive project <http://code.google.com/p/libarchive/>`_, which can do all
+sort of magic just for this purpose, alas there seem to be no cli client for it
+to utilize this magic, so I got around to write my own one.
+
+These few minutes of happy-hacking probably saved me a lot of time in the long
+run, guess the result may as well be useful to someone else:
+
+.. code-block:: c
+
+    #include <archive.h>
+    #include <archive_entry.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+
+    const int BS = 16384;
+
+    int main(int argc, const char **argv) {
+        if (argc > 2) {
+            fprintf(stderr, "Usage: %s [file]\n", argv[0]);
+            exit(1); }
+
+        struct archive *a = archive_read_new();
+        archive_read_support_compression_all(a);
+        archive_read_support_format_raw(a);
+
+        int err;
+        if (argc == 2) err = archive_read_open_filename(a, argv[1], BS);
+        else err = archive_read_open_fd(a, 0, BS);
+        if (err != ARCHIVE_OK) {
+            fprintf(stderr, "Broken archive (1)\n");
+            exit(1); }
+
+        struct archive_entry *ae;
+        err = archive_read_next_header(a, &ae);
+        if (err != ARCHIVE_OK) {
+            fprintf(stderr, "Broken archive (2)\n");
+            exit(1); }
+
+        (void) archive_read_data_into_fd(a, 1);
+
+        archive_read_finish(a);
+        exit(0);
+    }
+
+| Build it with "gcc -larchive excat.c -o excat" and use as "excat
+  /path/to/something.{xz,gz,bz2,...}".
+| List of formats, supported by libarchive can be found `here
+  <http://code.google.com/p/libarchive/wiki/LibarchiveFormats>`_, note that it
+  can also unpack something like file.gz.xz, although I have no idea why'd
+  someont want to create such thing.
+
+I've also created a `project on sourceforge <http://excat.sf.net/>`_ for it, in
+hopes that it'd save someone like me a bit of time with google-fu, but I doubt
+I'll add any new features here.

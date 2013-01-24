@@ -1,0 +1,57 @@
+Using csync2 for security-sensitive paths
+#########################################
+
+:date: 2011-06-12 16:25
+:tags: sysadmin, unix, python, ssh
+
+
+| Usually I was using fabric to clone similar stuff to many machines, but since
+  I've been deploying `csync2 <http://oss.linbit.com/csync2/>`_ everywhere to
+  sync some web templates and I'm not the only one introducing changes, it
+  ocurred to me that it'd be great to use it for scripts as well.
+| Problem I see there is security - most scripts I need to sync are cronjobs
+  executed as root, so updating some script one one (compromised) machine with
+  "rm -Rf /\*" and running csync2 to push this change to other machines will
+  cause a lot of trouble.
+
+So I came up with simple way to provide one-time keys to csync2 hosts, which
+will be valid only when I want them to.
+
+| Idea is to create FIFO socket in place of a key on remote hosts, then just
+  pipe a key into each socket while script is running on my dev
+  machine. Simpliest form of such "pipe" I could come up with is an "ssh host
+  'cat >remote.key.fifo'", no fancy sockets, queues or protocols.
+| That way, even if one host is compromised changes can't be propagnated to
+  other hosts without access to fifo sockets there and knowing the right
+  key. Plus running sync for that "privileged" group accidentally will just
+  result in a hang 'till the script will push data to fifo socket - nothing will
+  break down or crash horribly, just wait.
+| Key can be spoofed of course, and sync can be timed to the moment the keys are
+  available, so the method is far from perfect, but it's insanely fast and
+  convenient.
+
+| `Implementation <http://fraggod.net/static/code/csync2_unlocker.py>`_ is
+  fairly simple `twisted <http://twistedmatrix.com/>`_ eventloop, spawning ssh
+  processes (guess `twisted.conch
+  <http://twistedmatrix.com/trac/wiki/TwistedConch>`_ or stuff like `paramiko
+  <http://www.lag.net/paramiko/>`_ can be used for ssh implementation there, but
+  neither performance nor flexibility is an issue with ssh binary).
+| Script also (by default) figures out the hosts to connect to from the provided
+  group name(s) and the local copy of csync2 configuration file, so I don't have
+  to specify keep separate list of these or specify them each time.
+| As always, twisted makes it insanely simple to write such IO-parallel loop.
+
+csync2 can be configured like this:
+
+::
+
+    group sbin_sync {
+        host host1 host2;
+        key /var/lib/csync2/privileged.key;
+        include /usr/local/sbin/*.sh
+    }
+
+And then I just run it with something like "./csync2\_unlocker.py sbin\_sync"
+when I need to replicate updates between hosts.
+
+`Source <http://fraggod.net/static/code/csync2_unlocker.py>`_.

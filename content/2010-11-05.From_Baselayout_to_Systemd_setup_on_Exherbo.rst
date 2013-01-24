@@ -1,0 +1,386 @@
+From Baselayout to Systemd setup on Exherbo
+###########################################
+
+:date: 2010-11-05 13:27
+:tags: desktop, exherbo, sysadmin, unix, systemd
+
+
+| It's been more than a week since I've migrated from sysvinit and gentoo'ish
+  baselayout scripts to `systemd
+  <http://0pointer.de/blog/projects/systemd.html>`_ with it's units, and aside
+  from few initial todos it's been surprisingly easy.
+| Nice guide for migration (which actually tipped me into trying systemd) `can
+  be found here <http://www.mailstation.de/wordpress/?p=48>`_, in this post I'd
+  rather summarize my experiences.
+
+| Most distributions seem to take "the legacy" way of migration, starting all
+  the old initscripts from systemd just as sysinit did before that.
+| It makes some sense, since all the actions necessary to start the service are
+  already written there, but most of them are no longer necessary with systemd -
+  you don't need pidfiles, daemonization, killing code, LSB headers and most
+  checks for other stuff... which kinda leaves nothing at all for 95% of
+  software I've encountered!
+| I haven't really tried to adapt fedora or debian init for systemd (since my
+  setup runs `exherbo <http://www.exherbo.org/>`_), so I may be missing some
+  crucial points here, but it looks like even in these systems initscripts,
+  written in simple unaugmented \*sh, are unnecessary evil, each one doing the
+  same thing in it's own crappy way.
+
+| With exherbo (or gentoo, for that matter), which has a bit more advanced init
+  system, it's even harder to find some sense in keeping these
+  scripts. Baselayout `allows some cool stuff beyond simple LSB headers
+  <http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=2&chap=4>`_, but
+  does so in it's own way, typical initscript here looks like this:
+
+.. code-block:: bash
+
+    #!/sbin/runscript
+    depend() {
+        use logger
+        need clock hostname
+        provide cron
+    }
+    start() {
+        ebegin "Starting ${SVCNAME}"
+        start-stop-daemon --start --pidfile ${FCRON_PIDFILE}\
+          --exec /usr/sbin/fcron -- -c ${FCRON_CONF}
+        eend $?
+    }
+    stop() {
+        ebegin "Stopping ${SVCNAME}"
+        start-stop-daemon --stop --pidfile ${FCRON_PIDFILE}
+        eend $?
+    }
+
+...with $SVCNAME taken from the script name and other vars from complimentary
+"/etc/conf.d/someservice" file (with sensible defaults in initscript itself).
+
+Such script already allows nice and logged output (with e\* commands) and
+clearly-defined, relatively uncluttered sections for startup and shutdown. You
+don't have to parse commandline arguments (although it's perfectly possible),
+since baselayout scripts will do that, and every daemon is accounted for via
+"start-stop-daemon" wrapper - it has a few simple ways to check their status via
+passed --pidfile or --exec lines, plus it handles forking (if necessary), IO
+redirection, dropping privileges and stuff like that.
+
+All these feats lead to much more consistent init and control over services'
+state:
+
+.. code-block:: bash
+
+    root@damnation:~# rc-status -a
+    Runlevel: shutdown
+      killprocs        [ stopped ]
+      savecache        [ stopped ]
+      mount-ro         [ stopped ]
+    Runlevel: single
+    Runlevel: nonetwork
+      local            [ started ]
+    Runlevel: cryptinit
+      rsyslog          [ started ]
+      ip6tables        [ started ]
+    ...
+      twistd           [ started ]
+      local            [ started ]
+    Runlevel: sysinit
+      dmesg            [ started ]
+      udev             [ started ]
+      devfs            [ started ]
+    Runlevel: boot
+      hwclock          [ started ]
+      lvm              [ started ]
+    ...
+      wdd              [ started ]
+      keymaps          [ started ]
+    Runlevel: default
+      rsyslog          [ started ]
+      ip6tables        [ started ]
+    ...
+      twistd           [ started ]
+      local            [ started ]
+    Dynamic Runlevel: hotplugged
+    Dynamic Runlevel: needed
+      sysfs            [ started ]
+      rpc.pipefs       [ started ]
+    ...
+      rpcbind          [ started ]
+      rpc.idmapd       [ started ]
+    Dynamic Runlevel: manual
+
+| One nice colored list of everything that should be running, is running, failed
+  to start, crashed and whatever. One look and you know if unscheduled reboot
+  has any surprises for you. Weird that such long-lived and supported distros as
+  debian and fedora make these simple tasks so much harder (*chkconfig --list*?
+  You can keep it! ;)
+| Furthermore, it provides as many custom and named runlevels as you want, as a
+  way to flip the state of the whole system with a painless one-liner.
+
+Now, systemd provides all of these features, in a cleaner nicer form and much
+more, but that makes migration from one to the other actually harder.
+
+| Systemd is developed/tested mainly on and for fedora, so abscence of LSB
+  headers in these scripts is a problem (no dependency information), and
+  presence of other headers (which start another scripts w/o systemd help or
+  permission) is even more serious problem.
+| start-stop-daemon interference is also redundant and actually harmful and so
+  is e\* (and other special bl-commands and wrappers), and they won't work w/o
+  baselayout framework.
+
+Thus, it makes sense for systemd on exherbo to be totally independent of
+baselayout and it's scripts, and having a separate package option to install
+systemd and baselayout-specific init stuff:
+
+.. code-block:: console
+
+    root@sacrilege:~# cave show -f acpid
+    * sys-power/acpid
+       ::arbor   2.0.6-r2* {:0}
+       ::installed  2.0.6-r2 {:0}
+       sys-power/acpid-2.0.6-r2:0::installed
+       Description
+    acpid is designed to notify user-space programs of ACPI events. It will
+    will attempt to connect to the Linux kernel via the input layer and
+    netlink. When an ACPI event is received from one of these sources, acpid
+    will examine a list of rules, and execute the rules that match the event.
+       Homepage  http://tedfelix.com/linux/acpid-netlink.html
+       Summary  A configurable ACPI policy daemon for Linux
+       From repositories arbor
+       Installed time Thu Oct 21 23:11:55 YEKST 2010
+       Installed using paludis-0.55.0-git-0.54.2-44-g203a470
+       Licences  GPL-2
+       Options  (-baselayout) (systemd) build_options: -trace
+
+      sys-power/acpid-2.0.6-r2:0::arbor
+       Homepage  http://tedfelix.com/linux/acpid-netlink.html
+       Summary  A configurable ACPI policy daemon for Linux
+       Description
+    acpid is designed to notify user-space programs of ACPI events. It will
+    will attempt to connect to the Linux kernel via the input layer and
+    netlink. When an ACPI event is received from one of these sources, acpid
+    will examine a list of rules, and execute the rules that match the event.
+       Options  -baselayout systemd
+         build_options: -recommended_tests split strip jobs -trace -preserve_work
+       Overridden Masks
+         Supported platforms ~amd64 ~x86
+
+So, basically, the migration to systemd consists of enabling the option and
+flipping the "eclectic init" switch:
+
+.. code-block:: console
+
+    root@sacrilege:~# eclectic init list
+    Available providers for init:
+     [1] systemd *
+     [2] sysvinit
+
+| Of course, in reality things are little more complicated, and breaking init is
+  quite undesirable prospect, so I took advantage of virtualization capabilities
+  of cpu on my new laptop and made a complete virtual replica of the system.
+
+| Things got a bit more complicated since `dm-crypt/lvm setup I've described
+  before
+  <http://blog.fraggod.net/2010/4/LUKS-dm-crypt-rootfs-without-password-via-smartcard>`_,
+  but overally creating such a vm is trivial:
+
+- A dedicated lv for whole setup.
+- luksFormat it, so it'd represent an encrypted "raw" partition.
+- pvcreate / vgcreate / lvcreate / mkfs on top of it, identical (although much
+  smaller) to original system.
+- A script to mount all these and rsync the "original" system to this replica,
+  with a few post-sync hooks to make some vm-specific changes - different vg
+  name, no extra devices for media content, simplier passwords.
+
+| `I have this script here <http://fraggod.net/oss/bin_scrz/quasictl.sh>`_, list
+  of "exclusions" for rsync is actually taken from backup scripts, since it's
+  designed to omit various heavy and non-critical paths like caches, spools and
+  debugging info, plus there's not much point syncing most /home contents. All
+  in all, whole setup is about 2-3G and rsync makes a fast job of updating it.
+| vm (qemu-kvm) startup is right there in the `script
+  <http://fraggod.net/oss/bin_scrz/quasictl.sh>`_ and uses exactly the same
+  kernel/initrd as the host machine, although I skip encryption part (via kernel
+  cmdline) for faster bootup.
+
+And the first launch gave quite a mixed result: systemd fired a bunch of basic
+stuff at once, then hanged for about a minute before presenting a getty. After
+login, it turned out that none of the filesystems in */etc/fstab* got mounted.
+
+| Systemd handles mounts in quite a clever (and fully documented) way - from
+  each device in fstab it creates a "XXX.device" unit, "fsck\@XXX.service", and
+  either "XXX.mount" or "XXX.automount" from mountpoints (depending on optional
+  "comment=" mount opts). All the autogenerated "XXX.mount" units without
+  explicit "noauto" option will get started on boot.
+| And they do get started, hence that hang. Each .mount, naturally, depends on
+  corresponding .device unit (with fsck in between), and these are considered
+  started when udev issues an event.
+
+| In my case, even after exherbo-specific lvm2.service, which does *vgscan* and
+  *vgchange -ay* stuff, these events are never generated, so .device units hang
+  for 60 seconds and systemd marks them as "failed" as well as dependent .mount
+  units.
+| It looks like my local problem, since I actually activate and use these in
+  initrd, so I just worked around it by adding "ExecStart=-/sbin/udevadm trigger
+  --subsystem-match=block --sysname-match=dm-\*" line to lvm2.service. That
+  generated the event in parallel to still-waiting .device units, so they got
+  started, then fsck, then just mounted.
+
+While this may look a bit like a problem, it's quite surprising how transparent
+and easy-to-debug whole process is, regardless of it's massively-parallel
+nature - all the information is available via "systemctl" and it's show/status
+commands, all the services are organized (and monitored) in systemd-cgls tree,
+and can be easily debugged with systemd monitoring and console/dmesg-logging
+features:
+
+.. code-block:: console
+
+    root@sacrilege:~# systemd-cgls
+    ├ 2 [kthreadd]
+    ├ 3 [ksoftirqd/0]
+    ├ 6 [migration/0]
+    ├ 7 [migration/1]
+    ├ 9 [ksoftirqd/1]
+    ├ 10 [kworker/0:1]
+    ...
+    ├ 2688 [kworker/0:2]
+    ├ 2700 [kworker/u:0]
+    ├ 2728 [kworker/u:2]
+    ├ 2729 [kworker/u:4]
+    ├ user
+    │ └ fraggod
+    │ └ no-session
+    │ ├ 1444 /bin/sh /usr/bin/startx
+    │ ├ 1462 xinit /home/fraggod/.xinitrc -- /etc/X11/xinit/xserverrc :0 -auth /home/fraggod/.serveraut...
+    ...
+    │ ├ 2407 ssh root@anathema -Y
+    │ └ 2751 systemd-cgls
+    └ systemd-1
+     ├ 1 /sbin/init
+     ├ var-src.mount
+     ├ var-tmp.mount
+     ├ ipsec.service
+     │ ├ 1059 /bin/sh /usr/lib/ipsec/_plutorun --debug --uniqueids yes --force_busy no --nocrsend no --str...
+     │ ├ 1060 logger -s -p daemon.error -t ipsec__plutorun
+     │ ├ 1061 /bin/sh /usr/lib/ipsec/_plutorun --debug --uniqueids yes --force_busy no --nocrsend no --str...
+     │ ├ 1062 /bin/sh /usr/lib/ipsec/_plutoload --wait no --post
+     │ ├ 1064 /usr/libexec/ipsec/pluto --nofork --secretsfile /etc/ipsec.secrets --ipsecdir /etc/ipsec.d -...
+     │ ├ 1069 pluto helper # 0
+     │ ├ 1070 pluto helper # 1
+     │ ├ 1071 pluto helper # 2
+     │ └ 1223 _pluto_adns
+     ├ sys-kernel-debug.mount
+     ├ var-cache-fscache.mount
+     ├ net@.service
+     ├ rpcidmapd.service
+     │ └ 899 /usr/sbin/rpc.idmapd -f
+     ├ rpcstatd.service
+     │ └ 892 /sbin/rpc.statd -F
+     ├ rpcbind.service
+     │ └ 890 /sbin/rpcbind -d
+     ├ wpa_supplicant.service
+     │ └ 889 /usr/sbin/wpa_supplicant -c /etc/wpa_supplicant/wpa_supplicant.conf -u -Dwext -iwlan0
+     ├ cachefilesd.service
+     │ └ 883 /sbin/cachefilesd -n
+     ├ dbus.service
+     │ └ 784 /usr/bin/dbus-daemon --system --address=systemd: --nofork --systemd-activation
+     ├ acpid.service
+     │ └ 775 /usr/sbin/acpid -f
+     ├ openct.service
+     │ └ 786 /usr/sbin/ifdhandler -H -p etoken64 usb /dev/bus/usb/002/003
+     ├ ntpd.service
+     │ └ 772 /usr/sbin/ntpd -u ntp:ntp -n -g -p /var/run/ntpd.pid
+     ├ bluetooth.service
+     │ ├ 771 /usr/sbin/bluetoothd -n
+     │ └ 1469 [khidpd_046db008]
+     ├ syslog.service
+     │ └ 768 /usr/sbin/rsyslogd -n -c5 -6
+     ├ getty@.service
+     │ ├ tty1
+     │ │ └ 1451 /sbin/agetty 38400 tty1
+     │ ├ tty3
+     │ │ └ 766 /sbin/agetty 38400 tty3
+     │ ├ tty6
+     │ │ └ 765 /sbin/agetty 38400 tty6
+     │ ├ tty5
+     │ │ └ 763 /sbin/agetty 38400 tty5
+     │ ├ tty4
+     │ │ └ 762 /sbin/agetty 38400 tty4
+     │ └ tty2
+     │ └ 761 /sbin/agetty 38400 tty2
+     ├ postfix.service
+     │ ├ 872 /usr/lib/postfix/master
+     │ ├ 877 qmgr -l -t fifo -u
+     │ └ 2631 pickup -l -t fifo -u
+     ├ fcron.service
+     │ └ 755 /usr/sbin/fcron -f
+     ├ var-cache.mount
+     ├ var-run.mount
+     ├ var-lock.mount
+     ├ var-db-paludis.mount
+     ├ home-fraggod-.spring.mount
+     ├ etc-core.mount
+     ├ var.mount
+     ├ home.mount
+     ├ boot.mount
+     ├ fsck@.service
+     ├ dev-mapper-prime\x2dswap.swap
+     ├ dev-mqueue.mount
+     ├ dev-hugepages.mount
+     ├ udev.service
+     │ ├ 240 /sbin/udevd
+     │ ├ 639 /sbin/udevd
+     │ └ 640 /sbin/udevd
+     ├ systemd-logger.service
+     │ └ 228 //lib/systemd/systemd-logger
+     └ tmp.mount
+
+.. code-block:: console
+
+    root@sacrilege:~# systemctl status ipsec.service
+    ipsec.service - IPSec (openswan)
+      Loaded: loaded (/etc/systemd/system/ipsec.service)
+      Active: active (running) since Fri, 05 Nov 2010 15:16:54 +0500; 2h 16min ago
+      Process: 981 (/usr/sbin/ipsec setup start, code=exited, status=0/SUCCESS)
+      Process: 974 (/bin/sleep 10, code=exited, status=0/SUCCESS)
+      CGroup: name=systemd:/systemd-1/ipsec.service
+       ├ 1059 /bin/sh /usr/lib/ipsec/_plutorun --debug --uniqueids yes --force_busy no --noc...
+       ├ 1060 logger -s -p daemon.error -t ipsec__plutorun
+       ├ 1061 /bin/sh /usr/lib/ipsec/_plutorun --debug --uniqueids yes --force_busy no --noc...
+       ├ 1062 /bin/sh /usr/lib/ipsec/_plutoload --wait no --post
+       ├ 1064 /usr/libexec/ipsec/pluto --nofork --secretsfile /etc/ipsec.secrets --ipsecdir ...
+       ├ 1069 pluto helper # 0
+       ├ 1070 pluto helper # 1
+       ├ 1071 pluto helper # 2
+       └ 1223 _pluto_adns
+
+It's not just hacking at some opaque \*sh hacks (like debian init or even
+interactive-mode baselayout) and takes so little effort to the point that it's
+really enjoyable process.
+
+| But making it mount and start all the default (and available) stuff is not the
+  end of it, because there are plenty of services not yet adapted to systemd.
+| I actually expected some (relatively) hard work here, because there are quite
+  a few initscripts in /etc/init.d, even on a desktop machine, but once again, I
+  was in for a nice surprise, since systemd just makes all the work go away. All
+  you need to do is to decide on the ordering (or copy it from baselayout
+  scripts) and put an appropriate "Type=" and "ExecStart=" lines in .service
+  file. That's all there is, really.
+| After that, of course, complete bootup-shutdown test on a vm is in order, and
+  everything "just works" as it is supposed to.
+| Bootup on a real hardware is exactly the same as vm, no surprises here.
+  "udevadm trigger" seem to be necessary as well, proving validity of vm model.
+
+Systemd boot time is way faster than sysvinit, as it is supposed to, although I
+don't really care, since reboot is seldom necessary here.
+
+As a summary, I'd recommend everyone to give systemd a try, or at least get
+familiar with `it's rationale <http://0pointer.de/blog/projects/systemd.html>`_
+and `features <http://0pointer.de/public/systemd-man/>`_ (plus this three-part
+blog series: `one
+<http://0pointer.de/blog/projects/systemd-for-admins-1.html>`_, `two
+<http://0pointer.de/blog/projects/systemd-for-admins-2.html>`_, `three
+<http://0pointer.de/blog/projects/systemd-for-admins-3.html>`_).  `My units
+<http://fraggod.net/svc/git/systemd>`_ aren't perfect (and I'll probably update
+network-related stuff to use `ConnMan <http://connman.net/>`_), but if you're
+lazy, `grab them here <http://fraggod.net/svc/git/systemd>`_. Also, `here is a
+repo with units for archlinux
+<http://github.com/falconindy/systemd-arch-units>`_, which I loosely used as a
+reference point along with */lib/systemd* contents.

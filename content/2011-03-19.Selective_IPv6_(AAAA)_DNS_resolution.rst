@@ -1,0 +1,71 @@
+Selective IPv6 (AAAA) DNS resolution
+####################################
+
+:date: 2011-03-19 09:54
+:tags: python, sysadmin, ipv6
+
+
+| Had IPv6 tunnel from `HE <http://tunnelbroker.net/>`_ for a few years now, but
+  since I've changed ISP about a year ago, I've been unable to use it because
+  ISP dropped sit tunnel packets for some weird reason.
+| A quick check yesterday revealed that this limitation seem to have been
+  lifted, so I've re-enabled the tunnel at once.
+
+| All the IPv6-enabled stuff started using AAAA-provided IPs at once, and that
+  resulted in some problems.
+| Particulary annoying thing is that `ZNC IRC bouncer <http://en.znc.in/>`_
+  managed to loose connection to `freenode <http://freenode.net/>`_ about five
+  times in two days, interrupting conversations and missing some channel
+  history.
+
+| Of course, problem can be easily solved by making znc connect to IPv4
+  addresses, as it was doing before, but since there's no option like "connect
+  to IPv4" and "irc.freenode.net" doesn't seem to have some alias like
+  "ipv4.irc.freenode.net", that'd mean either specifying single IP in znc.conf
+  (instead on DNS-provided list of servers) or filtering AAAA results, while
+  leaving A records intact.
+| Latter solution seem to be better in many ways, so I decided to look for
+  something that can override AAAA RR's for a single domain (irc.freenode.net in
+  my case) or a configurable list of them.
+
+| I use dead-simple dnscache resolver from `djbdns bundle
+  <http://cr.yp.to/djbdns/>`_, which doesn't seem to be capable of such
+  filtering by itself.
+| `ISC BIND <http://www.isc.org/software/bind>`_ seem to have "filter-aaaa"
+  global option to provide A-only results to a list of clients/networks, but
+  that's also not what I need, since it will make IPv6-only mirrors (upon which
+  I seem to stumble more and more lately) inaccessible.
+| Rest of the recursive DNS resolvers doesn't seem to have even that capability,
+  so some hack was needed here.
+
+| Useful feature that most resolvers have though is the ability to query
+  specific DNS servers for a specific domains. Even dnscache is capable of doing
+  that, so putting BIND with AAAA resolution disabled behind dnscache and
+  forwarding freenode.net domain to it should do the trick.
+| But installing and running BIND just to resolve one (or maybe a few more, in
+  the future) domain looks like an overkill to me, so I thought of `twisted
+  <http://twistedmatrix.com/>`_ and it's names component, implementing DNS
+  protocols.
+
+And all it took with twisted to implement such no-AAAA DNS proxy, as it turns
+out, was these five lines of code:
+
+.. code-block:: python
+
+    class IPv4OnlyResolver(client.Resolver):
+        def lookupIPV6Address(self, name, timeout = None):
+            return self._lookup('nx.fraggod.net', dns.IN, dns.AAAA, timeout)
+
+    protocol = dns.DNSDatagramProtocol(
+        server.DNSServerFactory(clients=[IPv4OnlyResolver()]) )
+
+Meh, should've skipped the search for existing implementation altogether.
+
+That script plus "echo IP > /etc/djbdns/cache/servers/freenode.net" solved the
+problem, although dnscache doesn't seem to be capable of forwarding queries to
+non-standard port, so proxy has to be bound to specific localhost interface, not
+just some wildcard:port socket.
+
+Code, with trivial CLI, logging, dnscache forwarders-file support and redirected
+AAAA-answer caching, is `here
+<http://fraggod.net/static/code/dns-aaaa-filter.py>`_.

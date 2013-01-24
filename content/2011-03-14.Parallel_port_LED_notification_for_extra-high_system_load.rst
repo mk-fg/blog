@@ -1,0 +1,53 @@
+Parallel port LED notification for extra-high system load
+#########################################################
+
+:date: 2011-03-14 11:26
+:tags: python, notification, sysadmin
+
+
+| I've heard about how easy it is to control stuff with a parallel port, but
+  recently I've been asked to write a simple script to send repeated signals to
+  some hardware via lpt and I really needed some way to test whether signals are
+  coming through or not.
+| Googling around a bit, I've found that it's trivial to plug leds right into
+  the port and did just that to test the script.
+
+Since it's trivial to control these leds and they provide quite a simple way for
+a visual notification for an otherwise headless servers, I've put together
+another script to monitor system resources usage and indicate extra-high load
+with various blinking rates.
+
+Probably the coolest thing is that parallel port on mini-ITX motherboards comes
+in a standard "male" pin group like usb or audio with "ground" pins exactly
+opposite of "data" pins, so it's easy to take a few leds (power, ide, and they
+usually come in different colors!) from an old computer case and plug these
+directly into the board.
+
+.. html::
+
+  <a href="|filename|images/led_notification.jpg">
+  <img align="right"
+    src="|filename|images/led_notification.jpg"
+    title="LED indicators from a mini-ITX board"
+    alt="LED indicators from a mini-ITX board">
+  </a>
+
+| Parallel port interaction is implemented in fairly simple `pyparallel module
+  <http://pyserial.sourceforge.net/pyparallel.html>`_.
+| Making leds blink actually involves an active switching of data bits on the
+  port in an infinite loop, so I've forked one subprocess to do that while
+  another one checks/processes the data and feeds led blinking intervals'
+  updates to the first one via pipe.
+| System load data is easy to acquire from "/proc/loadavg" for cpu and as
+  "%util" percentage from "sar -d" reports.
+| And the easiest way to glue several subprocesses and a timer together into an
+  eventloop is `twisted <http://twistedmatrix.com/>`_, so the script is
+  basically 150 lines sar output processing, checks and blinking rate settings.
+
+Obligatory `link to the source <http://fraggod.net/static/code/ledd.py>`_. Deps
+are `python-2.7 <http://python.org/>`_, `twisted <http://twistedmatrix.com/>`_
+and `pyparallel <http://pyserial.sourceforge.net/pyparallel.html>`_.
+
+Guess mail notifications could've been just as useful, but quickly-blinking leds
+are more spectacular and kinda way to utilize legacy hardware capabilities that
+these motherboards still have.

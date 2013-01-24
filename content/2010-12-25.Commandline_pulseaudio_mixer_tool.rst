@@ -1,0 +1,67 @@
+Commandline pulseaudio mixer tool
+#################################
+
+:date: 2010-12-25 21:55
+:tags: desktop, python
+
+
+| Some time ago I decided to check out `pulseaudio project
+  <http://pulseaudio.org/>`_, and after a few docs it was controlling all the
+  sound flow in my system, since then I've never really looked back to pure
+  alsa.
+| At first I just needed the sound-over-network feature, which I've extensively
+  used a few years ago with esd, and pulse offered full transparency here, not
+  just limited support. Hell, it even has simple-client netcat'able stream
+  support, so there's no need to look for a client on alien OS'es.
+| Controllable and centralized resampling was the next nice feat, because some
+  apps (notably, audacious and aqualung) seemed to waste quite a lot of
+  resources on it in the past, either because of unreasonably-high quality or
+  just suboptimal alghorithms, I've never really cared to check. Alsa should be
+  capable to do that as well, but for some reason it failed me in this regard
+  before.
+
+| One major annoyance though was the abscence of a simple tool to control volume
+  levels.
+| pactl seem to be only good for muting the output, while the rest of pa-stuff
+  on the net seem to be based on either gtk or qt, while I needed something to
+  bind to a hotkeys and quickly run inside a readily-available terminal.
+| Maybe it's just an old habit of using alsamixer for this, but replacing it
+  with heavy gnome/kde tools for such a simple task seem unreasonable, so I
+  thought: since it's modern daemon with a lot of well-defined interfaces, why
+  not write my own?
+
+| I considered writing a simple hack around pacmd/pacli, but they aren't much
+  machine-oriented and regex-parsing is not fun, so I found that newer (git or
+  v1.0-dev) pulse versions have a `nice dbus interface
+  <http://pulseaudio.org/wiki/DBusInterface>`_ to everything.
+| Only problem there is that it doesn't really work, crashing pulse on any
+  attempt to get some list from properties. Had to track down `the issue
+  <http://pulseaudio.org/ticket/887>`_, good thing it's fairly trivial to fix
+  (just a simple revert), and then just hacked-up simple non-interactive tool to
+  adjust sink volume by some percentage, specified on command line.
+
+It was good enough for hotkeys, but I still wanted some nice
+alsamixer-like bars and thought it might be a good place to implement
+control per-stream sound levels as well, which is really another nice
+feature, but only as long as there's a way to actually adjust these
+levels, which there wasn't.
+
+A few hours of python and learning curses and there we go:
+
+::
+
+     ALSA plug-in [aplay] (fraggod@sacrilege:1424)        [ #############---------- ]
+     MPlayer (fraggod@sacrilege:1298)                     [ ####################### ]
+     Simple client (TCP/IP client from 192.168.0.5:49162) [ #########-------------- ]
+
+Result was quite responsive and solid, which I kinda didn't expect from any sort
+of interactive interface.
+
+| Guess I may be not the only person in the world looking for a cli mixer, so
+  I'd probably put the project up somewhere, meanwhile the script is available
+  `here <http://fraggod.net/oss/projects/pa_mixer.py>`_.
+| The only deps are python-2.7 with curses support and dbus-python, which should
+  come out of the box on any decent desktop system these days, anyway. List of
+  command-line parameters to control sink level is available via traditional
+  "-h" or "--help" option, although interactive stream levels tuning doesn't
+  need any of them.

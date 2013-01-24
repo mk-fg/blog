@@ -1,0 +1,33 @@
+snmpd-pyagentx or re-discovery of sf.net
+########################################
+
+:date: 2010-02-28 14:49
+:tags: python, sysadmin, web
+
+
+Since I've put some two-day effort into creation of `net-snmp
+<http://net-snmp.sourceforge.net/>`_ snmpd extension and had some free time to
+report bug in `source of this inspiration
+<http://sourceforge.net/projects/python-agentx/>`_, thought I might as well save
+someone trouble of re-inventing the wheel and publish it somewhere, since snmpd
+extension definitely looks like a black area from python perspective.
+
+I've used `sf.net <http://sf.net/>`_ as a project admin before, publishing some
+crappy php code for `hyscar project <http://sourceforge.net/projects/hyscar/>`_
+with pretty much the same reasons in mind, and I didn't like the experience
+much - cvs for code storage and weird interface are among the reasons I can
+remember, but I'll gladly take all this criticism back - current interface has
+by far exceed all my expectations (well, prehaps they were too low in the first
+place?).
+
+Putting up a full-fledged project page took me (a complete n00b at that) about
+half an hour, everything being simple and obvious as it is, native-to-me `git
+vcs <http://www.git-scm.com/>`_, and even `trac <http://trac.edgewall.com/>`_
+among the (numerous) features. Damn pleasant xp, making you wanna upload
+something else just for the sake of it ;)
+
+| Oh, and the project is `snmpd-pyagentx
+  <http://sourceforge.net/projects/snmpd-pyagentx/>`_, `freshmeat page
+  <http://freshmeat.net/projects/snmpd-pyagentx>`_ included.
+| Just an alpha right now, but I'll polish and deploy it in production in a day
+  or two, so no worries.

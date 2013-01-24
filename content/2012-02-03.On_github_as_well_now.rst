@@ -1,0 +1,38 @@
+On github as well now
+#####################
+
+:date: 2012-02-03 20:57
+:tags: scm, web, social
+
+
+Following another hiatus from a day job, I finally have enough spare time to
+read some of the internets and do something about them.
+
+| For quite a while I had lots of quite small scripts and projects, which I
+  kinda documented here (and on the site pages before that).
+| I always kept them in some kind of scm - be it system-wide repo for
+  configuration files, ~/.cFG repo for DE and misc user configuration and ~/bin
+  scripts, or ~/hatch repo I keep for misc stuff, but as their number grows, as
+  well as the size and complexity, I think maybe some of this stuff deserves
+  some kind of repo, maybe attention, and best-case scenario, will even be
+  useful to someone but me.
+
+So I thought to gradually push all this stuff out to github and/or bitbucket
+(still need to learn or at least look at hg for that!).  github being the most
+obvious and easiest choice, just created a few repos there and started the
+migration. More to come.
+
+| Still don't really trust a silo like github to keep anything reliably (besides
+  it lags like hell here, especially compared to local servers I'm kinda used
+  to), so need to devise some mirroring scheme asap.
+| Initial idea is to take some flexible tool (hg seem to be ideal, being python
+  and scm proper) and build a hooks into local repos to push stuff out to
+  mirrors from there, ideally both bitbucket and github, also exploiting their
+  metadata APIs to fetch stuff like tickets/issues and commit history of these
+  into separate repo branch as well.
+
+Effort should be somewhat justified by the fact that such repos will be
+geo-distributed backups, shareable links and I can learn more SCM internals by
+the way.
+
+For now - `me on github <https://github.com/mk-fg/>`_.

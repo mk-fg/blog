@@ -1,0 +1,93 @@
+Running stuff like firefox, flash and skype with apparmor
+#########################################################
+
+:date: 2011-11-12 09:08
+:tags: desktop, unix
+
+
+Should've done it a long time ago, actually.  I was totally sure it'd be much
+harder task, but then recently I've had some spare time and decided to do
+something about this binary crap, and looking for possible solutions stumbled
+upon `apparmor <http://apparmor.net/>`_.
+
+| A while ago I've used `SELinux <http://selinuxproject.org/>`_ (which was the
+  reason why I thought it'd have to be hard) and kinda considered LSM-based
+  security as kind of heavy-handed no-nonsense shit you chose NOT to deal with
+  if you have such choice, but apparmor totally proved this to be a silly
+  misconception, which I'm insanely happy about.
+| With apparmor, it's just one file with a set of permissions, which can be
+  loaded/enforced/removed at runtime, no xattrs (and associated maintenance
+  burden) or huge and complicated policies like SELinux has.
+| For good whole-system security SELinux still seem to be a better approach, but
+  not for confining a few crappy apps on a otherwise general system.
+| On top of that, it's also trivially easy to install on a general system - only
+  kernel LSM and one userspace package needed.
+
+Case in point - skype apparmor profile, which doesn't allow it to access
+anything but ~/.Skype, /opt/skype and a few other system-wide things:
+
+::
+
+    #include <tunables/global>
+    /usr/bin/skype {
+      #include <abstractions/base>
+      #include <abstractions/user-tmp>
+      #include <abstractions/pulse>
+      #include <abstractions/nameservice>
+      #include <abstractions/ssl_certs>
+      #include <abstractions/fonts>
+      #include <abstractions/X>
+      #include <abstractions/freedesktop.org>
+      #include <abstractions/kde>
+      #include <abstractions/site/base>
+      #include <abstractions/site/de>
+
+      /usr/bin/skype mr,
+      /opt/skype/skype pix,
+      /opt/skype/** mr,
+      /usr/share/fonts/X11/** m,
+
+      @{PROC}/*/net/arp r,
+      @{PROC}/sys/kernel/ostype r,
+      @{PROC}/sys/kernel/osrelease r,
+
+      /dev/ r,
+      /dev/tty rw,
+      /dev/pts/* rw,
+      /dev/video* mrw,
+
+      @{HOME}/.Skype/ rw,
+      @{HOME}/.Skype/** krw,
+
+      deny @{HOME}/.mozilla/ r, # no idea what it tries to get there
+      deny @{PROC}/[0-9]*/fd/ r,
+      deny @{PROC}/[0-9]*/task/ r,
+      deny @{PROC}/[0-9]*/task/** r,
+    }
+
+"deny" lines here are just to supress audit warnings about this paths,
+everything is denied by default, unless explicitly allowed.
+
+Compared to "default" linux DAC-only "as user" confinement, where it has access
+to all your documents, activities, smartcard, gpg keys and processes, ssh keys
+and sessions, etc - it's a huge improvement.
+
+| Even more useful confinement is firefox and it's plugin-container process
+  (which can - and does, in my configuration - have separate profile), where
+  known-to-be-extremely-exploitable adobe flash player runs.
+| Before apparmor, I mostly relied on FlashBlock extension to keep Flash in
+  check somehow, but at some point I noted that plugin-container with
+  libflashplayer.so seem to be running regardless of FlashBlock and whether
+  flash is displayed on pages or not. I don't know if it's just a warm-start,
+  check-run or something, but still looks like a possible hole.
+
+| Aforementioned (among others) profiles `can be found here
+  <http://fraggod.net/static/code/apparmor/>`_.
+| I'm actually quite surprised that I failed to find functional profiles for
+  common apps like firefox and pulseaudio on the internets, aside from some blog
+  posts like this one.
+| In theory, Ubuntu and SUSE should have these, since apparmor is developed and
+  deployed there by default (afaik), so maybe google just haven't picked these
+  files up in the package manifests, and all I needed was to go over them by
+  hand. Not sure if it was much faster or more productive than writing them
+  myself though.
