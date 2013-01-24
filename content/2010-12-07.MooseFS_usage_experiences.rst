@@ -1,6 +1,7 @@
 MooseFS usage experiences
 #########################
 
+:legacy-link: 2010/12/MooseFS-usage-experiences
 :date: 2010-12-07 22:22
 :tags: sysadmin, nfs, replication
 

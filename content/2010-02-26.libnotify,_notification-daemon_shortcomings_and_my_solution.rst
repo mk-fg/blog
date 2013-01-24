@@ -1,6 +1,7 @@
 libnotify, notification-daemon shortcomings and my solution
 ###########################################################
 
+:legacy-link: 2010/2/libnotify-notification-daemon-shortcomings-and-my-solution
 :date: 2010-02-26 16:44
 :tags: python, desktop, unix, notification, rate-limiting
 

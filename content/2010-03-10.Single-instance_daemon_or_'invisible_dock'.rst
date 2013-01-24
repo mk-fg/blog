@@ -1,6 +1,7 @@
 Single-instance daemon or "invisible dock"
 ##########################################
 
+:legacy-link: 2010/3/Single-instance-daemon-or-invisible-dock
 :date: 2010-03-10 02:41
 :tags: python, desktop
 

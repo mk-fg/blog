@@ -1,6 +1,7 @@
 Backup of 5 million tiny files and paths
 ########################################
 
+:legacy-link: 2011/5/Backup-of-5-million-tiny-files-and-paths
 :date: 2011-05-08 11:57
 :tags: sysadmin, unix, python
 

@@ -1,6 +1,7 @@
 My "simple" (ok, not quite) backup system - implementation (backup host)
 ########################################################################
 
+:legacy-link: 2010/2/My-simple-ok-not-quite-backup-system-implementation-backup-host
 :date: 2010-02-14 09:51
 :tags: python, unix, sysadmin, ssh, rsync
 

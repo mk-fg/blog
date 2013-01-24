@@ -1,6 +1,7 @@
 Exherbo / paludis fossil syncer
 ###############################
 
+:legacy-link: 2010/4/Exherbo-paludis-fossil-syncer
 :date: 2010-04-25 09:00
 :tags: scm, exherbo, fossil
 

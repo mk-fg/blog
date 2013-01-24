@@ -1,6 +1,7 @@
 My "simple" (ok, not quite) backup system - implementation (backed-up side)
 ###########################################################################
 
+:legacy-link: 2010/2/My-simple-ok-not-quite-backup-system-implementation-backed-up-side
 :date: 2010-02-13 14:29
 :tags: python, unix, sysadmin, ssh
 

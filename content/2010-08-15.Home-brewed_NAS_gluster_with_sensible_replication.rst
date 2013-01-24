@@ -1,6 +1,7 @@
 Home-brewed NAS gluster with sensible replication
 #################################################
 
+:legacy-link: 2010/8/Home-brewed-NAS-gluster-with-sensible-replication
 :date: 2010-08-15 09:13
 :tags: sysadmin, nfs, caching, replication
 

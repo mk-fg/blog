@@ -1,6 +1,7 @@
 No IPSec on-a-stick for me ;(
 #############################
 
+:legacy-link: 2010/6/No-IPSec-on-a-stick-for-me-
 :date: 2010-06-14 10:41
 :tags: ipsec, unix, encryption
 

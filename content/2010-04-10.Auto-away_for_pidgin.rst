@@ -1,6 +1,7 @@
 Auto-away for pidgin
 ####################
 
+:legacy-link: 2010/4/Auto-away-for-pidgin
 :date: 2010-04-10 06:02
 :tags: python, desktop, im
 

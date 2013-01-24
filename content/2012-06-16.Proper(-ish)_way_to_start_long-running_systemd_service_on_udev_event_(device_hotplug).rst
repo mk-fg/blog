@@ -1,6 +1,7 @@
 Proper(-ish) way to start long-running systemd service on udev event (device hotplug)
 #####################################################################################
 
+:legacy-link: 2012/6/Proper-ish-way-to-start-long-running-systemd-service-on-udev-event-device-hotplug
 :date: 2012-06-16 12:26
 :tags: sysadmin, systemd, udev
 

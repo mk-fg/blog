@@ -1,6 +1,7 @@
 Wheee, I've got a blog ;)
 #########################
 
+:legacy-link: 2010/1/Wheee-Ive-got-a-blog-
 :date: 2010-01-30 21:06
 
 

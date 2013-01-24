@@ -1,6 +1,7 @@
 Key-Value storage with history/versioning on top of scm
 #######################################################
 
+:legacy-link: 2011/4/Key-Value-storage-with-historyversioning-on-top-of-scm
 :date: 2011-04-18 02:59
 :tags: scm, sysadmin, python
 

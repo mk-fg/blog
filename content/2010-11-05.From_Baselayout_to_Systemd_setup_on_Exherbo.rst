@@ -1,6 +1,7 @@
 From Baselayout to Systemd setup on Exherbo
 ###########################################
 
+:legacy-link: 2010/11/From-Baselayout-to-Systemd-setup-on-Exherbo
 :date: 2010-11-05 13:27
 :tags: desktop, exherbo, sysadmin, unix, systemd
 

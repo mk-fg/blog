@@ -1,6 +1,7 @@
 Parallel port LED notification for extra-high system load
 #########################################################
 
+:legacy-link: 2011/3/Parallel-port-LED-notification-for-extra-high-system-load
 :date: 2011-03-14 11:26
 :tags: python, notification, sysadmin
 

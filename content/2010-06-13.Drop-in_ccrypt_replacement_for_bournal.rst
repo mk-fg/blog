@@ -1,6 +1,7 @@
 Drop-in ccrypt replacement for bournal
 ######################################
 
+:legacy-link: 2010/6/Drop-in-ccrypt-replacement-for-bournal
 :date: 2010-06-13 13:35
 :tags: bash, encryption, desktop
 

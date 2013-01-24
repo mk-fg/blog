@@ -1,6 +1,7 @@
 Detailed process memory accounting, including shared and swapped one
 ####################################################################
 
+:legacy-link: 2011/9/Detailed-process-memory-accounting-including-shared-and-swapped-one
 :date: 2011-09-16 18:12
 :tags: unix, sysadmin
 

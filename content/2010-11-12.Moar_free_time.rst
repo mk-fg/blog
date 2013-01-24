@@ -1,6 +1,7 @@
 Moar free time!
 ###############
 
+:legacy-link: 2010/11/Moar-free-time
 :date: 2010-11-12 13:33
 :tags: rl
 

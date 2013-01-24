@@ -1,6 +1,7 @@
 Fossil to Git export and mirroring
 ##################################
 
+:legacy-link: 2011/5/Fossil-to-Git-export-and-mirroring
 :date: 2011-05-02 14:34
 :tags: fossil, scm, python, sysadmin
 

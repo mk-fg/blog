@@ -1,6 +1,7 @@
 Music collection updates feed via musicbrainz and last.fm
 #########################################################
 
+:legacy-link: 2010/5/Music-collection-updates-feed-via-musicbrainz-and-lastfm
 :date: 2010-05-08 14:10
 :tags: web
 

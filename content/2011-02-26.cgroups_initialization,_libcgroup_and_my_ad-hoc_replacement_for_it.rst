@@ -1,6 +1,7 @@
 cgroups initialization, libcgroup and my ad-hoc replacement for it
 ##################################################################
 
+:legacy-link: 2011/2/cgroups-initialization-libcgroup-and-my-ad-hoc-replacement-for-it
 :date: 2011-02-26 20:28
 :tags: python, sysadmin, rate-limiting, systemd
 

@@ -1,6 +1,7 @@
 xdiskusage-like visualization for any remote machine
 ####################################################
 
+:legacy-link: 2011/4/xdiskusage-like-visualization-for-any-remote-machine
 :date: 2011-04-19 14:57
 :tags: sysadmin, coffeescript, web
 

@@ -1,6 +1,7 @@
 Sane playback for online streaming video via stream dumping
 ###########################################################
 
+:legacy-link: 2010/12/Sane-playback-for-online-streaming-video-and-via-stream-dumping
 :date: 2010-12-29 11:09
 :tags: desktop, python, caching, web
 

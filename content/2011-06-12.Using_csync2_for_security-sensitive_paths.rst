@@ -1,6 +1,7 @@
 Using csync2 for security-sensitive paths
 #########################################
 
+:legacy-link: 2011/6/Using-csync2-for-security-sensitive-paths
 :date: 2011-06-12 16:25
 :tags: sysadmin, unix, python, ssh
 

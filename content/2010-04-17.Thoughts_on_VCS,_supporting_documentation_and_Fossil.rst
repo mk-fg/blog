@@ -1,6 +1,7 @@
 Thoughts on VCS, supporting documentation and Fossil
 ####################################################
 
+:legacy-link: 2010/4/Thoughts-on-VCS-supporting-documentation-and-Fossil
 :date: 2010-04-17 17:22
 :tags: scm, fossil, documentation, desktop, web
 

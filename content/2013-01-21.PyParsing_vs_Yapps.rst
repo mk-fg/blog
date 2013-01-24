@@ -1,6 +1,7 @@
 PyParsing vs Yapps
 ##################
 
+:legacy-link: 2013/1/PyParsing-vs-Yapps
 :date: 2013-01-21 04:15
 :tags: python
 

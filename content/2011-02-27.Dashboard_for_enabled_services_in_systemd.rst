@@ -1,6 +1,7 @@
 Dashboard for enabled services in systemd
 #########################################
 
+:legacy-link: 2011/2/Dashboard-for-enabled-services-in-systemd
 :date: 2011-02-27 07:02
 :tags: python, sysadmin, unix, systemd
 

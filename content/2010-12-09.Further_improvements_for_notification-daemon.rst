@@ -1,6 +1,7 @@
 Further improvements for notification-daemon
 ############################################
 
+:legacy-link: 2010/12/Further-improvements-on-notification-daemon
 :date: 2010-12-09 03:58
 :tags: python, desktop, unix, notification, rate-limiting, lisp
 

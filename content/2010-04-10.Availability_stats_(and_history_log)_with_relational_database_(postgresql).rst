@@ -1,6 +1,7 @@
 Availability stats (and history log) with relational database (postgresql)
 ##########################################################################
 
+:legacy-link: 2010/4/Availability-stats-and-history-log-with-relational-database-postgresql
 :date: 2010-04-10 14:29
 :tags: sql, sysadmin, web
 

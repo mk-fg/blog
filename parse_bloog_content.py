@@ -46,6 +46,8 @@ def main(argv=None):
 		description='Decode appengine data dump for blog entries.')
 	parser.add_argument('dump', help='Path appengine data dump.')
 	parser.add_argument('dst_dir', help='Path to generate files in.')
+	parser.add_argument('--add-legacy-link', action='store_true',
+		help='Only add "legacy-link" attribute to existing *.rst entries.')
 	optz = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
 	src = open(optz.dump).read().decode('utf-8')
@@ -61,12 +63,27 @@ def main(argv=None):
 			if proc.wait(): raise RuntimeError('pandoc failed')
 		slug = slugify(title)
 		path = '{}.{}.rst'.format(published.strftime('%Y-%m-%d'), slug)
-		with open(os.path.join(optz.dst_dir, path), 'w') as dst:
-			dst.write('\n'.join(filter(None, [
-				'{}\n{}\n'.format(title, '#'*len(title)),
-				':date: {}'.format(published.strftime('%Y-%m-%d %H:%M')),
-				tags and ':tags: {}'.format(', '.join(tags)),
-				'\n', body ])).encode('utf-8'))
+		dst = os.path.join(optz.dst_dir, path)
+		if optz.add_legacy_link:
+			if not os.path.exists(dst):
+				print('Missing file: {}'.format(dst), file=sys.stderr)
+				continue
+			with open(dst, 'a+') as dst:
+				dst.readline(), dst.readline() # title, underline
+				assert not dst.readline().strip() # empty line
+				pos = dst.tell()
+				rest = dst.read()
+				dst.seek(pos)
+				dst.truncate()
+				dst.write(':legacy-link: {}\n'.format(permalink))
+				dst.write(rest)
+		else:
+			with open(dst, 'w') as dst:
+				dst.write('\n'.join(filter(None, [
+					'{}\n{}\n'.format(title, '#'*len(title)),
+					':date: {}'.format(published.strftime('%Y-%m-%d %H:%M')),
+					tags and ':tags: {}'.format(', '.join(tags)),
+					'\n', body ])).encode('utf-8'))
 
 
 if __name__ == '__main__': main()

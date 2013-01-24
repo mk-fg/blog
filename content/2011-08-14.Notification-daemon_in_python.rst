@@ -1,6 +1,7 @@
 Notification-daemon in python
 #############################
 
+:legacy-link: 2011/8/Notification-daemon-in-python
 :date: 2011-08-14 09:12
 :tags: python, desktop, unix, notification, rate-limiting
 

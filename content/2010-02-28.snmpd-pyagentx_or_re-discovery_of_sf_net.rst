@@ -1,6 +1,7 @@
 snmpd-pyagentx or re-discovery of sf.net
 ########################################
 
+:legacy-link: 2010/2/snmpd-pyagentx-or-re-discovery-of-sfnet
 :date: 2010-02-28 14:49
 :tags: python, sysadmin, web
 

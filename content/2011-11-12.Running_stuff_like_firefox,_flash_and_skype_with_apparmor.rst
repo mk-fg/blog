@@ -1,6 +1,7 @@
 Running stuff like firefox, flash and skype with apparmor
 #########################################################
 
+:legacy-link: 2011/11/Running-stuff-like-firefox-flash-and-skype-with-apparmor
 :date: 2011-11-12 09:08
 :tags: desktop, unix
 

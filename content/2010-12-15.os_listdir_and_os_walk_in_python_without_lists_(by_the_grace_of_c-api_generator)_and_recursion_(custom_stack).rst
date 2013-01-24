@@ -1,6 +1,7 @@
 os.listdir and os.walk in python without lists (by the grace of c-api generator) and recursion (custom stack)
 #############################################################################################################
 
+:legacy-link: 2010/12/oslistdir-and-oswalk-in-python-without-lists-by-the-grace-of-c-api-generator-and-recursion-custom-stack
 :date: 2010-12-15 19:11
 :tags: unix, python
 

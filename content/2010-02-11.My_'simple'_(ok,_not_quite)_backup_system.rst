@@ -1,6 +1,7 @@
 My "simple" (ok, not quite) backup system
 #########################################
 
+:legacy-link: 2010/2/My-simple-ok-not-quite-backup-system
 :date: 2010-02-11 22:58
 :tags: unix, sysadmin
 

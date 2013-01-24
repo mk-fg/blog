@@ -1,6 +1,7 @@
 Migrating configuration / settings to E17 (enlightenment) 0.17.0 from older E versions
 ######################################################################################
 
+:legacy-link: 2013/1/Migrating-configuration-settings-to-E17-enlightenment-0170-from-older-E-versions
 :date: 2013-01-16 18:59
 :tags: desktop
 

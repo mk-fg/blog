@@ -1,6 +1,7 @@
 Commandline pulseaudio mixer tool
 #################################
 
+:legacy-link: 2010/12/Commandline-pulseaudio-mixer-tool
 :date: 2010-12-25 21:55
 :tags: desktop, python
 

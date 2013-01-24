@@ -1,6 +1,7 @@
 Info feeds
 ##########
 
+:legacy-link: 2010/9/Info-feeds
 :date: 2010-09-12 10:54
 :tags: web, syndication
 

@@ -1,6 +1,7 @@
 Distributed fault-tolerant fs take 2: MooseFS
 #############################################
 
+:legacy-link: 2010/9/Distributed-fault-tolerant-fs-take-2-MooseFS
 :date: 2010-09-09 15:39
 :tags: sysadmin, nfs, replication
 

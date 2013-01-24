@@ -1,6 +1,7 @@
 Selective IPv6 (AAAA) DNS resolution
 ####################################
 
+:legacy-link: 2011/3/Selective-IPv6-AAAA-DNS-resolution
 :date: 2011-03-19 09:54
 :tags: python, sysadmin, ipv6
 

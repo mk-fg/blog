@@ -1,6 +1,7 @@
 POSIX capabilities for python
 #############################
 
+:legacy-link: 2010/2/POSIX-capabilities-for-python
 :date: 2010-02-01 06:19
 :tags: python, unix
 

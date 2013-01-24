@@ -1,6 +1,7 @@
 Getting rid of dead bittorrent trackers for rtorrent by scrubbing .torrent files
 ################################################################################
 
+:legacy-link: 2010/6/Getting-rid-of-dead-bittorrent-trackers-for-rtorrent-by-scrubbing-torrent-files
 :date: 2010-06-05 08:33
 :tags: web, p2p, python
 

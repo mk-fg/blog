@@ -1,6 +1,7 @@
 zcat, bzcat, lzcat, xzcat... Arrrgh! Autodetection rocks
 ########################################################
 
+:legacy-link: 2010/12/zcat-bzcat-lzcat-xzcat-Arrrgh-Autodetection-rocks
 :date: 2010-12-11 06:04
 :tags: unix, compression
 

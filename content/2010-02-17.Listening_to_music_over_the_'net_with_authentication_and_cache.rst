@@ -1,6 +1,7 @@
 Listening to music over the 'net with authentication and cache
 ##############################################################
 
+:legacy-link: 2010/2/Listening-to-music-over-the-net-with-authentication-and-cache
 :date: 2010-02-17 18:09
 :tags: unix, nfs, caching, ssh
 
