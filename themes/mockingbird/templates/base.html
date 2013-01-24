@@ -19,7 +19,10 @@
         <link rel="stylesheet" href="{{ SITEURL }}/theme/css/pygments.css" type="text/css" />
     </head>
     <body>
-        {% if SITENAME -%}
+        {% if article and article.metadata["legacy-link"] -%}
+        <!-- legacy-link: {{ article.metadata["legacy-link"] }} -->
+        {% endif %}
+        {%- if SITENAME -%}
         <div id="header">
             <ul id="nav">
                 {%- block ephemeral_nav %}{%- endblock %}

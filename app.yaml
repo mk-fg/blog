@@ -1,0 +1,53 @@
+# https://developers.google.com/appengine/docs/python/config/appconfig
+
+application: fg-blog
+version: pelican-1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+
+handlers:
+
+  - url: /(favicon\.ico|robots\.txt)
+    static_files: output/static/misc/\1
+    upload: output/static/misc/(favicon\.ico|robots\.txt)
+
+  - url: /\d+/\d+/[^\d][^/]+/?
+    script: dynamic.legacy_redirect.app
+
+  - url: /
+    static_files: output/index.html
+    upload: output/index.html
+
+  - url: /
+    static_dir: output
+
+
+# builtins:
+#   - datastore_admin: on
+#   - appstats: on
+#   - remote_api: on
+
+
+# pagespeed:
+#   domains_to_rewrite:
+#   - www.foo.com
+#   - https://*.secure.foo.com
+#   url_blacklist:
+#   - http://myapp.com/blob/*
+#   - http://myapp.com/comments/*
+#   enabled_rewriters:
+#   - MinifyCss
+#   disabled_rewriters:
+#   - ImageStripColorProfile
+
+
+skip_files:
+  - ^(.*/)?.*\.py[co]$
+  - ^(.*/)?\..*$
+
+  - ^(themes|content)/
+  - ^[^/]*conf\.py$
+  - ^[^/]+\.(yaml|txt|sh)$
+  - ^Makefile$

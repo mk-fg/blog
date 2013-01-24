@@ -37,6 +37,9 @@ help:
 
 
 html: clean $(OUTPUTDIR)/index.html
+	awk\
+		'match($$0,/^\s*<!-- legacy-link: (.*) -->\s*$$/,a) {sub(/^output\//, "", FILENAME); print a[1], FILENAME}'\
+		output/*/*/*/*.html | sort -u | ./dynamic/legacy_redirect.py
 	@echo 'Done'
 
 $(OUTPUTDIR)/%.html:

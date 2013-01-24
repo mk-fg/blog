@@ -25,7 +25,7 @@ FEED_ALL_RSS = FEED_RSS
 
 DISPLAY_PAGES_ON_MENU = False
 
-STATIC_PATHS = ['images']
+STATIC_PATHS = ['images', 'misc']
 
 LINKS = [
 	('Homepage', 'fraggod.net') ]
