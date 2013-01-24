@@ -1,24 +1,33 @@
 # https://developers.google.com/appengine/docs/python/config/appconfig
 
-application: fg-blog
+application: fg-blog-hr
 version: pelican-1
 runtime: python27
 api_version: 1
-threadsafe: true
+threadsafe: false
 
 
 handlers:
+
+  - url: /\d+/\d+/[^\d][^/]+/?
+    script: dynamic.legacy_redirect.app
+
+  - url: /_ereporter.*
+    script: $PYTHON_LIB/google/appengine/ext/ereporter/report_generator.py
+    login: admin
 
   - url: /(favicon\.ico|robots\.txt)
     static_files: output/static/misc/\1
     upload: output/static/misc/(favicon\.ico|robots\.txt)
 
-  - url: /\d+/\d+/[^\d][^/]+/?
-    script: dynamic.legacy_redirect.app
-
   - url: /
     static_files: output/index.html
     upload: output/index.html
+
+  - url: /theme/css/.*\.ttf
+    static_files: output/theme/css/\1
+    upload: output/static/misc/(.*\.ttf)
+    mime_type: application/x-font-ttf
 
   - url: /
     static_dir: output

@@ -4,12 +4,16 @@ from __future__ import unicode_literals, print_function
 
 import itertools as it, operator as op, functools as ft
 
-try: import webapp2
+try:
+	import webapp2
+	from legacy_redirect_list import redirects
+	from google.appengine.ext import ereporter
 except ImportError:
 	if __name__ != '__main__': raise
 
 
 if __name__ == '__main__':
+
 	from os.path import join, dirname
 	import os, sys
 
@@ -24,7 +28,6 @@ if __name__ == '__main__':
 
 
 else:
-	from legacy_redirect_list import redirects
 
 	class MainPage(webapp2.RequestHandler):
 
@@ -34,4 +37,5 @@ else:
 			except KeyError: raise webapp2.exc.HTTPNotFound()
 			else: self.redirect(dst, permanent=True)
 
+	ereporter.register_logger()
 	app = webapp2.WSGIApplication([('/.*', MainPage)])
