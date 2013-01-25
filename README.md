@@ -7,9 +7,9 @@ inconvenient to update, data not versioned properly and generally
 hard-to-access, not to mention numerous minor issues.
 Not a bad platform in general, just very poorly suited for my usage.
 
-Currently it's a [pelican](getpelican.com)-based static blog, generated from
-ReST sources in [content](https://github.com/mk-fg/blog/tree/master/content)
-path.
+Currently it's a [pelican](http://getpelican.com)-based static blog, generated
+from ReST sources in
+[content](https://github.com/mk-fg/blog/tree/master/content) path.
 
 Blog instance is deployed on Google AppEngine at
 [blog.fraggod.net](http://blog.fraggod.net/) ([https appspot
