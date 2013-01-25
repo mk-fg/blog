@@ -1,0 +1,24 @@
+Static pelican blog
+###################
+
+:date: 2013-01-25 12:46
+:tags: social
+
+
+Ditched bloog_ engine here in favor of static pelican_ yesterday, and while I
+was able to remember about keeping legacy links working, pretty sure I forgot
+about guids on the feed, so apologies to anyone who might care.
+Guess it's pointless to fix these now.
+
+All the entries can be found `on github`_ now in rst-format, though older ones
+might be a bit harder to read in the source, as they were mostly auto-converted
+by pandoc and I only checked if they're still rendered correctly to html.
+
+As appengine also made me migrate from master-slave db replication to the shiny
+high-replication blobstore, I wonder if hosting static html here now counts as
+abuse...
+
+
+.. _bloog: https://github.com/DocSavage/bloog
+.. _pelican: http://getpelican.com
+.. _on github: https://github.com/mk-fg/blog/tree/master/content
