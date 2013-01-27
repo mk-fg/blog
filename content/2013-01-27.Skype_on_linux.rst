@@ -1,0 +1,168 @@
+Skype to IRC gateway on a headless server as a systemd user session daemon
+##########################################################################
+
+:date: 2013-01-27 12:10
+:tags: im, desktop, systemd
+
+
+Skype is a necessary evil for me, but just for text messages, and it's quite
+annoying that its closed nature makes it hard to integrate it into existing
+IM/chat infrastructure (for which I use ERC_ + ZNC_ + bitlbee_ + ejabberd_).
+
+So, finally got around to pushing the thing off my laptop machine.
+
+Despite being quite a black-box product, skype has a `surprisingly useful API`_,
+allowing to do pretty much everything desktop client allows to, which is
+accessible via several means, one of them being dbus.
+Wish that API was accessible on one of their servers, but no such luck, I
+guess. Third-party proxies are actually available, but I don't think +1 point of
+trust/failure is necessary here.
+
+Since they stopped providing amd64 binaries (and still no word of sources, of
+course) and all the local non-laptop machines around are amd64, additional quirk
+is either enabling multibuild and pulling it everything up to and including Qt
+and WebKit to the poor headless server or just put what skype needs there built
+on 32-bit machine.
+
+Not too enthusiastic about building lots of desktop crap on atom-based mini-ITX
+server, decided to go with the latter option, and dependency libs turn out to be
+fairly lean:
+
+.. code-block:: console
+
+	% ldd /opt/skype/skype | awk '$3 {print $3}' |
+		xargs ls -lH | awk '{sum+=$5} END {print sum}'
+	49533468
+
+Naturally, 50M is not an issue for a reasonably modern amounts of RAM.
+
+But, of course, skype runs on X server, so Xvfb (cousing of X, drawing to memory
+instead of some GPU hardware):
+
+.. code-block:: console
+
+	# cave resolve -zx1 xorg-server x11vnc fluxbox
+
+Concrete example above is for source-based exherbo_, I think binary distros like
+debian might package Xvfb binary separately from X (in some "xvfb" package).
+fluxbox_ is there to have easy time interacting with skype-created windows.
+
+Note - no heavy DE stuff is needed here, and as I was installing it on a machine
+hosting cairo-based graphite_ web frontend, barely any packages are actually
+needed here, aside from a bunch of X protocol headers and the things specified.
+
+So, to run Xvfb with VNC I've found a bunch of simple shell scripts, which were
+guaranteed to not provide a lot of things a normal desktop session does, miss
+stray pids, create multiple instances for all the things involved, loose output,
+no xdg session, etc.
+
+In general (and incomplete) case, something like this should be done:
+
+.. code-block:: bash
+
+	export DISPLAY=:0
+	Xvfb $DISPLAY -screen 0 800x600x16 &
+	x11vnc -display $DISPLAY -nopw -listen localhost &
+	fluxbox &
+	skype &
+	wait
+
+So, to not reinvent the same square wheel, decided to go with trusty `systemd
+--user`_, as it's used as a system init anyway.
+
+`skype-desktop.service`_:
+
+.. code-block:: ini
+
+	[Service]
+	User=skype
+	PAMName=login
+	Type=notify
+	Environment=DISPLAY=:1
+	Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%h/tmp/session_bus_socket
+	ExecStart=/usr/lib/systemd/systemd --user
+
+	[Install]
+	WantedBy=multi-user.target
+
+Aside from a few quirks like hardcoding dbus socket, that already fixes a lot of
+XDG_* related env-stuff, proper start/stop cleanup (no process escapes from that
+cgroup), monitoring (state transitions for services are echoed on irc to me),
+logging (all output will end up in queryable journal_ and syslog) and such, so
+highly recommend not going the "simple" bash-way here.
+
+Complimentary `session units`_ generally look like this (`Xvfb.service`_):
+
+.. code-block:: ini
+
+	[Service]
+	SyslogIdentifier=%p
+	ExecStart=/usr/bin/Xvfb $DISPLAY -screen 0 800x600x16
+
+And with ``systemct start skype-desktop``, nice (but depressingly empty) fluxbox
+desktop is now accessible over ssh+vnc (don't trust vnc enough to run it on
+non-localhost, plus should be rarely needed anyway):
+
+.. code-block:: console
+
+	% ssh -L 5900:localhost:5900 user@host &
+	% vncclient localhost
+
+Getting skype to run on the target host was a bit more difficult than I've
+expected though - local x86 machine has -march=native in CFLAGS and core-i3 cpu,
+so just copying binaries/libs resulted in a predictable::
+
+	[271817.608818] traps: ld-linux.so.2[7169]
+		trap invalid opcode ip:f77dad60 sp:ffb91860 error:0 in ld-linux.so.2[f77c6000+20000]
+
+Fortunately, there're always generic-arch binary distros, so had to spin up a
+qemu with ubuntu livecd iso, install skype there and run the same
+`collect-all-the-deps script`_.
+
+Basically, what's needed for skype to run is it's own data/media files
+("/opt/skype", "/usr/share/skype"), binary ("/usr/lib/skype",
+"/opt/skype/skype") and all the so's it's linked against.
+
+| There's no need to put them all in "/usr/lib" or such, aside from
+  "ld-linux.so.2", path to which ("/lib/ld-linux.so.2") is hard-compiled into
+  skype binary (and is honored by linker).
+| Should be possible to change it there, but iirc skype checked it's binary
+  checksum as well, so might be a bit more complicated than just "sed".
+| ``LD_LIBRARY_PATH=. ./skype --resources=.`` is the recipie for dealing with
+  the rest.
+
+.. html::
+
+  <img style="width: 550px;"
+    src="|filename|images/skype_on_vnc.jpg"
+    title="Skype started $DEITY-knows-where over VNC"
+    alt="Skype started $DEITY-knows-where over VNC">
+
+Yay!
+
+So, to the API-to-IRC scripts then... probably in the next entry, as I get to
+these myself.
+Also following might be revised `apparmor profile`_ for such setup and maybe a
+script to isolate the whole thing even further into namespaces (which is
+interesting thing to try, but not sure how it might be useful yet with LSM
+already in place).
+
+All the interesting stuff for the whole endeavor can be found in the ad-hoc repo
+I've created for it: https://github.com/mk-fg/skype-space
+
+
+.. _ERC: http://www.emacswiki.org/ERC
+.. _ZNC: http://znc.in
+.. _bitlbee: http://bitlbee.org
+.. _ejabberd: http://ejabberd.im
+.. _surprisingly useful API: http://developer.skype.com/desktop-api-reference
+.. _fluxbox: http://fluxbox.org
+.. _graphite: http://graphite.readthedocs.org
+.. _exherbo: http://exherbo.org
+.. _systemd --user: http://www.freedesktop.org/wiki/Software/systemd/
+.. _journal: http://0pointer.de/blog/projects/journalctl.html
+.. _session units: https://github.com/mk-fg/skype-space/tree/master/systemd/user
+.. _Xvfb.service: https://github.com/mk-fg/skype-space/blob/master/systemd/user/Xvfb.service
+.. _skype-desktop.service: https://github.com/mk-fg/skype-space/blob/master/systemd/system/skype-desktop.service
+.. _collect-all-the-deps script: https://github.com/mk-fg/skype-space/blob/master/build_skype_env.bash
+.. _apparmor profile: http://blog.fraggod.net/2011/11/12/running-stuff-like-firefox-flash-and-skype-with-apparmor.html
