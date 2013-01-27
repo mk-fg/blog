@@ -81,6 +81,10 @@ div.post img {
 	margin: 1em;
 }
 
+div.post tt.literal { font-family: 'DejaVu Sans Mono',monospace; }
+div.post tt.literal:before { content:"`"; }
+div.post tt.literal:after { content:"'"; }
+
 a {
 	text-decoration: none;
 	color: #000;
