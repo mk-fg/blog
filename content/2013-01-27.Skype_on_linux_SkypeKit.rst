@@ -1,0 +1,36 @@
+Headless Skype to IRC gateway part 2 - SkypeKit
+###############################################
+
+:date: 2013-01-27 15:03
+:tags: im, desktop
+
+
+Thought it should be (hardly) worth a notice that Skype (well, Microsoft now)
+offers a thing called SkypeKit_.
+
+To get it, one have to jump through a dozen of hoops, including long
+registration form, $5 "tax for your interest in out platform" and wait for
+indefinite amount of time for invite to the privileged circle of skype hackers.
+
+Here's part of the blurb one have to agree to:
+
+	By registering with Skype Developer, you will have access to confidential
+	information and documentation relating to the SkypeKit program that has not
+	been publicly released ("Confidential Information") and you agree not to
+	disclose, publish or disseminate the Confidential Information to any third
+	party (including by posting on any developer forum); and to take reasonable
+	measures to prevent the unauthorised use, disclosure, publication or
+	dissemination of the Confidential Information.
+
+| Just *WOW*!
+| What a collossal douchebags people who came up with that must be.
+| I can't even begin to imagine sheer scale of idiocy that's going on in the
+  organization to come up with such things.
+
+| And just as these things often go, here's the `Pirate Bay link`_.
+| But I think I'd rather respect the right of whoever came up with that "hey,
+  let's screw developers" policy, if only to avoid (admittedly remote) chance of
+  creating something useful for a platform like that.
+
+.. _SkypeKit: https://developer.skype.com/account/tools
+.. _Pirate Bay link: https://thepiratebay.se/search/skypekit/0/99/0

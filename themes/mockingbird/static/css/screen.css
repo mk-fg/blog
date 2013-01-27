@@ -85,6 +85,8 @@ div.post tt.literal { font-family: 'DejaVu Sans Mono',monospace; }
 div.post tt.literal:before { content:"`"; }
 div.post tt.literal:after { content:"'"; }
 
+div.post em { font-style: italic; }
+
 a {
 	text-decoration: none;
 	color: #000;
