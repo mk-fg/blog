@@ -17,6 +17,7 @@ DEFAULT_DATE_FORMAT = '%Y-%m-%d %H:%M'
 ARTICLE_URL = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
 ARTICLE_SAVE_AS = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
 
+FEED_MAX_ITEMS = 10
 FEED_DOMAIN = SITEURL
 FEED_ATOM = 'feeds/atom.xml'
 FEED_RSS = 'feeds/rss.xml'
