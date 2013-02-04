@@ -1,0 +1,105 @@
+Headless Skype to IRC gateway part 3 - bitlbee + skyped
+#######################################################
+
+:date: 2013-01-28 11:32
+:tags: im, desktop, python
+
+
+As per `previous entry`_, with mock-desktop setup of Xvfb, fluxbox, x11vnc and
+skype in place, the only thing left is to use skype interfaces (e.g. dbus) to
+hook it up with existing IRC setup and maybe insulate skype process from the
+rest of the system.
+
+Last bit is even easier than usual, since all the 32-bit libs skype needs are
+collected in one path, so no need to allow it to scan whatever system paths.
+Decided to go with the usual simplistic apparmor-way here - `apparmor.profile`_,
+don't see much reason to be more paranoid here.
+
+| Also, libasound, used in skype gets quite noisy log-wise about not having the
+  actual hardware on the system, but I felt bad about supressing the whole
+  stderr stream from skype (to not miss the crash/hang info there), so had to
+  look up a way to /dev/null alsa-lib output.
+| General way seem to be having "null" module as "default" sink
+
+::
+
+  pcm.!default {
+    type null
+  }
+  ctl.!default {
+    type null
+  }
+
+(libasound can be pointed to a local config by ALSA_CONFIG_PATH env var)
+
+That "null" module is actually a dynamically-loaded .so, but alsa prints just a
+single line about it being missing instead of an endless stream of complaints
+for missing hw, so the thing works, by accident.
+
+Luckily, bitlbee_ has support for skype, thanks to vmiklos_, with sane way to
+run bitlbee and skype setup on different hosts (as it actually is in my case)
+through "skyped" daemon talking to skype and bitlbee connecting to its tcp
+(tls-wrapped) socket.
+
+Using skyped shipped with bitlbee (which is a bit newer than on `bitlbee-skype
+github`_) somewhat worked, with no ability to reconnect to it (hangs after
+handling first connection), ~1/4 chance of connection from bitlbee failing, it's
+persistence in starting skype (even though it's completely unnecessary in my
+case - systemd can do it way better) and such.
+
+| It's fairly simple python script though, based on somewhat unconventional
+  `Skype4Py module`_, so was able to fix most annoying of these issues (code can
+  be found in the `skype-space repo`_).
+| Will try to get these merged into bitlbee as I'm not the only one having these
+  issues, apparently (e.g. `#966`_), but so many things seem to be broken in
+  that code (esp. wrt socket-handling), I think some major rewrite is in order,
+  but that might be much harder to push upstream.
+
+| One interesting quirk of skyped is that it uses TLS to protect connections
+  (allowing full control of the skype account) between bitlbee module and the
+  daemon, but it doesn't bothers with any authorization, making that traffic as
+  secure as plaintext to anyone in-between.
+| Quite a bit worse is that it's documented that the traffic is "encrypted",
+  which might get one to think "ok, so running that thing on vps I don't need
+  ssh-tunnel wrapping", which is kinda sad.
+| Add to that the added complexity it brings, segfaults in the plugin (crashing
+  bitlbee), unhandled errors like
+
+::
+
+  Traceback (most recent call last):
+    File "./skyped", line 209, in listener
+      ssl_version=ssl.PROTOCOL_TLSv1)
+    File "/usr/lib64/python2.7/ssl.py", line 381, in wrap_socket
+      ciphers=ciphers)
+    File "/usr/lib64/python2.7/ssl.py", line 143, in __init__
+      self.do_handshake()
+    File "/usr/lib64/python2.7/ssl.py", line 305, in do_handshake
+      self._sslobj.do_handshake()
+  error: [Errno 104] Connection reset by peer
+
+| ...and it seem to be classic "doing it wrong" pattern.
+| Not that much of an issue in my case, but I guess there should at least be a
+  big red warning for that.
+
+Functionality-wise, pretty much all I needed is there - one-to-one chats,
+bookmarked channels (as irc channels!), file transfers (just set "accept all"
+for these) with notifications about them, user info, contact list (add/remove
+with allow/deny queries),
+
+But the most important thing by far is that it works at all, saving me plenty of
+work to code whatever skype-control interface over irc, though I'm very tempted
+to rewrite "skyped" component, which is still a lot easier with bitlbee plugin
+on the other end.
+
+Units and configs for the whole final setup can be found `on github`_.
+
+.. _previous entry: http://blog.fraggod.net/2013/01/27/skype-to-irc-gateway-on-a-headless-server-as-a-systemd-user-session-daemon.html
+.. _bitlbee: http://bitlbee.org
+.. _Skype4Py module: https://github.com/awahlig/skype4py
+.. _vmiklos: http://vmiklos.hu/bitlbee-skype
+.. _bitlbee-skype github: https://github.com/vmiklos/bitlbee-skype
+.. _apparmor.profile: https://github.com/mk-fg/skype-space/blob/master/apparmor.profile
+.. _skype-space repo: https://github.com/mk-fg/skype-space
+.. _#966: http://bugs.bitlbee.org/bitlbee/ticket/966
+.. _on github: https://github.com/mk-fg/skype-space
