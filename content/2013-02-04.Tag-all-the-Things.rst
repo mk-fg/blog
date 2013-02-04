@@ -1,0 +1,85 @@
+codetag + tmsu: Tag all the Things (and Go!)
+#######################################################
+
+:date: 2013-02-04 16:52
+:tags: go, scm, caching
+
+
+| Was hacking something irrelevant together again and, as often happens with
+  such things, realized that I implemented something like that before.
+| It can be some simple - locking function in python, awk pipe to get some
+  monitoring data, chunk of argparse-based code to process multiple subcommands,
+  TLS wrapper for requests, dbapi wrapper, multi-module parser/generator for
+  human-readable dates, logging buffer, etc...
+| Point is - some short snippet of code is needed as a base for implementing
+  something new or maybe even to re-use as-is, yet it's not noteworthy enough on
+  it's own to split into a module or generally do anything specific about it.
+
+Happens a lot to me, as over the years, a lot of such ad-hoc yet reusable code
+gets written, and I can usually remember enough implementation details
+(e.g. which modules were used there, how the methods/classes were called and
+such), but going "grep" over the source dir takes a shitload of time.
+
+Some things make it faster - ack_ or pss_ tools can scan only relevant things
+(like e.g. "grep ... \*\*/\*.py" will do in zsh), but these also run for
+minutes, as even simple "find" does - there're several django source trees in
+appengine sdk, php projects with 4k+ files inside, maybe even whole linux kernel
+source tree or two...
+
+Traversing all these each time on regular fs to find something that can be
+rewritten in a few minutes will never be an option for me, but luckily there're
+cool post-fs projects like tmsu_, which allow to transcend
+single-hierarchy-index limitation of a traditional unix fs in much more elegant
+and useful way than gazillion of symlinks and dentries.
+
+tmsu allows to attach any tags to any files, then query these files back using a
+set of tags, which it does really fast using sqlite db and clever indexes there.
+
+So, just tagging all the "\*.py" files with "lang:py" will allow to:
+
+.. code-block:: console
+
+	% time tmsu files lang:py | grep myclass
+	tmsu files lang:py  0.08s user 0.01s system 98% cpu 0.094 total
+	grep --color=auto myclass  0.01s user 0.00s system 10% cpu 0.093 total
+
+That's 0.1s instead of several minutes for all the python code in the
+development area on this machine.
+
+| tmsu can actually do even cooler tricks than that with fuse-tagfs mounts, but
+  that's all kinda wasted until all the files won't be tagged properly.
+| Which, of course, is a simple enough problem to solve.
+| So here's my first useful `Go`_ project - codetag_.
+
+I've added taggers for things that are immediately useful for me to tag files
+by - implementation language, code hosting (github, bitbucket, local project, as
+I sometimes remember that snippet was in some public tool), scm type (git, hg,
+bzr, svn), but it adding a new one is just a metter of writing a "Tagger"
+function, which, given the path and config, returns a list of string tags, plus
+they're only used if explicitly enabled in config.
+
+| Other features include proper python-like logging and rsync-like filtering (but
+  using more powerful `re2 regexps`_ instead of simple glob patterns).
+| Up-to-date list of these should be apparent from the `included configuration file`_.
+
+Being a proper compiled language, Go allows to make the thing into a `single
+static binary`_, which is quite neat, as I realized that I now have a tool to
+tag all the things everywhere - media files on servers' remote-fs'es, like music
+and movies, hundreds of configuration files by the app they belong to (think
+``tmsu files daemon:apache`` to find/grep all the horrible ".htaccess" things
+and it's "\*.conf" includes), distfiles by the os package name, etc... can be
+useful.
+
+So, to paraphrase well-known meme, Tag All The Things! ;)
+
+`github link`_
+
+.. _ack: http://betterthangrep.com
+.. _pss: https://bitbucket.org/eliben/pss
+.. _tmsu: http://tmsu.org
+.. _Go: http://golang.org
+.. _codetag: https://github.com/mk-fg/codetag
+.. _re2 regexps: https://code.google.com/p/re2/wiki/Syntax
+.. _single static binary: http://fraggod.net/static/code/codetag
+.. _Github link: https://github.com/mk-fg/codetag
+.. _included configuration file: https://github.com/mk-fg/codetag/blob/master/codetag.yaml.dist
