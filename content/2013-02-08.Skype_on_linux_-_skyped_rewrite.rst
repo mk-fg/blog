@@ -1,0 +1,42 @@
+Headless Skype to IRC gateway part 4 - skyped bikeshed
+######################################################
+
+:date: 2013-02-08 19:26
+:tags: im, python, monitoring
+
+
+As suspected before_, ended up rewriting skyped glue daemon.
+
+| There were just way too many bad practices (from my point of view) accumulated
+  there (incomplete list can be found in the `github issue #7`_, as well as some
+  PRs I've submitted), and I'm quite puzzled why the thing actually works, given
+  quite weird socket handling going on there, but one thing should be said: it's
+  *there* and *it works*.
+| As software goes, that's the most important metric by far.
+
+But as I'm currently purely a remote worker (not sure if I qualify for
+"freelancer", being just a drone), and skype is being quite critical for comms
+in this field, just working thing that silently drops errors and messages is not
+good enough.
+
+| `Rewritten version`_ is a generic eventloop with non-blocking sockets and
+  standard handle_in/handle_out low-level recv/send/buffer handlers, with
+  handle_<event> and dispatch_<event> callbacks on higher level and explicit
+  conn_state var.
+| It also features full-fledged and `configurable python logging`_, with debug
+  options, (at least) warnings emitted on every unexpected event and proper
+  non-broad exception handling.
+
+Regardless of whether the thing will be useful upstream, it should finally put a
+final dot into skype setup story for me, as the whole setup seem to be robust
+and reliable enough for my purposes now.
+
+Unless vmiklos will find it useful enough to merge, I'll probably maintain the
+script in `this bitlbee fork`_, rebasing it on top of stable upstream bitlbee.
+
+
+.. _before: http://blog.fraggod.net/2013/01/28/headless-skype-to-irc-gateway-part-3-bitlbee-skyped.html
+.. _github issue #7: https://github.com/vmiklos/bitlbee/issues/7
+.. _Rewritten version: https://github.com/mk-fg/bitlbee/blob/master/protocols/skype/skyped.py
+.. _configurable python logging: https://github.com/mk-fg/bitlbee/blob/master/protocols/skype/skyped.yaml
+.. _this bitlbee fork: https://github.com/mk-fg/bitlbee
