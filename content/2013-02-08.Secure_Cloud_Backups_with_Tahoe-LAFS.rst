@@ -1,0 +1,66 @@
+Secure cloud backups with Tahoe-LAFS
+####################################
+
+:date: 2013-03-25 08:25
+:tags: p2p, encryption, replication, sysadmin, python
+
+
+| There's plenty_ of public cloud storage these days, but trusting any of them
+  with any kind of data seem reckless - service is free to corrupt, monetize,
+  leak, hold hostage or just drop it then.
+| Given that these services are provided at no cost, and generally without much
+  ads, guess reputation and ToS are the things stopping them from acting like
+  that.
+
+| Not trusting any single one of these services looks like a sane safeguard
+  against them suddenly collapsing or blocking one's account.
+| And not trusting any of them with plaintext of the sensitive data seem to be a
+  good way to protect it from all the shady things that can be done to it.
+
+`Tahoe-LAFS`_ is a great capability-based secure distributed storage system,
+where you basically do "tahoe put somefile" and get capability string like
+"URI:CHK:iqfgzp3ouul7tqtvgn54u3ejee:...u2lgztmbkdiuwzuqcufq:1:1:680"
+in return.
+
+| That string is sufficient to find, decrypt and check integrity of the file (or
+  directory tree) - basically to get it back in what guaranteed to be the same
+  state.
+| Neither tahoe node state nor stored data can be used to recover that cap.
+| Retreiving the file afterwards is as simple as GET with that cap in the url.
+
+With remote storage providers, tahoe node works as a client, so all crypto being
+client-side, actual cloud provider is clueless about the stuff you store, which
+I find to be quite important thing, especially if you stripe data across many of
+these leaky and/or plain evil things.
+
+Finally got around to connecting a third backend (box.net) to tahoe today, so
+wanted to share a few links on the subject:
+
+ - https://github.com/mk-fg/tahoe-lafs-public-clouds
+
+   Public cloud drivers for tahoe-lafs.
+
+ - https://github.com/mk-fg/lafs-backup-tool
+
+   Tool to intelligently (compression, deduplication, rate-limiting, filtering,
+   metadata, etc) backup stuff to tahoe.
+
+ - https://github.com/LeastAuthority/tahoe-lafs
+
+   Upstream repo with more enterprisey cloud backend drivers (s3, openstack,
+   googlestorage, msazure).
+
+ - https://tahoe-lafs.org/trac/tahoe-lafs/browser/git/docs/specifications/backends/raic.rst
+
+   Redundant Array of Independent Clouds concept.
+
+ - http://www.sickness.it/crazycloudexperiment.txt
+
+   A way to link all the clouds together without having any special drivers.
+
+   As I run tahoe nodes on a headless linux machines, running proprietary GUI
+   clients there doesn't sound too appealing, even if they exist for certain
+   services.
+
+.. _plenty: https://en.wikipedia.org/wiki/Comparison_of_file_hosting_services
+.. _Tahoe-LAFS: http://tahoe-lafs.org/
