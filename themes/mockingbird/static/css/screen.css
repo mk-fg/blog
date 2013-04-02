@@ -87,6 +87,13 @@ div.post tt.literal:after { content:"'"; }
 
 div.post em { font-style: italic; }
 
+a#idl-ribbon {
+	display: inline-block;
+	position: absolute;
+	right: 0;
+	top: 120px;
+}
+
 a {
 	text-decoration: none;
 	color: #000;
