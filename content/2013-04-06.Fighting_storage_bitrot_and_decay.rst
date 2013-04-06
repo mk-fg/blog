@@ -1,0 +1,160 @@
+Fighting storage bitrot and decay
+#################################
+
+:date: 2013-04-06 19:16
+:tags: hardware, encryption, monitoring, python, sysadmin
+
+
+Everyone is probably aware that bits do flip here and there in the supposedly
+rock-solid, predictable and deterministic hardware, but somehow every single
+data-management layer assumes that it's not its responsibility to fix or even
+detect these flukes.
+
+`Bitrot`_ in RAM is a `known source of bugs`_, but short of ECC, dunno what one
+can do without huge impact on performance.
+
+| Disks, on the other hand, seem to have a lot of software layers above them,
+  handling whatever data arrangement, compression, encryption, etc, and the fact
+  that bits do flip in magnetic media seem to be just as well-known (`study1`_,
+  `study2`_, `study3`_, ...).
+| In fact, these very issues `seem to be the main idea`_ behind well known storage
+  behemoth ZFS.
+| So it really bugged me for quite a while that any modern linux system seem to
+  be completely oblivious to the issue.
+
+Consider typical linux storage stack on a commodity hardware:
+
+- You have closed-box proprietary hdd brick at the bottom, with no way to tell
+  what it does to protect your data - aside from vendor marketing pitches, that
+  is.
+
+- Then you have well-tested and robust linux driver for some ICH storage
+  controller.
+
+  I wouldn't bet that it will corrupt anything at this point, but it doesn't do
+  much else to the data but pass around whatever it gets from the flaky device
+  either.
+
+- Linux blkdev layer above, presenting /dev/sdX. No checks, just simple mapping.
+
+- device-mapper.
+
+  Here things get more interesting.
+
+  I tend to use lvm wherever possible, but it's just a convenience layer (or a
+  set of nice tools to setup mappings) on top of dm, no checks of any kind, but
+  at least it doesn't make things much worse either - lvm metadata is fairly
+  redundant and easy to backup/recover.
+
+  | dm-crypt gives no noticeable performance overhead, exists either above or
+    under lvm in the stack, and is nice hygiene against accidental leaks
+    (selling or leasing hw, theft, bugs, etc), but lacking authenticated
+    encryption modes it doesn't do anything to detect bit-flips.
+  | Worse, it amplifies the issue.
+  | In the most common `CBC mode`_ one flipped bit in the ciphertext will affect
+    a few other bits of data until the end of the dm block.
+  | Current dm-crypt default (since the latest cryptsetup-1.6.X, iirc) is XTS
+    block encryption mode, which somewhat limits the damage, but dm-crypt has
+    little support for changing modes on-the-fly, so tough luck.
+
+  | But hey, there is `dm-verity`_, which sounds like exactly what I want,
+    except it's read-only, damn.
+  | Read-only nature is heavily ingrained in its "hash tree" model of integrity
+    protection - it is hashes-of-hashes all the way up to the root hash, which
+    you specify on mount, immutable by design.
+
+  Block-layer integrity protection is a bit weird anyway - lots of unnecessary
+  work potential there with free space (can probably be somewhat solved by
+  `TRIM`_), data that's already journaled/checksummed by fs and just plain
+  transient block changes which aren't exposed for long and one might not care
+  about at all.
+
+- Filesystem layer above does the right thing sometimes.
+
+  | `COW`_ fs'es like `btrfs`_ and `zfs`_ have checksums and scrubbing, so seem
+    to be a good options.
+  | btrfs was slow as hell on rotating plates last time I checked, but zfs port
+    might be worth a try, though if a single cow fs works fine on all kinds of
+    scenarios where I use ext4 (mid-sized files), xfs (glusterfs backend) and
+    reiserfs (hard-linked backups, caches, tiny-file sub trees), then I'd really
+    be amazed.
+
+  Other fs'es plain suck at this. No care for that sort of thing at all.
+
+- Above-fs syscall-hooks kernel layers.
+
+  `IMA/EVM`_ sound great, but are also for immutable security ("integrity")
+  purposes ;(
+
+  | In fact, this layer is heavily populated by security stuff like LSM's, which I
+    can't imagine being sanely used for bitrot-detection purposes.
+  | Security tools are generally oriented towards detecting any changes,
+    intentional tampering included, and are bound to produce a lot of
+    false-positives instead of legitimate and actionable alerts.
+
+  Plus, upon detecting some sort of failure, these tools generally don't care
+  about the data anymore acting as a Denial-of-Service attack on you, which is
+  survivable (everything can be circumvented), but fighting your own tools
+  doesn't sound too great.
+
+- Userspace.
+
+  There is `tripwire`_, but it's also a security tool, unsuitable for the task.
+
+  Some `rare discussions`_ of the problem pop up here and there, but alas, I
+  failed to salvage anything useable from these, aside from ideas and links to
+  subject-relevant papers.
+
+Scanning github, bitbucket and xmpp popped up `bitrot script`_ and a
+proof-of-concept `md-checksums`_ md layer, which apparently haven't even made it
+to lkml.
+
+So, naturally, following long-standing "... then do it yourself" motto,
+introducing `fs-bitrot-scrubber`_ tool for all the scrubbing needs.
+
+It should be fairly well-described in the readme, but the gist is that it's just
+a simple userspace script to checksum file contents and check changes there over
+time, taking all the signs of legitimate file modifications and the fact that it
+isn't the only thing that needs i/o in the system into account.
+
+Main goal is not to provide any sort of redundancy or backups, but rather notify
+of the issue before all the old backups (or some cluster-fs mirrors in my case)
+that can be used to fix it are rotated out of existance or overidden.
+
+Don't suppose I'll see such decay phenomena often (if ever), but I don't like
+having the odds, especially with an easy "most cases" fix within grasp.
+
+If I'd keep lot of important stuff compressed (think what will happen if a
+single bit is flipped in the middle of few-gigabytes .xz file) or naively
+(without storage specifics and corruption in mind) encrypted in cbc mode (or
+something else to the same effect), I'd be worried about the issue so much more.
+
+Wish there'd be something common out-of-the-box in the linux world, but I guess
+it's just not the time yet (hell, there's not even one clear term in the techie
+slang for it!) - with still increasing hdd storage sizes and much more
+vulnerable ssd's, some more low-level solution should materialize eventually.
+
+Here's me hoping to raise awareness, if only by a tiny bit.
+
+`github project link`_
+
+
+.. _Bitrot: http://en.wikipedia.org/wiki/Bit_rot#Decay_of_storage_media
+.. _known source of bugs: https://code.google.com/p/cryptsetup/source/browse/FAQ#687
+.. _study1: http://www.cse.scu.edu/~tschwarz/Papers/mascots04.pdf
+.. _study2: http://arxiv.org/pdf/cs/0508130
+.. _study3: http://bnrg.eecs.berkeley.edu/~randy/Courses/CS294.F07/11.1.pdf
+.. _seem to be the main idea: https://blogs.oracle.com/bonwick/entry/zfs_end_to_end_data
+.. _CBC mode: https://en.wikipedia.org/wiki/Disk_encryption_theory#Cipher-block_chaining_.28CBC.29
+.. _dm-verity: https://code.google.com/p/cryptsetup/wiki/DMVerity
+.. _TRIM: http://en.wikipedia.org/wiki/TRIM
+.. _btrfs: https://btrfs.wiki.kernel.org/index.php/Main_Page
+.. _zfs: http://zfsonlinux.org/
+.. _COW: http://en.wikipedia.org/wiki/Copy-on-write
+.. _IMA/EVM: http://linux-ima.sourceforge.net/
+.. _tripwire: http://sourceforge.net/projects/tripwire/
+.. _rare discussions: http://thread.gmane.org/gmane.linux.gentoo.user/263018/
+.. _bitrot script: https://github.com/ambv/bitrot
+.. _md-checksums: http://pages.cs.wisc.edu/~bpkroth/cs736/md-checksums/
+.. _fs-bitrot-scrubber: https://github.com/mk-fg/fs-bitrot-scrubber/
+.. _github project link: https://github.com/mk-fg/fs-bitrot-scrubber/
