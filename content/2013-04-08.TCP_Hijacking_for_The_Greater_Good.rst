@@ -1,0 +1,118 @@
+TCP Hijacking for The Greater Good
+##################################
+
+:date: 2013-04-08 11:02
+:tags: python, unix
+
+
+As `discordian folk`_ celebrated Jake Day yesterday, decided that I've had it
+with random hanging userspace state-machines, stuck forever with tcp connections
+that are not legitimately dead, just waiting on both sides.
+
+And since pretty much every tool can handle transient connection failures and
+reconnects, decided to come up with some simple and robust-enough solution to
+break such links without (or rather before) patching all the apps to behave.
+
+| One last straw was davfs2 failing after a brief net-hiccup, with my options
+	limited to killing everything that uses (and is hanging dead on) its mount,
+	then going kill/remount way.
+| As it uses stateless http connections, I bet it's not even an issue for it to
+	repeat whatever request it tried last and it sure as hell handles network
+	failures, just not well in all cases.
+
+I've used such technique to test some twisted-things in the past, so it was easy
+to dig `scapy-automata`_ code for doing that, though the real trick is not to
+craft/send FIN or RST packet, but rather to guess TCP seq/ack numbers to stamp
+it with.
+
+Alas, none of the existing tools (e.g. `tcpkill`_) seem to do anything clever in
+this regard.
+
+`cutter`_ states that
+
+	There is a feature of the TCP/IP protocol that we could use to good effect
+	here - if a packet (other than an RST) is received on a connection that has
+	the wrong sequence number, then the host responds by sending a corrective
+	"ACK" packet back.
+
+But neither the tool itself nor the technique described seem to work, and I
+actually failed to find (or recall) any mentions (or other uses) of such
+corrective behavior. Maybe it was so waaay back, dunno.
+
+Naturally, as I can run such tool on the host where socket endpoint is, local
+kernel has these numbers stored, but apparently no one really cared (or had a
+legitimate enough use-case) to expose these to the userspace... until very
+recently, that is.
+
+| Recent work of Parallels folks on `CRIU`_ landed ``getsockopt(sk, SOL_TCP,
+	TCP_QUEUE_SEQ, ...)`` in one the latest mainline kernel releases.
+| Trick is then just to run that syscall in the pid that holds the socket fd,
+	which looks like a trivial enough task, but looking over `crtools`_ (which
+	unfortunately doesn't seem to work with vanilla kernel yet) and
+	`ptrace-parasite`_ tricks of compiling and injecting shellcode, decided that
+	it's just too much work for me, plus they share the same x86_64-only codebase,
+	and I'd like to have the thing working on ia32 machines as well.
+
+| Caching all the "seen" seq numbers in advance looks tempting, especially since
+	for most cases, relevant traffic is processed already by
+	`nflog-zmq-pcap-pipe`_ and `Snort`_, which can potentially dump
+	"(endpoint1-endpoint2, seq, len)" tuples to some fast key-value backend.
+| Invalidation of these might be a minor issue, but I'm not too thrilled about
+	having some dissection code to pre-cache stuff that's already cached in every
+	kernel anyway.
+
+Patching kernel to just expose stuff via /proc looks like bit of a burden as
+well, though an isolated module code would probably do the job well.
+Weird that there doesn't seem to be one of these around already, closest one
+being tcp_probe.c code, which hooks into tcp_recv code-path and doesn't really
+get seqs without some traffic either.
+
+One interesting idea that got my attention and didn't require a single line of
+extra code was proposed on the local xmpp channel - to use tcp keepalives.
+
+Sure, they won't make kernel drop connection when it's userspace that hangs on
+both ends, with connection itself being perfectly healthy, but every one of
+these carries a seq number that can be spoofed and used to destroy that
+"healthy" state.
+
+Pity these are optional and can't be just turned on for all sockets system-wide
+on linux (unlike some BSD systems, apparently), and nothing uses these much by
+choice (which can be seen in ``netstat --timer``).
+
+| Luckily, there's a dead-simple LD_PRELOAD code of `libkeepalive`_ which can be
+	used to enforce system-wide opt-out behavior for these (at least for
+	non-static binaries).
+| For suid stuff (like mount.davfs, mentioned above), it has to be in
+	/etc/ld.so.preload, not just env, but as I need it "just in case" for all the
+	connections, that seems fine in my case.
+
+And tuning keepalives to be frequent-enough seem to be a no-brainer and
+shouldn't have any effect on 99% of legitimate connections at all, as they
+probably pass some traffic every other second, not after minutes or hours.
+
+::
+
+	net.ipv4.tcp_keepalive_time = 900
+	net.ipv4.tcp_keepalive_probes = 5
+	net.ipv4.tcp_keepalive_intvl = 156
+
+(default is to send empty keepalive packet after 2 hours of idleness)
+
+With that, tool has to run ~7 min on average to kill any tcp connection in the
+system, which totally acceptable, and no fragile non-portable ptrace-shellcode
+magic involved (at least yet, I bet it'd be much easier to do in the future).
+
+Code and some docs for the tool/approach can be found `on github`_.
+
+
+.. _discordian folk: http://en.wikipedia.org/wiki/Discordianism
+.. _scapy-automata: http://trac.secdev.org/scapy/wiki/Automata
+.. _tcpkill: http://www.monkey.org/~dugsong/dsniff/
+.. _cutter: http://www.digitage.co.uk/digitage/software/cutter
+.. _CRIU: http://criu.org/
+.. _crtools: http://git.criu.org/?p=crtools.git;a=summary
+.. _ptrace-parasite: https://code.google.com/p/ptrace-parasite/
+.. _nflog-zmq-pcap-pipe: https://github.com/mk-fg/nflog-zmq-pcap-pipe
+.. _Snort: http://snort.org/
+.. _libkeepalive: http://libkeepalive.sourceforge.net/
+.. _on github: https://github.com/mk-fg/tcp-connection-hijack-reset
