@@ -105,6 +105,54 @@ magic involved (at least yet, I bet it'd be much easier to do in the future).
 Code and some docs for the tool/approach can be found `on github`_.
 
 
+More of the same (**update 2013-08-11**):
+
+Actually, lacking some better way to send RST/FIN from a machine to itself than
+swapping MACs (and hoping that router is misconfigured enough to bounce packet
+"from itself" back) or "-j REJECT --reject-with tcp-reset" (plus a "recent"
+match or transient-port matching, to avoid blocking reconnect as well),
+countdown for a connection should be ~7 + 15 min, as only next keepalive will
+reliably produce RST response.
+
+With a bit of ipset/iptables/nflog magic, it was easy to make the one-time
+REJECT rule, snatching seq from dropped packet via NFLOG and using that to
+produce RST for the other side as well.
+
+Whole magic there goes like this:
+
+::
+
+	-A conn_cutter ! -p tcp -j RETURN
+	-A conn_cutter -m set ! --match-set conn_cutter src,src -j RETURN
+	-A conn_cutter -p tcp -m recent --set --name conn_cutter --rsource
+	-A conn_cutter -p tcp -m recent ! --rcheck --seconds 20\
+		--hitcount 2 --name conn_cutter --rsource -j NFLOG
+	-A conn_cutter -p tcp -m recent ! --rcheck --seconds 20\
+		--hitcount 2 --name conn_cutter --rsource -j REJECT --reject-with tcp-reset
+
+	-I OUTPUT -j conn_cutter
+
+"recent" matcher there is a bit redundant in most cases, as outgoing connections
+usually use transient-range tcp ports, which shouldn't match for different
+attempts, but some apps might bind these explicitly.
+
+`ipset`_ turned out to be quite a neat thing to avoid iptables manipulations (to
+add/remove match).
+
+It's interesting that this set of rules handles RST to both ends all by itself
+if packet arrives from remote first - response (e.g. ACK) from local socket will
+get RST but won't reach remote, and retransmit from remote will get RST because
+local port is legitimately closed by then.
+
+Current `code`_ allows to optionally specify ipset name, whether to use nflog
+(via spin-off `scapy-nflog-capture`_ driver) or raw sockets, and doesn't do any
+mac-swapping, only sending RST to remote (which, again, should still be
+sufficient with frequent-enough keepalives).
+
+Now, if only some `decade-old undocumented code`_ `didn't explicitly disable`_ these
+nice keepalives...
+
+
 .. _discordian folk: http://en.wikipedia.org/wiki/Discordianism
 .. _scapy-automata: http://trac.secdev.org/scapy/wiki/Automata
 .. _tcpkill: http://www.monkey.org/~dugsong/dsniff/
@@ -116,3 +164,8 @@ Code and some docs for the tool/approach can be found `on github`_.
 .. _Snort: http://snort.org/
 .. _libkeepalive: http://libkeepalive.sourceforge.net/
 .. _on github: https://github.com/mk-fg/tcp-connection-hijack-reset
+.. _ipset: http://ipset.netfilter.org/
+.. _scapy-nflog-capture: https://github.com/mk-fg/scapy-nflog-capture
+.. _code: https://github.com/mk-fg/tcp-connection-hijack-reset
+.. _decade-old undocumented code: https://openssl.org
+.. _didn't explicitly disable: http://article.gmane.org/gmane.comp.encryption.openssl.user/48464
