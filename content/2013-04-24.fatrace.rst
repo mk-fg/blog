@@ -1,0 +1,61 @@
+fatrace - poor man's auditd
+###########################
+
+:date: 2013-04-24 22:51
+:tags: unix, sysadmin
+
+
+Was hacking on (or rather debugging) Convergence FF plugin and it became
+painfully obvious that I really needed something simple to push js changes from
+local git clone to ``~/.mozilla`` so that I can test them.
+
+Usually I tend to employ simple ad-hoc ``for src in $(git st | awk ...); do cat
+$src >...`` hack, and done same thing in this case as well, but was forgetting
+to run it after small "debug printf" changes waaay too often.
+
+At this point, I sometimes hack some ad-hoc emacs post-save hook to run the
+thing, but this time decided to find some simplier and more generic "run that on
+any changes to path" tool.
+
+Until the last few years, the only way to do that was polling or inotify_, and
+for some project dir it's actually quite fine, but luckily there's fanotify_ in
+kernel now, and fatrace_ looks like the simliest cli tool based on it.
+
+::
+
+	# fatrace
+	sadc(977): W /var/log/sa/sa24
+	sadc(977): W /var/log/sa/sa24
+	sadc(977): W /var/log/sa/sa24
+	sadc(977): W /var/log/sa/sa24
+	qmgr(1195): O /var/spool/postfix/deferred
+	qmgr(1195): CO /var/spool/postfix/deferred/0
+	qmgr(1195): CO /var/spool/postfix/deferred/3
+	qmgr(1195): CO /var/spool/postfix/deferred/7
+	...
+
+| That thing can just watch everything that's being done to all (or any
+  specific) local mount(s).
+| Even better - reports the app that does the changes.
+
+I never got over `auditd's`_ complexity for such simple use-cases, so was damn
+glad that there is a real and simplier alternative now.
+
+Unfortunately, with power of the thing comes the need for root, so one `simple
+bash wrapper`_ later, my "sync changes" issue was finally resolved:
+
+::
+
+	(root) ~# fatrace_pipe ~user/hatch/project
+	(user) project% xargs -in1 </tmp/fatrace.fifo make
+
+Looks like a real problem-solver for a lot of real-world "what the hell happens
+on the fs there!?" cases as well - can't recommend the thing highly-enough for
+all that.
+
+
+.. _inotify: http://en.wikipedia.org/wiki/Inotify
+.. _fanotify: http://lwn.net/Articles/339253/
+.. _fatrace: https://launchpad.net/fatrace
+.. _auditd's: http://people.redhat.com/sgrubb/audit/
+.. _simple bash wrapper: https://github.com/mk-fg/fgtk#fatrace_pipe
