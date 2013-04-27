@@ -16,13 +16,13 @@ window.
   \*important\* parts of it) can be just re-used (even if you've already started
   new version!) with just a little bit of extra effort (thanks to ppurka in #e
   for pointing me in the right direction here).
-| So wasn't looking forward to restore all the keyboard bindings, for one thing
-  (that's why I actually did the update just one week ago or so).
+| Sooo wasn't looking forward to restore all the keyboard bindings, for one
+  thing (that's why I actually did the update just one week ago or so).
 
-E is a bit special (at least among wm's, fairly sure some de's do similar things
-as well) in that it keeps it's settings on disk compiled and compressed (with
-`eet <http://docs.enlightenment.org/auto/eet/>`_) - but it's much easier to work
-with than it might sound like.
+E is a bit special (at least among wm's - fairly sure some de's do similar
+things as well) in that it keeps its settings on disk compiled and compressed
+(with `eet <http://docs.enlightenment.org/auto/eet/>`_) - but it's much easier
+to work with than it might sound like at first.
 
 So, to get the bits of config migrated, one just has to pull the old (pre-zero)
 config out, then start zero-release e to generate new config, decompile both of
@@ -33,7 +33,7 @@ Before zero update, config can be found in "~/.e/e/config/standard/e.cfg"
 
 If release version was started already and dropped the config, then old one
 should be "~/.e/e/config/standard/e.1.cfg" (or any different number instead of
-"1" there).
+"1" there, just mentally substitute it in examples below).
 
 Note that "standard" there is a profile name, if it might be called differently,
 check "~/.e/e/config/profile.cfg" (profile name should be readable there, or use
@@ -44,8 +44,8 @@ version of the config to stdout.
 
 Below is how I went about the whole process.
 
-Make a repository to track changes (will help if workflow might have merge-test
-steps than one):
+Make a repository to track changes (will help if the process might take more
+merge-test iterations than one):
 
 .. code-block:: console
 
@@ -89,7 +89,7 @@ did:
 
 -  copy that list (~200 lines) from old config to some file - say,
    "values.old", then from a new one to e.g. "values.new".
--  sort -u values.old > values.old.sorted
+-  sort -u values.old > values.old.sorted;
    sort -u values.new > values.new.sorted
 -  diff -uw values.{old,new}.sorted
 
