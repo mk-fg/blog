@@ -1,0 +1,146 @@
+Recent fixes to great tools - 0bin and Convergence
+##################################################
+
+:date: 2013-04-29 01:37
+:tags: web, encryption
+
+
+I've tried both of these in the past, but didn't have attention budget to make
+them really work for me - which finally found now, so wanted to also give
+crawlers a few more keywords on these nice things.
+
+
+0bin - leak-proof pastebin
+``````````````````````````
+
+As I pastebin a lot of stuff all the time - basically everything multiline -
+because all my IM happens in ERC_ over IRC (with bitlbee_ linking xmpp and all
+the proprietary crap like icq, skype and twitter), and IRC doesn't handle
+multiline messages at all.
+
+All sorts of important stuff ends up there - some internal credentials,
+contacts, non-public code, bugs, private chat logs, etc - so I always winced a
+bit when pasting something in fear that google might index/data-mine it and
+preserve forever, so I figured it'll bite me eventually, somewhat like this:
+
+.. html::
+
+	<a href="|filename|images/github_keys_fail.png">
+	<img
+		style="width: 400px;"
+		src="|filename|images/github_keys_fail.png"
+		title="Google finds everything you forget"
+		alt="massive security fail">
+	</a>
+
+Easy and acceptable solution is to use simple client-side crypto, with link
+having decryption key after hashmark, which never gets sent to pastebin server
+and doesn't provide crawlers with any useful data. ZeroBin_ does that.
+
+But `original ZeroBin`_ is php, which I don't really want to touch, and have its
+share of problems - from the lack of command-line client (for e.g. ``grep stuff
+log | zerobinpaste``), to overly-long urls and flaky overloaded interface.
+
+Luckily, there's more hackable python version of it - 0bin_, for which I hacked
+together a simple `zerobinpaste tool`_, then simplified interface to bare
+minimum and updated to use shorter urls (`#41`_, `#42`_) and put to my host -
+result is `paste.fraggod.net`_ - my own nice robot-proof pastebin.
+
+URLs there aren't any longer than with regular pastebins:
+
+  http://paste.fraggod.net/paste/pLmEb0BI#Verfn+7o
+
+Plus the links there expire reliably, and it's easy to force this expiration,
+having control over app backend.
+
+`Local fork`_ should have all the not-yet-merged stuff as well as the
+non-upstreamable simplier white-bootstrap theme.
+
+
+Convergence - better PKI for TLS keys
+`````````````````````````````````````
+
+Can't really recommend `this video`_ highly enough to anyone with even the
+slightest bit of interest in security, web or SSL/TLS protocols.
+
+| There are lots of issues beyond just key distribution and authentication, but
+  I'd dare anyone to watch that rundown of just-as-of-2011 issues and remain
+  convinced that the PKI there is fine or even good enough.
+| Even fairly simple Convergence_ tool implementation is a vast improvement,
+  giving a lot of control to make informed decisions about who to trust on the
+  net.
+
+I've been using the plugin in the past, but eventually it broke and I just
+disabled it until the better times when it'll be fixed, but Moxie seem to have
+moved on to other tasks and project never got the developers' attention it
+deserved.
+
+So finally got around to fixing `fairly massive list`_ of issues around it
+myself.
+
+Bugs around newer firefox plugin were the priority - one was compatibility thing
+from `PR #170`_, another is endless hanging on all requests to notaries (`PR
+#173`_), more minor issues with adding notaries, interfaces and just plain bugs
+that were always there.
+
+| Then there was one shortcoming of existing perspective-only verification
+  mechanism that bugged me - it didn't utilize existing flawed CA lists at all,
+  making decision of whether random site's cert is signed by at least some
+  crappy CA or completely homegrown (and thus don't belong on
+  e.g. "paypal.com").
+| Not the deciding factor by any means, but allows to make much more informed
+  decision than just perspectives for e.g. fishing site with typo in URL.
+
+So was able to utilize (and extend a bit) the best part of Convergence - agility
+of its trust decision-making - by hacking together a verifier (which can be
+easily run on desktop localhost) that queries existing CA lists.
+
+Enabling Convergence with that doesn't even force to give up the old model -
+just adds perspective checks on top, giving a clear picture of which of the
+checks have failed on any inconsistencies.
+
+Other server-side fixes include nice argparse interface, configuration file
+support, loading of verifiers from `setuptools/distribute entry points`_ (can be
+installed separately with any python package), hackish TLS SNI support (Moxie
+actually filed `twisted-5374`_ about more proper fix), sane logging, ...
+
+Filed only a few PR for the show-stopper client bugs, but looks like upstream
+repo is simply dead, pity ;(
+
+| But all this stuff should be available in `my fork`_ in the meantime.
+| Top-level README there should provide a more complete list of links and
+  changes.
+
+| Hopefully, upstream development will be picked-up at some point, or maybe
+  shift to some next incarnation of the idea - CrossBear_ seem to potentially
+  be one.
+| Until then, at least was able to salvage this one, and hacking ctypes-heavy ff
+  extension implementing SOCKS MitM proxy was quite rewarding experience all by
+  itself... certainly broadens horizons on just how damn accessible and simple
+  it is to implement such seemingly-complex protocol wrappers.
+
+Plan to also add a few other internet-observatory (like OONI, CrossBear crawls,
+EFF Observatory, etc) plugins there in the near future, plus some other things
+listed in the README here_.
+
+
+.. _ERC: http://www.emacswiki.org/ERC
+.. _bitlbee: http://bitlbee.org/
+.. _ZeroBin: http://sebsauvage.net/wiki/doku.php?id=php:zerobin
+.. _original ZeroBin: https://github.com/sebsauvage/ZeroBin
+.. _0bin: https://github.com/sametmax/0bin
+.. _zerobinpaste tool: https://github.com/sametmax/0bin/pull/39
+.. _#41: https://github.com/sametmax/0bin/pull/41
+.. _#42: https://github.com/sametmax/0bin/pull/42
+.. _paste.fraggod.net: http://paste.fraggod.net
+.. _Local fork: https://github.com/mk-fg/0bin
+.. _this video: http://www.youtube.com/watch?v=Z7Wl2FW2TcA
+.. _Convergence: http://convergence.io/
+.. _fairly massive list: https://github.com/mk-fg/convergence#fork
+.. _PR #170: https://github.com/moxie0/Convergence/pull/170
+.. _PR #173: https://github.com/moxie0/Convergence/pull/173
+.. _setuptools/distribute entry points: http://packages.python.org/distribute/setuptools.html#dynamic-discovery-of-services-and-plugins
+.. _twisted-5374: http://twistedmatrix.com/trac/ticket/5374
+.. _my fork: https://github.com/mk-fg/convergence
+.. _CrossBear: https://pki.net.in.tum.de/
+.. _here: https://github.com/mk-fg/convergence#convergence
