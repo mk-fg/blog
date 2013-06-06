@@ -1,0 +1,99 @@
+Firefox - breaking free of webdevs' tyranny
+###########################################
+
+:date: 2013-06-06 15:07
+:tags: web, desktop
+
+
+Wanted to share three kinda-big-deal fixes I've added to my firefox:
+
+ - Patch to remove sticky-on-top focus-grabbing "Do you want to activate plugins
+   on this page?" popup.
+
+ - Patch to prevent plugins (e.g. Abode Flash) from ever grabbing firefox
+   hotkeys like "Ctrl + w" (close tab) or F5, forcing to do click outside
+   e.g. YouTube video window to get back to ff.
+
+ - Easy "toggle js" fix for JavaScript on pages grabbing controls like keyboard
+   and mouse (e.g. overriding F5 to retweet instead of reload page, preventing
+   copy-paste if forms and on pages, etc).
+
+Lately, firefox seem to give more-and-more control into the hands of web
+developers, who seem to be hell-bent on abusing that to make browsing UX a
+living hell.
+
+FF bug-reports about Flash grabbing all the focus date back to 2001 and are
+unresolved still.
+
+Sites override Up/Down, Space, PgUp/PgDown, F5, Ctrl+T/W I've no idea why -
+guess some JS developers just don't use keyboard at all, which is somewhat
+understandable, combined with the spread of tablet-devices these days.
+
+Overriding clicks in forms to prevent pasting email/password seem to be
+completely ignoring valid (or so I think) use-case of using some storage app
+for these.
+
+And native "click-to-play" switch seem to be hilariously unusable in FF, giving
+cheerful "Hey, there's flash here! Let me pester you with this on every page
+load!" popups.
+
+All are known, neither one seem to be going away anytime soon, so onwards to the
+fixes.
+
+| Removing "Do you want to activate plugins" thing seem to be straightforward js
+  one-liner patch, as it's implemented in
+  "browser/base/content/browser-plugins.js" - whole fix is adding
+  ``this._notificationDisplayedOnce = true;`` to break the check there.
+| "notificationDisplayedOnce" thing is used to not popup that thing on the same
+  page within the same browing session afaict.
+| With `this patch`_ applied (more up-to-date github link:
+  `no_plugins_popup.patch`_) it will never pester user again, ever \\o/
+
+| Patch for plugin focus is clever - all one has to do is to switch focus to
+  browser window (from embedded flash widget) before keypress gets processed and
+  ff will handle it correctly.
+| Hackish plugin + ad-hoc perl script solution (to avoid patching/rebuilding ff)
+  can be found here_.
+| My hat goes to Alexander Rødseth however, who hacked the patch attached to
+  `ff-bug-78414`_ - this one is a real problem-solver, though a bit (not
+  terribly - just context lines got shuffled around since) out-of-date.
+| More up-to-date (for current 21-ish stable ff from hg) fix is here:
+  `ff_loose_plugin_keygrab.patch`_ (more future-proof `github link`_).
+
+| JS-click/key-jacking issue seem to require some JS event firewalling, and
+  sometimes (e.g. JS games or some weird-design sites) can be useful.
+| So my solution was simply to bind JS-toggle key, which allows not only to
+  disable all that crap, but also speed some "load-shit-as-you-go" or
+  JS-BTC-mining (or so it feels) sites rapidly.
+| I have `KeyConfig extension`_, which allows to bind random JS to a key, so:
+
+.. code-block:: javascript
+
+	var prefs = Components.classes['@mozilla.org/preferences-service;1']
+	    .getService(Components.interfaces.nsIPrefBranch),
+	  state = prefs.getBoolPref('javascript.enabled');
+	prefs.setBoolPref('javascript.enabled', !state);
+
+That's the whole thing, bound to something like Ctrl+\\ (the one above Enter
+here), makes a nice "Turbo and Get Off My JS" key.
+Fairly sure there are addons that allow to toggle prefs ("javascript.enabled"
+above) via keys without needing any code, but I have this one.
+
+Damn glad there are open-source (and uglifyjs-like) browsers like that, hope
+proprietary google-ware won't take over the world in the nearest future.
+
+Mentioned patches are available in (and integrated with-) the `firefox-nightly
+exheres`_ in my repo, forked off awesome `sardemff7-pending`_
+firefox-scm.exheres-0 / mozilla-app.exlib work.
+
+
+.. _this patch: http://fraggod.net/static/code/ff_no_plugins_popup.patch
+.. _no_plugins_popup.patch: https://github.com/mk-fg/fg_exheres/blob/master/packages/net-www/firefox/files/no_plugins_popup.patch
+.. _here: http://www.ibm.com/developerworks/opensource/library/os-78414-firefox-flash/index.html?ca=drs-
+.. _ff-bug-78414: https://bugzilla.mozilla.org/show_bug.cgi?id=78414#attachment_table
+.. _this patch applied: http://fraggod.net/static/code/ff_no_plugins_popup.patch
+.. _ff_loose_plugin_keygrab.patch: http://fraggod.net/static/code/ff_loose_plugin_keygrab.patch
+.. _github link: https://github.com/mk-fg/fg_exheres/blob/master/packages/net-www/firefox/files/loose_plugin_keygrab.patch
+.. _KeyConfig extension: http://mozilla.dorando.at/
+.. _firefox-nightly exheres: https://github.com/mk-fg/fg_exheres/blob/master/packages/net-www/firefox/
+.. _sardemff7-pending: http://git.sardemff7.net/exherbo/sardemff7-pending/
