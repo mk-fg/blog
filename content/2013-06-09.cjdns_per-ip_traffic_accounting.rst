@@ -1,0 +1,90 @@
+cjdns per-IP (i.e. per-peer) traffic accounting
+###############################################
+
+:date: 2013-06-09 16:46
+:tags: unix, sysadmin, darknet, monitoring
+
+
+I've been using Hyperboria_ darknet for about a month now, and after late influx
+of russian users there (after `this article`_) got plently of peers, so node is
+forwarding a bit of network traffic.
+
+Being a dorknet-proper, of course, you can't see what kind of traffic it is or
+to whom it goes (though cjdns doesn't have anonymity as a goal), but I thought
+it'd be nice to at least know when my internet lags due to someone launching DoS
+flood or abusing torrents.
+
+Over the Internet (called "clearnet" here), cjdns peers using udp, but linux
+conntrack seem to be good enough to track these "connections" just as if they
+were stateful tcp flows.
+
+Simple-ish traffic accounting on vanilla linux usually boils down to ulogd2,
+which can use packet-capturing interfaces (raw sockets via libpcap, netfilter
+ULOG and NFLOG targets), but it's kinda heavy-handed here - traffic is opaque,
+only endpoints matter, so another one of its interfaces seem to be better
+option - conntrack tables/events.
+
+Handy conntrack-tools_ (or /proc/net/{ip,nf}_conntrack) cat track all the
+connections, including simple udp-based ones (like cjdns uses), producing
+entries like:
+
+::
+
+	udp 17 179 \
+		src=110.133.5.117 dst=188.226.51.71 sport=52728 dport=8131 \
+		src=188.226.51.71 dst=110.133.5.117 sport=8131 dport=52728 \
+		[ASSURED] mark=16 use=1
+
+First trick is to enable the packet/byte counters there, which is a simple, but
+default-off sysctl knob:
+
+.. code-block:: console
+
+	# sysctl -w net.netfilter.nf_conntrack_acct=1
+
+That will add "bytes=" and "packets=" values there for both directions.
+
+Of course, polling the table is a good way to introduce extra hangs into system
+(/proc files are basically hooks that tend to lock stuff to get consistent
+reads) and loose stuff in-between polls, so luckily there's an event-based
+netlink interface and ulogd2_ daemon to monitor that.
+
+One easy way to pick both incoming and outgoing udp flows in ulogd2 is to add
+connmarks to these:
+
+::
+
+	-A INPUT -p udp --dport $cjdns_port -j CONNMARK --set-xmark 0x10/0x10
+	-A OUTPUT -p udp --sport $cjdns_port -j CONNMARK --set-xmark 0x10/0x10
+
+Then setup filtering by these in ulogd.conf:
+
+::
+
+	...
+
+	stack=log:NFCT,mark:MARK,ip2str:IP2STR,print:PRINTFLOW,out:GPRINT
+
+	[log]
+	accept_proto_filter=udp
+
+	[mark]
+	mark=0x10
+	mask=0x10
+
+	[out]
+	file="/var/log/ulogd2/cjdns.log"
+
+Should produce parseable log of all the traffic flows with IPs and such.
+
+Fairly `simple script`_ can then be used to push this data to graphite_, munin,
+ganglia, cacti or whatever time-series graphing/processing tool.
+Linked script is for graphite "carbon" interface.
+
+
+.. _Hyperboria: http://hyperboria.net/
+.. _this article: http://habrahabr.ru/post/181862/
+.. _conntrack-tools: http://conntrack-tools.netfilter.org/
+.. _ulogd2: http://www.netfilter.org/projects/ulogd/
+.. _simple script: http://fraggod.net/static/code/ulogd-graphite-flows.py
+.. _graphite: http://graphite.readthedocs.org/
