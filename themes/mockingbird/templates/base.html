@@ -4,76 +4,75 @@
 
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <title>{% block title %}{{ SITENAME }}{% if title %} &middot; ${ title | escape }{% endif %}{% endblock %}</title>
-        <link rel="shortcut icon" href="{{ SITEURL }}/favicon.ico" />
-        {% if FEED_ALL_ATOM -%}
-        <link href="{{ FEED_DOMAIN }}/{{ FEED_ALL_ATOM }}" type="application/atom+xml" rel="alternate" title="{{ SITENAME }} Atom Feed" />
-        {% endif %}
-        {% if FEED_ALL_RSS %}
-        <link href="{{ FEED_DOMAIN }}/{{ FEED_ALL_RSS }}" type="application/rss+xml" rel="alternate" title="{{ SITENAME }} RSS Feed" />
-        {% endif %}
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+		<title>{% block title %}{{ SITENAME }}{% if title %} &middot; ${ title | escape }{% endif %}{% endblock %}</title>
+		<link rel="shortcut icon" href="{{ SITEURL }}/favicon.ico" />
+		{% if FEED_ALL_ATOM -%}
+		<link href="{{ FEED_DOMAIN }}/{{ FEED_ALL_ATOM }}" type="application/atom+xml" rel="alternate" title="{{ SITENAME }} Atom Feed" />
+		{% endif %}
+		{% if FEED_ALL_RSS %}
+		<link href="{{ FEED_DOMAIN }}/{{ FEED_ALL_RSS }}" type="application/rss+xml" rel="alternate" title="{{ SITENAME }} RSS Feed" />
+		{% endif %}
 
-        <link rel="stylesheet" href="{{ SITEURL }}/theme/css/screen.css" type="text/css" />
-        <link rel="stylesheet" href="{{ SITEURL }}/theme/css/pygments.css" type="text/css" />
-    </head>
-    <body>
-        {% if article and article.metadata["legacy-link"] -%}
-        <!-- legacy-link: {{ article.metadata["legacy-link"] }} -->
-        {% endif %}
-        {%- if SITENAME -%}
-        <div id="header">
-            <ul id="nav">
-                {%- block ephemeral_nav %}{%- endblock %}
+		<link rel="stylesheet" href="{{ SITEURL }}/theme/css/screen.css" type="text/css" />
+		<link rel="stylesheet" href="{{ SITEURL }}/theme/css/pygments.css" type="text/css" />
+	</head>
+	<body>
+		{% if article and article.metadata["legacy-link"] -%}
+		<!-- legacy-link: {{ article.metadata["legacy-link"] }} -->
+		{% endif %}
+		{%- if SITENAME -%}
+		<div id="header">
+			<ul id="nav">
+				{%- block ephemeral_nav %}{%- endblock %}
 
-                <li {%- if page_name == "index" %} class="selected"{% endif %}><a href="{{ SITEURL }}">Home</a></li>
-                {% if DISPLAY_PAGES_ON_MENU -%}
-                {% for p in PAGES -%}
-                <li {%- if page and page.url == p.url %} class="selected"{% endif %}><a href="{{ SITEURL }}/{{ p.url }}">{{ p.title }}</a></li>
-                {% endfor -%}
-                {% endif -%}
+				<li {%- if page_name == "index" %} class="selected"{% endif %}><a href="{{ SITEURL }}">Home</a></li>
+				{% if DISPLAY_PAGES_ON_MENU -%}
+				{% for p in PAGES -%}
+				<li {%- if page and page.url == p.url %} class="selected"{% endif %}><a href="{{ SITEURL }}/{{ p.url }}">{{ p.title }}</a></li>
+				{% endfor -%}
+				{% endif -%}
 
-                <li {%- if page and page.slug == "contacts" %} class="selected"{% endif %}><a href="{{ SITEURL }}/pages/contacts.html">Who</a></li>
-                <li {%- if page_name == 'archives' %} class="selected"{% endif %}><a href="{{ SITEURL }}/archives.html">Archives</a></li>
-                {% if FEED_ALL_ATOM -%}
-                <li><a href="{{ SITEURL }}/{{ FEED_ALL_ATOM }}">Feed</a></li>
-                {%- endif %}
-            </ul>
-            <div class="header_box">
-                <h1><a href="{{ SITEURL }}">{{ SITENAME }}</a></h1>
-                {%- if SITESUBTITLE %}
+				<li {%- if page and page.slug == "contacts" %} class="selected"{% endif %}><a href="{{ SITEURL }}/pages/contacts.html">Who</a></li>
+				<li {%- if page_name == 'archives' %} class="selected"{% endif %}><a href="{{ SITEURL }}/archives.html">Archives</a></li>
+				{% if FEED_ALL_ATOM -%}
+				<li><a href="{{ SITEURL }}/{{ FEED_ALL_ATOM }}">Feed</a></li>
+				{%- endif %}
+			</ul>
+			<div class="header_box">
+				<h1><a href="{{ SITEURL }}">{{ SITENAME }}</a></h1>
+				{%- if SITESUBTITLE %}
 
-                <h2>{{ SITESUBTITLE }}</h2>
-                {%- endif %}
+				<h2>{{ SITESUBTITLE }}</h2>
+				{%- endif %}
 
-            </div>
-        </div>
-        {%- endif %}
+			</div>
+		</div>
+		{%- endif %}
 
-        <div id="wrapper">
-            <div id="content">
+		<div id="wrapper">
+			<div id="content">
 {%- block content -%}{%- endblock %}
 
-            </div>
-            <div class="clear"></div>
-        </div>
+			</div>
+			<div class="clear"></div>
+		</div>
 
 
-        <!-- internetdefenseleague.org banner/ribbon -->
-        <script type="text/javascript">
-            window._idl = {};
-            _idl.variant = "banner";
-            (function() {
-                var idl = document.createElement('script');
-                idl.type = 'text/javascript';
-                idl.async = true;
-                idl.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'members.internetdefenseleague.org/include/?url=' + (_idl.url || '') + '&campaign=' + (_idl.campaign || '') + '&variant=' + (_idl.variant || 'banner');
-                document.getElementsByTagName('body')[0].appendChild(idl);
-            })();
-        </script>
+		<!-- internetdefenseleague.org banner/ribbon -->
+		<script type="text/javascript">
+			window._idl = {};
+			_idl.variant = "banner";
+			(function() {
+				var idl = document.createElement('script');
+				idl.type = 'text/javascript';
+				idl.async = true;
+				idl.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'members.internetdefenseleague.org/include/?url=' + (_idl.url || '') + '&campaign=' + (_idl.campaign || '') + '&variant=' + (_idl.variant || 'banner');
+				document.getElementsByTagName('body')[0].appendChild(idl);
+			})();
+		</script>
+		<a id="idl-ribbon" href="http://internetdefenseleague.org"><img src="{{ SITEURL }}/theme/img/idl_ribbon_right.png" alt="Member of The Internet Defense League" /></a>
 
-        <a id="idl-ribbon" href="http://internetdefenseleague.org"><img src="{{ SITEURL }}/theme/img/idl_ribbon_right.png" alt="Member of The Internet Defense League" /></a>
-
-    </body>
+	</body>
 </html>
