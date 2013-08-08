@@ -1,0 +1,125 @@
+Encrypted root on a remote vds
+##############################
+
+:date: 2013-08-08 12:58
+:tags: unix, sysadmin, encryption, bash, ssh, hardware
+
+
+Most advice wrt encryption on a remote hosts (VPS, VDS) don't seem to concert
+full-disk encryption as such, but is rather limited to encrypting /var and
+/home, so that machine will boot from non-crypted / and you'll be able to ssh to
+it, decrypt these parts manually, then start services that use data there.
+
+That seem to be in contrast with what's generally used on local machines - make
+LUKS container right on top of physical disk device, except for /boot (if it's
+not on USB key) and don't let that encryption layer bother you anymore.
+
+Two policies seem to differ in that former one is opt-in - you have to actively
+think which data to put onto encrypted part (e.g. /etc/ssl has private keys?
+move to /var, shred from /etc), while the latter is opt-out - everything is
+encrypted, period.
+
+So, in spirit of that opt-out way, I thought it'd be a drag to go double-think
+wrt which data should be stored where and just go ahead and put everything
+possible to encrypted container for a remote host as well, leaving only /boot
+with kernel and initramfs in the clear.
+
+| Naturally, to enter encryption password and not have it stored alongside LUKS
+  header, some remote login from the network is in order, and sshd seem to be
+  the secure and easy way to go about it.
+| Initramfs in question should then also be able to setup network, which luckily
+  dracut_ can. Openssh sshd is a bit too heavy for it though, but there are much
+  lighter sshd's like dropbear_.
+
+Searching around for someone to tie the two things up, found a bit incomplete
+and non-packaged solutions like this `RH enhancement proposal`_ and a set of
+hacky scripts and instructions in `dracut-crypt-wait`_ repo on bitbucket.
+
+| Approach outlined in RH bugzilla is to make dracut "crypt" module to operate
+  normally and let cryptsetup query for password in linux console, but also
+  start sshd in the background, where one can login and use a simple tool to
+  echo password to that console (without having it echoed).
+| dracut-crypt-wait does a clever hack of removing "crypt" module hook instead
+  and basically creates "rescure" console on sshd, where user have to manually
+  do all the decryption necessary and then signal initramfs to proceed with the
+  boot.
+
+I thought first way was rather more elegant and clever, allowing dracut to
+figure out which device to decrypt and start cryptsetup with all the necessary,
+configured and documented parameters, also still allowing to type passphrase
+into console - best of both worlds, so went along with that one, creating
+`dracut-crypt-sshd`_ project.
+
+As README there explains, using it is as easy as adding it into dracut.conf (or
+passing to dracut on command line) and adding networking to grub.cfg, e.g.:
+
+::
+
+	menuentry "My Linux" {
+		linux /vmlinuz ro root=LABEL=root
+			rd.luks.uuid=7a476ea0 rd.lvm.vg=lvmcrypt rd.neednet=1
+			ip=88.195.61.177::88.195.61.161:255.255.255.224:myhost:enp0s9:off
+		initrd /dracut.xz
+	}
+
+("ip=dhcp" might be simplier way to go, but doesn't yield default route in my case)
+
+And there, you'll have sshd on that IP port 2222 (configurable), with
+pre-generated (during dracut build) keys, which might be a good idea to put into
+"known_hosts" for that ip/port somewhere. "authorized_keys" is taken from
+/root/.ssh by default, but also configurable via dracut.conf, if necessary.
+
+Apart from sshd, that module includes two tools for interaction with console -
+console_peek and console_auth (derived from auth.c in the bugzilla link above).
+
+Logging in to that sshd then yields sequence like this:
+
+.. code-block:: console
+
+	[214] Aug 08 13:29:54 lastlog_perform_login: Couldn't stat /var/log/lastlog: No such file or directory
+	[214] Aug 08 13:29:54 lastlog_openseek: /var/log/lastlog is not a file or directory!
+
+	# console_peek
+	[    1.711778] Write protecting the kernel text: 4208k
+	[    1.711875] Write protecting the kernel read-only data: 1116k
+	[    1.735488] dracut: dracut-031
+	[    1.756132] systemd-udevd[137]: starting version 206
+	[    1.760022] tsc: Refined TSC clocksource calibration: 2199.749 MHz
+	[    1.760109] Switching to clocksource tsc
+	[    1.809905] systemd-udevd[145]: renamed network interface eth0 to enp0s9
+	[    1.974202] 8139too 0000:00:09.0 enp0s9: link up, 100Mbps, full-duplex, lpa 0x45E1
+	[    1.983151] dracut: sshd port: 2222
+	[    1.983254] dracut: sshd key fingerprint: 2048 0e:14:...:36:f9  root@congo (RSA)
+	[    1.983392] dracut: sshd key bubblebabble: 2048 xikak-...-poxix  root@congo (RSA)
+	[185] Aug 08 13:29:29 Failed reading '-', disabling DSS
+	[186] Aug 08 13:29:29 Running in background
+	[    2.093869] dracut: luksOpen /dev/sda3 luks-...
+	Enter passphrase for /dev/sda3:
+	[213] Aug 08 13:29:50 Child connection from 188.226.62.174:46309
+	[213] Aug 08 13:29:54 Pubkey auth succeeded for 'root' with key md5 0b:97:bb:...
+
+	# console_auth
+	Passphrase:
+
+	#
+
+| First command - "console_peek" - allows to see which password is requested (if
+  any) and second one allows to login.
+| Note that fingerprints of host keys are also echoed to console on sshd start,
+  in case one has access to console but still needs sshd later.
+
+| I quickly found out that such initramfs with sshd is also a great and robust
+  rescue tool, especially if "debug" and/or "rescue" dracut modules are enabled.
+| And as it includes fairly comprehensive network-setup options, might be a good
+  way to boot multiple different OS'es with same (machine-specific) network
+  parameters,
+
+Yay for dracut, the amazingly cool and hackable initramfs project.
+
+Code link: https://github.com/mk-fg/dracut-crypt-sshd
+
+.. _dracut: https://dracut.wiki.kernel.org/index.php/Main_Page
+.. _dropbear: https://matt.ucc.asn.au/dropbear/dropbear.html
+.. _RH enhancement proposal: https://bugzilla.redhat.com/show_bug.cgi?id=524727
+.. _dracut-crypt-wait: https://bitbucket.org/bmearns/dracut-crypt-wait
+.. _dracut-crypt-sshd: https://github.com/mk-fg/dracut-crypt-sshd
