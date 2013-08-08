@@ -114,7 +114,27 @@ Logging in to that sshd then yields sequence like this:
   way to boot multiple different OS'es with same (machine-specific) network
   parameters,
 
-Yay for dracut, the amazingly cool and hackable initramfs project.
+Probably obligatory disclaimer for such post should mention that crypto above
+won't save you from malicious hoster or whatever three-letter-agency that will
+coerce it into cooperation, should it take interest in your poor machine - it'll
+just extract keys from RAM image (especially if it's a virtualized VPS) or
+backdoor kernel/initramfs and force a reboot.
+
+Threat model here is more trivial - be able to turn off and decomission host
+without fear of disks/images then falling into some other party's hands, which
+might also happen if hoster eventually goes bust or sells/scraps disks due to
+age or bad blocks.
+
+Also, even minor inconvenience like forcing to extract keys like outlined above
+might be helpful in case of quite well-known "we came fishing to a datacenter,
+shut everything down, give us all the hardware in these racks" tactic employed
+by some agencies.
+
+Absolute security is a myth, but these measures are fairly trivial and practical
+to be employed casually to cut off at least some number of basic threats.
+
+So, yay for dracut, the amazingly cool and hackable initramfs project, which
+made it that easy.
 
 Code link: https://github.com/mk-fg/dracut-crypt-sshd
 
