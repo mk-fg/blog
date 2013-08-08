@@ -5,7 +5,7 @@ Encrypted root on a remote vds
 :tags: unix, sysadmin, encryption, bash, ssh, hardware
 
 
-Most advice wrt encryption on a remote hosts (VPS, VDS) don't seem to concert
+Most advice wrt encryption on a remote hosts (VPS, VDS) don't seem to involve
 full-disk encryption as such, but is rather limited to encrypting /var and
 /home, so that machine will boot from non-crypted / and you'll be able to ssh to
 it, decrypt these parts manually, then start services that use data there.
@@ -20,9 +20,9 @@ move to /var, shred from /etc), while the latter is opt-out - everything is
 encrypted, period.
 
 So, in spirit of that opt-out way, I thought it'd be a drag to go double-think
-wrt which data should be stored where and just go ahead and put everything
-possible to encrypted container for a remote host as well, leaving only /boot
-with kernel and initramfs in the clear.
+wrt which data should be stored where and it'd be better to just go ahead and
+put everything possible to encrypted container for a remote host as well,
+leaving only /boot with kernel and initramfs in the clear.
 
 | Naturally, to enter encryption password and not have it stored alongside LUKS
   header, some remote login from the network is in order, and sshd seem to be
