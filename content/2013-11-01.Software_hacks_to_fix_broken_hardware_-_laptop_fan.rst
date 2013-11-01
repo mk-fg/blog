@@ -1,0 +1,99 @@
+Software hacks to fix broken hardware - laptop fan
+##################################################
+
+:date: 2013-11-01 18:29
+:tags: hardware, desktop, systemd
+
+
+Had a fan in a laptop dying for a few weeks now, but international mail being
+universally bad (and me too hopeful about dying fan's lifetime), replacement
+from ebay is still on its looong way.
+
+Meanwhile, thing started screeching like mad, causing strong vibration in the
+plastic and stopping/restarting every few seconds with an audible *thunk*.
+
+Things not looking good, and me being too lazy to work hard enough to be able to
+afford new laptop, had to do something to postpone this one's imminent death.
+
+Cleaning the dust and hairs out of fan's propeller and heatsink and changing
+thermal paste did make the thing a bit cooler, but given that it's fairly slim
+Acer S3 ultrabook, no local repair shop was able to offer any immediate
+replacement for the fan, so no clean hw fix in reach yet.
+
+Interesting thing about broken fans though, is that they seem to start vibrating
+madly out of control only beyond certain speed, so one option was to slow the
+thing down, while keeping cpu cool somehow.
+
+cpupower tool that comes with linux kernel can nicely downclock this i5 cpu to
+800 MHz, but that's not really enough to keep fan from spinning madly - some
+default BIOS code seem to be putting it to 100% at 50C.
+
+Besides, from what I've seen, it seem to be quite counter-productive, making
+everything (e.g. opening page in FF) much longer, keeping cpu at 100% of that
+lower rate all the time, which seem to heat it up slower, sure, but to the same
+or even higher level for the same task (e.g. opening that web page), with side
+effect being also wasting time.
+
+| Luckily, found out that fan on Acer laptops can be controlled using /dev/ports
+  registers, as described on `linlap wiki page`_.
+| 50C doesn't seem to be high for these CPUs at all, and one previous laptop
+  worked fine on 80C all the time, so making threshold for killing the fan
+  higher seem to be a good idea - it's not like there's much to loose anyway.
+
+As acers3fand_ script linked from the wiki was for a bit different purpose,
+wrote my own (also lighter and more self-contained) script - `fan_control`_ to
+only put more than ~50% of power to it after it goes beyond 60C and warns if it
+heats up way more without putting the fan into "wailing death" mode ever, with
+max being at about 75% power, also reaching for cpupower hack before that.
+
+Such manual control opens up a possibility of cpu overheating though, or
+otherwise doesn't help much when you run cpu-intensive stuff, and I kinda don't
+want to worry about some cronjob, stuck dev script or hung DE app killing the
+machine while I'm away, so one additional hack I could think of is to just
+throttle CPU bandwidth enough so that:
+
+ - short tasks complete at top performance, without delays.
+
+ - long cpu-intensive stuff gets throttled to a point where it can't generate
+   enough heat and cpu stays at some 60C with slow fan speed.
+
+ - some known-to-be-intensive tasks like compilation get their own especially
+   low limits.
+
+So kinda like cpupower trick, but more fine-grained and without fixed presets
+one can slow things down to (as lowest bar there doesn't cut it).
+
+Kernel Control Groups (cgroups) turned out to have the right thing for that -
+"cpu" resource controller there has cfs_quote_us/cfs_period_us knobs to control
+cpu bandwidth for threads within a specific cgroup.
+
+| New enough systemd has the concept of "slices" to control resources for a
+  groups of services, which are applied automatically for all DE stuff as
+  "user.slice" and its "user-<name>.slice" subslices, so all that had to be done
+  is to echo the right values (which don't cause overheating or fan-fail) to
+  that rc's /sys knobs.
+| Similar generic limitations are easy to apply to other services there by
+  grouping them with Slice= option.
+
+For distinct limits on daemons started from cli, there's "systemd-run" tool
+these days, and for more proper interactive wrapping, I've had pet
+`cgroup-tools`_ scripts for a while now (to limit cpu priority of heavier bg
+stuff like builds though).
+
+With that last tweak, situation seem to be under control - no stray app can
+really kill the cpu and fan doesn't have to do all the hard work to prevent it
+either, seemingly solving that hardware fail with software measures for now.
+
+| Keeping mobile i5 cpu around 50 degrees apparently needs it to spin only
+  barely, yet seem to allow all the desktop stuff to function without noticeable
+  slowdowns or difference.
+| Makes me wonder why Intel did allow that low-power ARM things fly past it...
+
+Now, if only replacement fan got here before I drop off the nets even with these
+hacks.
+
+
+.. _linlap wiki page: http://www.linlap.com/acer_aspire_s3#cpu_fan_speed_control
+.. _acers3fand: http://sourceforge.net/projects/acers3fand/
+.. _fan_control: https://github.com/mk-fg/fgtk/#fan_control
+.. _cgroup-tools: https://github.com/mk-fg/cgroup-tools
