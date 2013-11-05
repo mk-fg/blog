@@ -1,0 +1,42 @@
+Conky eye candy clocks and meters
+#################################
+
+:date: 2013-11-05 14:48
+:tags: desktop
+
+
+So my laptop broke anyway, but on the bright side - I've got fairly large
+(certainly by my display standards) desktop fullhd screen now.
+
+While restoring OS there, decided to update ~/.conkyrc (see conky_), as it was
+kinda small for this larger screen, so why not put some eye-candy there, while
+at it?
+
+.. html::
+
+	<a href="|filename|images/conky_clocks.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/conky_clocks.jpg"
+		title="Fancy conky meters and clocks (clicky!)"
+		alt="conky screenshot">
+	</a>
+
+Leftmost radial meters show (inner-to-outer) clock with hands and rings right
+next to them, blue-ish cpu arcs (right-bottom, outer one is load summary, inner
+ones are per-core), used (non-cache) memory/swap (left), network traffic
+(top-right, green/red arcs for up/down) and \/ and \/home df arcs (outer top).
+
+On the right it's good ol' binary clock.
+
+| All drawings are lua script, all text and graphs below is conky's magic.
+| Rings are adapted from `"Clock Rings" script here`_, just added background
+  planes and binary clock, because why not...
+
+Whole script to draw the things can be found in `de-setup repo on gh`_ along
+with full conkyrc I currently use.
+
+
+.. _conky: http://conky.sourceforge.net/
+.. _"Clock Rings" script here: http://blog.hozzamedia.com/software/conky-resource-dialrings/
+.. _de-setup repo on gh: https://github.com/mk-fg/de-setup/blob/master/conky
