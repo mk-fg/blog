@@ -82,9 +82,16 @@ ganglia, cacti or whatever time-series graphing/processing tool.
 Linked script is for graphite "carbon" interface.
 
 
+| **Update**: obsoleted/superseded by cjdns "`InterfaceController_peerStats`_"
+  admin api function and `graphite-metrics`_ `cjdns_peer_stats collector`_.
+
+
 .. _Hyperboria: http://hyperboria.net/
 .. _this article: http://habrahabr.ru/post/181862/
 .. _conntrack-tools: http://conntrack-tools.netfilter.org/
 .. _ulogd2: http://www.netfilter.org/projects/ulogd/
 .. _simple script: http://fraggod.net/static/code/ulogd-graphite-flows.py
 .. _graphite: http://graphite.readthedocs.org/
+.. _InterfaceController_peerStats: https://github.com/cjdelisle/cjdns/commit/aa293b8da615c76125a37114c0c10b2982b82054
+.. _graphite-metrics: https://github.com/mk-fg/graphite-metrics/
+.. _cjdns_peer_stats collector: https://github.com/mk-fg/graphite-metrics/blob/master/graphite_metrics/collectors/cjdns_peer_stats.py
