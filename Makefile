@@ -1,3 +1,4 @@
+PY=python
 PELICAN=pelican
 PELICANOPTS=
 
@@ -6,6 +7,11 @@ INPUTDIR=$(BASEDIR)/content
 OUTPUTDIR=$(BASEDIR)/output
 CONFFILE=$(BASEDIR)/pelicanconf.py
 PUBLISHCONF=$(BASEDIR)/publishconf.py
+
+DEBUG=0
+ifeq ($(DEBUG), 1)
+	PELICANOPTS += -D
+endif
 
 
 help:
@@ -16,8 +22,9 @@ help:
 	@echo '   make clean                       remove the generated files         '
 	@echo '   make regenerate                  regenerate files upon modification '
 	@echo '   make publish                     generate using production settings '
-	@echo '   make serve                       serve site at http://localhost:8000'
-	@echo '   make devserver                   start/restart develop_server.sh    '
+	@echo '   make serve [PORT=8000]           serve site at http://localhost:8000'
+	@echo '   make devserver [PORT=8000]       start/restart develop_server.sh    '
+	@echo '   make stopserver                  stop local server                  '
 	@echo '   make appengine                   push data up to the mothership     '
 	@echo '                                                                       '
 
@@ -29,7 +36,7 @@ $(OUTPUTDIR)/%.html:
 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(CONFFILE) $(PELICANOPTS)
 
 update_legacy_links:
-	awk\
+	@awk\
 		'match($$0,/^\s*<!-- legacy-link: (.*) -->\s*$$/,a) {sub(/^output\//, "", FILENAME); print a[1], FILENAME}'\
 		output/*/*/*/*.html | sort -u | ./dynamic/legacy_redirect.py
 
@@ -40,10 +47,23 @@ regenerate: clean
 	$(PELICAN) -r $(INPUTDIR) -o $(OUTPUTDIR) -s $(CONFFILE) $(PELICANOPTS)
 
 serve:
-	cd $(OUTPUTDIR) && python -m SimpleHTTPServer
+ifdef PORT
+	cd $(OUTPUTDIR) && $(PY) -m pelican.server $(PORT)
+else
+	cd $(OUTPUTDIR) && $(PY) -m pelican.server
+endif
 
 devserver:
-	$(BASEDIR)/develop_server.sh restart >/dev/null 2>&1
+ifdef PORT
+	$(BASEDIR)/develop_server.sh restart $(PORT) &>/dev/null
+else
+	$(BASEDIR)/develop_server.sh restart &>/dev/null
+endif
+
+stopserver:
+	kill -9 `cat pelican.pid`
+	kill -9 `cat srv.pid`
+	@echo 'Stopped Pelican and SimpleHTTPServer processes running in background.'
 
 publish_build:
 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(PUBLISHCONF) $(PELICANOPTS)
@@ -53,4 +73,4 @@ publish: | publish_build update_legacy_links
 appengine: publish
 	cd ~/hatch/gapp && ./appcfg.py update pelican-blog
 
-.PHONY: html update_legacy_links help clean regenerate serve devserver publish publish_build appengine
+.PHONY: html update_legacy_links help clean regenerate serve devserver stopserver publish publish_build appengine

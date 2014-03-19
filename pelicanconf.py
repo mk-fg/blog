@@ -19,22 +19,28 @@ ARTICLE_SAVE_AS = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
 
 FEED_MAX_ITEMS = 10
 FEED_DOMAIN = SITEURL
-FEED_ATOM = 'feeds/atom.xml'
-FEED_RSS = 'feeds/rss.xml'
-FEED_ALL_ATOM = FEED_ATOM
-FEED_ALL_RSS = FEED_RSS
+FEED_ALL_ATOM = 'feeds/atom.xml'
+FEED_ALL_RSS = 'feeds/rss.xml'
+TAG_FEED_ATOM = 'feeds/tag/%s.atom.xml'
+TAG_FEED_RSS = 'feeds/tag/%s.rss.xml'
 
 DISPLAY_PAGES_ON_MENU = False
 
 STATIC_PATHS = ['images', 'misc']
+# EXTRA_PATH_METADATA = {
+# 	'extra/robots.txt': {'path': 'robots.txt'} }
+# TEMPLATE_PAGES = {
+# 	'src/books.html': 'dest/books.html',
+# 	'src/resume.html': 'dest/resume.html',
+# 	'src/contact.html': 'dest/contact.html' }
 
 LINKS = [
 	('Homepage', 'fraggod.net') ]
 
 
 PLUGINS = [
-	'pelican.plugins.html_rst_directive',
-	'pelican.plugins.sitemap' ]
+	'plugins.html_rst_directive',
+	'plugins.sitemap' ]
 
 SITEMAP = dict(
 	format='xml',
