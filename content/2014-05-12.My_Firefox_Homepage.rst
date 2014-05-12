@@ -1,0 +1,55 @@
+My Firefox Homepage
+###################
+
+:date: 2014-05-12 13:14
+:tags: desktop, web, python, coffeescript, vis
+
+
+Wanted to have some sort of "homepage with my fav stuff, arranged as I want to"
+in firefox for a while, and finally got resolve to do something about it - just
+finished a (first version of) script to generate the thing -
+`firefox-homepage-generator`_.
+
+Default "grid of page screenshots" never worked for me, and while there are
+`other projects`_ that do other layouts for different stuff, they just aren't
+flexible enough to do whatever horrible thing I want.
+
+In this particular case, I wanted to experiment with chaotic tag cloud of
+bookmarks (so they won't ever be in the same place), relations graph for these
+tags and random picks for "links to read" from backlog.
+
+Result is a dynamic `d3`_ + `d3.layout.cloud`_ (`interactive example of this
+layout`_) page without much style:
+
+.. html::
+
+	<a href="|filename|images/ff_home_cloud.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/ff_home_cloud.jpg"
+		title="My Weird Firefox Homepage"
+		alt="homepage screenshot">
+	</a>
+
+| "Mark of Chaos" button in the corner can fly/re-pack tags around.
+| Clicking tag shows bookmarks tagged as such and fades all other tags out in
+  proportion to how they're related to the clicked one (i.e. how many links
+  share the tag with others).
+
+Started using FF bookmarks again in a meaningful way only recently, so not much
+stuff there yet, but it does seem to help a lot, especially with `these handy
+awesome bar tricks`_.
+
+Not entirely sure how useful the cloud visualization or actually having a
+homepage would be, but it's a fun experiment and a nice place to collect any
+useful web-surfing-related stuff I might think of in the future.
+
+Repo link: `firefox-homepage-generator`_
+
+
+.. _firefox-homepage-generator: https://github.com/mk-fg/firefox-homepage-generator
+.. _other projects: https://github.com/mk-fg/firefox-homepage-generator#links
+.. _d3: http://d3js.org/
+.. _d3.layout.cloud: https://github.com/jasondavies/d3-cloud/
+.. _these handy awesome bar tricks: https://support.mozilla.org/en-US/kb/awesome-bar-find-your-bookmarks-history-and-tabs#w_changing-results-on-the-fly
+.. _interactive example of this layout: http://www.jasondavies.com/wordcloud/
