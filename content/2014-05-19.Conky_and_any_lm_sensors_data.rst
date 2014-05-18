@@ -1,0 +1,142 @@
+Displaying any lm_sensors data (temperature, fan speeds, voltage, etc) in conky
+###############################################################################
+
+:date: 2014-05-19 01:17
+:tags: hardware, desktop, monitoring, C, lua
+
+
+Conky_ sure has a ton of sensor-related hw-monitoring options_, but it still
+doesn't seem to be enough to represent even just the temperatures from this
+"sensors" output::
+
+  atk0110-acpi-0
+  Adapter: ACPI interface
+  Vcore Voltage:      +1.39 V  (min =  +0.80 V, max =  +1.60 V)
+  +3.3V Voltage:      +3.36 V  (min =  +2.97 V, max =  +3.63 V)
+  +5V Voltage:        +5.08 V  (min =  +4.50 V, max =  +5.50 V)
+  +12V Voltage:      +12.21 V  (min = +10.20 V, max = +13.80 V)
+  CPU Fan Speed:     2008 RPM  (min =  600 RPM, max = 7200 RPM)
+  Chassis Fan Speed:    0 RPM  (min =  600 RPM, max = 7200 RPM)
+  Power Fan Speed:      0 RPM  (min =  600 RPM, max = 7200 RPM)
+  CPU Temperature:    +42.0°C  (high = +60.0°C, crit = +95.0°C)
+  MB Temperature:     +43.0°C  (high = +45.0°C, crit = +75.0°C)
+
+  k10temp-pci-00c3
+  Adapter: PCI adapter
+  temp1:        +30.6°C  (high = +70.0°C)
+                         (crit = +90.0°C, hyst = +88.0°C)
+
+  radeon-pci-0400
+  Adapter: PCI adapter
+  temp1:        +51.0°C
+
+Given the summertime, and faulty noisy cooling fans, decided that it'd be nice
+to be able to have an idea about what kind of temperatures hw operates on under
+all sorts of routine tasks.
+
+Conky is extensible via lua, which - among other awesome things there are -
+allows to code caches for expensive operations (and not just repeat them every
+other second) and parse output of whatever tools efficiently (i.e. without
+forking five extra binaries plus perl).
+
+Output of "sensors" though not only is kinda expensive to get, but also hardly
+parseable, likely unstable, and tool doesn't seem to have any "machine data"
+option.
+
+`lm_sensors`_ includes a libsensors, which still doesn't seem possible to call
+from conky-lua directly (would need some kind of ffi), but easy to write the
+wrapper around - i.e. this `sens.c`_ 50-liner, to dump info in a useful way::
+
+  atk0110-0-0__in0_input 1.392000
+  atk0110-0-0__in0_min 0.800000
+  atk0110-0-0__in0_max 1.600000
+  atk0110-0-0__in1_input 3.360000
+  ...
+  atk0110-0-0__in3_max 13.800000
+  atk0110-0-0__fan1_input 2002.000000
+  atk0110-0-0__fan1_min 600.000000
+  atk0110-0-0__fan1_max 7200.000000
+  atk0110-0-0__fan2_input 0.000000
+  ...
+  atk0110-0-0__fan3_max 7200.000000
+  atk0110-0-0__temp1_input 42.000000
+  atk0110-0-0__temp1_max 60.000000
+  atk0110-0-0__temp1_crit 95.000000
+  atk0110-0-0__temp2_input 43.000000
+  atk0110-0-0__temp2_max 45.000000
+  atk0110-0-0__temp2_crit 75.000000
+  k10temp-0-c3__temp1_input 31.500000
+  k10temp-0-c3__temp1_max 70.000000
+  k10temp-0-c3__temp1_crit 90.000000
+  k10temp-0-c3__temp1_crit_hyst 88.000000
+  radeon-0-400__temp1_input 51.000000
+
+It's all lm_sensors seem to know about hw in a simple key-value form.
+
+Still not keen on running that on every conky tick, hence the lua cache::
+
+  sensors = {
+    values=nil,
+    cmd="sens",
+    ts_read_i=120, ts_read=0,
+  }
+
+  function conky_sens_read(name, precision)
+    local ts = os.time()
+    if os.difftime(ts, sensors.ts_read) > sensors.ts_read_i then
+      local sh = io.popen(sensors.cmd, 'r')
+      sensors.values = {}
+      for p in string.gmatch(sh:read('*a'), '(%S+ %S+)\n') do
+        local n = string.find(p, ' ')
+        sensors.values[string.sub(p, 0, n-1)] = string.sub(p, n)
+      end
+      sh:close()
+      sensors.ts_read = ts
+    end
+
+    if sensors.values[name] then
+      local fmt = string.format('%%.%sf', precision or 0)
+      return string.format(fmt, sensors.values[name])
+    end
+    return ''
+  end
+
+Which can run the actual "sens" command every 120s, which is perfectly fine with
+me, since I don't consider conky to be an "early warning" system, and more of an
+"have an idea of what's the norm here" one.
+
+Config-wise, it'd be just ``cpu temp: ${lua sens_read atk0110-0-0__temp1_input}C``,
+or a more fancy template version with a flashing warning and hidden for missing
+sensors::
+
+  template3 ${color lightgrey}${if_empty ${lua sens_read \2}}${else}\
+  ${if_match ${lua sens_read \2} > \3}${color red}\1: ${lua sens_read \2}C${blink !!!}\
+  ${else}\1: ${color}${lua sens_read \2}C${endif}${endif}
+
+It can then be used simply as ``${template3 cpu atk0110-0-0__temp1_input 60}``
+or ``${template3 gpu radeon-0-400__temp1_input 80}``, with 60 and 80 being
+manually-specified thresholds beyond which indicator turns red and has blinking
+"!!!" to get more attention.
+
+Overall result in my case is something like this:
+
+.. html::
+
+	<a href="|filename|images/conky_sensors.jpg">
+	<img
+		style="width: 429px;"
+		src="|filename|images/conky_sensors.jpg"
+		title="Conky sensors display"
+		alt="conky sensors display">
+	</a>
+
+sens.c (plus Makefile with ``gcc -Wall -lsensors`` for it) and conky my config
+where it's utilized can be all found in `de-setup repo on github`_ (or my local
+git, ofc).
+
+
+.. _Conky: http://conky.sourceforge.net/
+.. _options: http://conky.sourceforge.net/variables.html
+.. _lm_sensors: http://www.lm-sensors.org/
+.. _sens.c: https://github.com/mk-fg/de-setup/blob/master/conky/sens.c
+.. _de-setup repo on github: https://github.com/mk-fg/de-setup/tree/master/conky
