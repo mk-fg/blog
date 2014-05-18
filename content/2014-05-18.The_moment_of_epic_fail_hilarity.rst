@@ -1,0 +1,112 @@
+The moment of epic fail hilarity with hashes
+############################################
+
+:date: 2014-05-18 22:24
+:tags: epic, fail, encryption, vis, coffeescript
+
+
+Just had an epic moment wrt how to fail at kinda-basic math, which seem to be
+quite representative of how people fail wrt homebrew crypto code (and what
+everyone and their mom warn against).
+
+So, anyhow, on a d3_ vis, I wanted to get a pseudorandom colors for text blobs,
+but with reasonably same luminosity on `HSL scale`_ (Hue - Saturation -
+Luminosity/Lightness/Level), so that changing opacity on light/dark bg can be
+seen clearly as a change of L in the resulting color.
+
+There are text items like (literally, in this example) "thing1", "thing2",
+"thing3" - these should have all distinct and constant colors, ideally.
+
+So how do you pick H and S components in HSL from a text tag?
+Just use hash, right?
+
+| As JS doesn't have any hashes yet (WebCryptoAPI_ is in the works) and I don't
+  really need "crypto" here, just some str-to-num shuffler for color, decided
+  that I might as well just roll out simple one-liner non-crypto hash func
+  implementation.
+| There are plenty of those around, e.g. `this list`_.
+
+Didn't want much bias wrt which range of colors get picked, so there are these
+test results - link1_, link2_ - wrt how these functions work, e.g. performance
+and distribution of output values over uint32 range.
+
+Picked random "ok" one - `Ly hash`_, with fairly even output distribution,
+implemented as this::
+
+  hashLy_max = 4294967296 # uint32
+  hashLy = (str, seed=0) ->
+    for n in [0..(str.length-1)]
+      c = str.charCodeAt(n)
+      while c > 0
+        seed = ((seed * 1664525) + (c & 0xff) + 1013904223) % hashLy_max
+        c >>= 8
+    seed
+
+``c >>= 8`` line and internal loop here because JS has unicode strings, so it's
+a trivial (non-standard) encoding.
+
+But given any "thing1" string, I need two 0-255 values: H and S, not one
+0-(2^32-1).
+So let's map output to a 0-255 range and just call it twice::
+
+  hashLy_chain = (str, count=2, max=255) ->
+    [hash, hashes] = [0, []]
+    scale = d3.scale.linear()
+      .range([0, max]).domain([0, hashLy_max])
+    for n in [1..count]
+      hash = hashLy(str, hash)
+      hashes.push(scale(hash))
+    hashes
+
+| Note how to produce second hash output "hashLy" just gets called with "seed"
+  value equal to the first hash - essentially ``hash(hash(value) || value)``.
+| People do that with md5, sha*, and their ilk all the time, right?
+
+Getting the values from this func, noticed that they look kinda non-random at
+all, which is not what I came to expect from hash functions, quite used to
+dealing crypto hashes, which are really easy to get in any lang but JS.
+
+So, sure, given that I'm playing around with d3 anyway, let's just plot the
+outputs:
+
+.. html::
+
+	<a href="|filename|images/predictable_hash.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/predictable_hash.jpg"
+		title="Non-crypto Ly hash outputs"
+		alt="Ly hash outputs">
+	</a>
+
+"Wat?... Oh, right, makes sense."
+
+| Especially with sequential items, it's hilarious how non-random, and even
+  constant the output there is.
+| And it totally makes sense, of course - it's just a "k1*x + x + k2" function.
+
+It's meant for hash tables, where seq-in/seq-out is fine, and the results in
+"chain(3)[0]" and "chain(3)[1]" calls are so close on 0-255 that they map to the
+same int value.
+
+Plus, of course, the results are anything but "random-looking", even for
+non-sequential strings of ``d3.scale.category20()`` range.
+
+Lession learned - know what you're dealing with, be super-careful rolling your
+own math from primitives you don't really understand, stop and think about wth
+you're doing for a second - don't just rely on "intuition" (associated with e.g.
+"hash" word).
+
+Now I totally get how people start with AES and SHA1 funcs, mix them into their
+own crypto protocol and somehow get something analogous to ROT13_ (or even
+double-ROT13, for extra hilarity) as a result.
+
+
+.. _d3: http://d3js.org/
+.. _HSL scale: https://en.wikipedia.org/wiki/HSL_and_HSV
+.. _WebCryptoAPI: http://www.w3.org/TR/WebCryptoAPI/
+.. _this list: http://vak.ru/doku.php/proj/hash/sources
+.. _link1: http://vak.ru/doku.php/proj/hash/efficiency-en
+.. _link2: http://habrahabr.ru/post/219139/
+.. _Ly hash: http://vak.ru/doku.php/proj/hash/sources#ly_hash_function
+.. _ROT13: https://en.wikipedia.org/wiki/ROT13
