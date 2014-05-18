@@ -130,9 +130,9 @@ Overall result in my case is something like this:
 		alt="conky sensors display">
 	</a>
 
-sens.c (plus Makefile with ``gcc -Wall -lsensors`` for it) and conky my config
-where it's utilized can be all found in `de-setup repo on github`_ (or my local
-git, ofc).
+sens.c (plus Makefile with ``gcc -Wall -lsensors`` for it) and my conky config
+where it's utilized can be all found in `de-setup repo on github`_ (or my git
+mirror, ofc).
 
 
 .. _Conky: http://conky.sourceforge.net/
