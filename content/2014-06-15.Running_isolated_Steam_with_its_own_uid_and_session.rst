@@ -1,0 +1,206 @@
+Running isolated Steam instance with its own UID and session
+############################################################
+
+:date: 2014-06-15 18:19
+:tags: desktop, games, systemd, unix
+
+
+| Finally got around to installing Steam_ platform to a desktop linux machine.
+| Been using Win7 instance here for games before, but as another fan in my
+  laptop died, have been too lazy to reboot into dedicated games-os here.
+
+Given that Steam is a closed-source proprietary DRM platform for mass software
+distribution, it seem to be either an ideal malware spread vector or just a
+recipie for disaster, so of course not keen on giving it any access in a
+non-dedicated os.
+
+| I also feel a bit guilty on giving the thing any extra PR, as it's the worst
+  kind of always-on DRM crap in principle, and already pretty much monopolized
+  PC Gaming market.
+| These days even many game critics push for filtering and essentially abuse of
+  that immense leverage - not a good sign at all.
+| To its credit, of course, Steam is nice and convenient to use, as such things
+  (e.g. google, fb, droids, apple, etc) tend to be.
+
+----------
+
+So, isolation:
+
+* To avoid having Steam and any games anywhere near $HOME, giving it separate
+  UID is a good way to go.
+
+* That should also allow for it to run in a separate desktop session - i.e. have
+  its own cgroup, to easily contain, control and set limits for games::
+
+    % loginctl user-status steam
+    steam (1001)
+      Since: Sun 2014-06-15 18:40:34 YEKT; 31s ago
+      State: active
+      Sessions: *7
+        Unit: user-1001.slice
+              └─session-7.scope
+                ├─7821 sshd: steam [priv]
+                ├─7829 sshd: steam@notty
+                ├─7830 -zsh
+                ├─7831 bash /usr/bin/steam
+                ├─7841 bash /home/steam/.local/share/Steam/steam.sh
+                ├─7842 tee /tmp/dumps/steam_stdout.txt
+                ├─7917 /home/steam/.local/share/Steam/ubuntu12_32/steam
+                ├─7942 dbus-launch --autolaunch=e52019f6d7b9427697a152348e9f84ad ...
+                └─7943 /usr/bin/dbus-daemon --fork --print-pid 5 ...
+
+* AppArmor_ should allow to further isolate processes from having any access
+  beyond what's absolutely necessary for them to run, warn when these try to do
+  strange things and allow to just restrict these from doing outright stupid
+  things.
+
+* Given separate UID and cgroup, network access from all Steam apps can be
+  easily controlled via e.g. iptables, to avoid Steam and games scanning and
+  abusing other things in LAN, for example.
+
+----------
+
+Creating steam user should be as simple as ``useradd steam``, but then switching
+to that UID from within a running DE should still allow it to access same X
+server and start systemd session for it, plus not have any extra env,
+permissions, dbus access, fd's and such from the main session.
+
+| By far the easiest way to do that I've found is to just ``ssh
+  steam@localhost``, putting proper pubkey into ~steam/.ssh/authorized_keys
+  first, of course.
+| That should ensure that nothing leaks from DE but whatever ssh passes, and
+  it's rather paranoid security-oriented tool, so can be trusted with that .
+
+| Steam comes with a bootstrap script (e.g. /usr/bin/steam) to install itself,
+  which also starts the thing when it's installed, so `Steam AppArmor profile
+  (github link)`_ is for that.
+| It should allow to both bootstrap and install stuff as well as run it, yet
+  don't allow steam to poke too much into other shared dirs or processes.
+
+To allow access to X, xhost or ~/.Xauthority cookie can be used along with some
+extra env in e.g. ~/.zshrc::
+
+  export DISPLAY=':1.0'
+
+In similar to ssh fashion, I've used pulseaudio network streaming to main DE
+sound daemon on localhost for sound (also in ~/.zshrc)::
+
+  export PULSE_SERVER='{e52019f6d7b9427697a152348e9f84ad}tcp6:malediction:4713'
+  export PULSE_COOKIE="$HOME"/.pulse-cookie
+
+(I have pulse network streaming setup anyway, for sharing sound from desktop to
+laptop - to e.g. play videos on a big screen there yet hear sound from laptop's
+headphones)
+
+Running Steam will also start its own dbus session (maybe it's pulse client lib
+doing that, didn't check), but it doesn't seem to be used for anything, so there
+seem to be no need to share it with main DE.
+
+----------
+
+That should allow to start Steam after ssh'ing to steam@localhost, but process
+can be made much easier (and more foolproof) with e.g. ~/bin/steam as::
+
+  #!/bin/bash
+
+  cmd=$1
+  shift
+
+  steam_wait_exit() {
+    for n in {0..10}; do
+      pgrep -U steam -x steam >/dev/null || return 0
+      sleep 0.1
+    done
+    return 1
+  }
+
+  case "$cmd" in
+    '')
+      ssh steam@localhost <<EOF
+  source .zshrc
+  exec steam "$@"
+  EOF
+      loginctl user-status steam ;;
+
+    s*) loginctl user-status steam ;;
+
+    k*)
+      steam_exited=
+      pgrep -U steam -x steam >/dev/null
+      [[ $? -ne 0 ]] && steam_exited=t
+      [[ -z "$steam_exited" ]] && {
+        ssh steam@localhost <<EOF
+  source .zshrc
+  exec steam -shutdown
+  EOF
+        steam_wait_exit
+        [[ $? -eq 0 ]] && steam_exited=t
+      }
+      sudo loginctl kill-user steam
+      [[ -z "$steam_exited" ]] && {
+        steam_wait_exit || sudo loginctl -s KILL kill-user steam
+      } ;;
+
+    *) echo >&2 "Usage: $(basename "$0") [ status | kill ]"
+  esac
+
+Now just ``steam`` in the main DE will run the thing in its own $HOME.
+
+For further convenience, there's ``steam status`` and ``steam kill`` to easily
+monitor or shutdown running Steam session from the terminal.
+
+Note the complicated shutdown thing - Steam doesn't react to INT or TERM signals
+cleanly, passing these to the running games instead, and should be terminated
+via its own `cli option`_ (and the rest can then be killed-off too).
+
+----------
+
+With this setup, iptables rules for outgoing connections can use user-slice
+cgroup match (in 3.14 at least) or ``-m owner --uid-owner steam`` matches for
+socket owner uid.
+
+The only non-WAN things Steam connects to here are DNS servers and
+aforementioned pulseaudio socket on localhost, the rest can be safely
+firewalled.
+
+----------
+
+Finally, running KSP_ there on Exherbo_, I quickly discovered that sound libs
+and plugins - alsa and pulse - in ubuntu "runtime" steam bootstrap setups don't
+work well - either there's no sound or game fails to load at all.
+
+Easy fix is to copy the runtime it uses (32-bit one for me) and cleanup alien
+stuff from there for what's already present in the system, i.e.::
+
+  % cp -R .steam/bin32/steam-runtime my-runtime
+  % find my-runtime -type f\
+    \( -path '*asound*' -o -path '*alsa*' -o -path '*pulse*' \) -delete
+
+And then add something like this to ~steam/.zshrc::
+
+  steam() { STEAM_RUNTIME="$HOME"/my-runtime command steam "$@"; }
+
+That should keep all of the know-working Ubuntu libs that steam bootsrap gets
+away from the rest of the system (where stuff like Mono just isn't needed, and
+others will cause trouble) while allowing to remove any of them from the runtime
+to use same thing in the system.
+
+And yay - Kerbal Space Program seem to work here way faster than on Win7.
+
+.. html::
+
+	<a href="|filename|images/steam_ksp.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/steam_ksp.jpg"
+		title="Kerbal Space Program and Steam on Linux"
+		alt="KSP and Steam on Linux">
+	</a>
+
+
+.. _Steam: http://steampowered.com/
+.. _AppArmor: http://apparmor.net/
+.. _Steam AppArmor profile (github link): https://github.com/mk-fg/apparmor-profiles/blob/master/profiles/usr.bin.steam
+.. _cli option: https://developer.valvesoftware.com/wiki/Command_Line_Options#Steam_.28Windows.29
+.. _KSP: https://kerbalspaceprogram.com/
+.. _Exherbo: http://exherbo.org/
