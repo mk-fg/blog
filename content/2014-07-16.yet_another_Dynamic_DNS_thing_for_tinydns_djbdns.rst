@@ -1,0 +1,57 @@
+(yet another) Dynamic DNS thing for tinydns (djbdns)
+####################################################
+
+:date: 2014-07-16 04:49
+:tags: encryption, python, sysadmin, unix, systemd
+
+
+Tried to find any simple script to update tinydns_ (part of djbdns_) zones
+that'd be better than ``ssh dns_update@remote_host update.sh``, but failed -
+they all seem to be hacky php scripts, doomed to run behind httpds, send
+passwords in url, query random "myip" hosts or something like that.
+
+What I want instead is something that won't be making http, tls or ssh
+connections (and stirring all the crap behind these), but would rather just send
+udp or even icmp pings to remotes, which should be enough for update, given
+source IPs of these packets and some authentication payload.
+
+So yep, wrote my own scripts for that - `tinydns-dynamic-dns-updater project`_.
+
+Tool sends UDP packets with 100 bytes of "( key_id || timestamp ) ||
+`Ed25519_sig`_" from clients, authenticating and distinguishing these
+server-side by their signing keys ("key_id" there is to avoid iterating over
+them all, checking which matches signature).
+
+Server zone files can have "# dynamic: ts key1 key2 ..." comments before records
+(separated from static records after these by comments or empty lines), which
+says that any source IPs of packets with correct signatures (and more recent
+timestamps) will be recorded in A/AAAA records (depending on source AF) that
+follow instead of what's already there, leaving anything else in the file
+intact.
+
+Zone file only gets replaced if something is actually updated and it's possible
+to use dynamic IP for server as well, using dynamic hostname on client (which is
+resolved for each delayed packet).
+
+Lossy nature of UDP can be easily mitigated by passing e.g. "-n5" to the client
+script, so it'd send 5 packets (with exponential delays by default, configurable
+via --send-delay), plus just having the thing on fairly regular intervals in
+crontab.
+
+Putting server script into socket-activated systemd service file also makes all
+daemon-specific pains like using privileged ports (and most other
+security/access things), startup/daemonization, restarts, auto-suspend timeout
+and logging woes just go away, so there's --systemd flag for that too.
+
+Given how easy it is to run djbdns/tinydns instance, there really doesn't seem
+to be any compelling reason not to use your own dynamic dns stuff for every
+single machine or device that can run simple python scripts.
+
+Github link: `tinydns-dynamic-dns-updater`_
+
+
+.. _tinydns: http://tinydns.org/
+.. _djbdns: http://cr.yp.to/djbdns.html
+.. _tinydns-dynamic-dns-updater project: https://github.com/mk-fg/tinydns-dynamic-dns-updater/
+.. _Ed25519_sig: http://ed25519.cr.yp.to/
+.. _tinydns-dynamic-dns-updater: https://github.com/mk-fg/tinydns-dynamic-dns-updater/
