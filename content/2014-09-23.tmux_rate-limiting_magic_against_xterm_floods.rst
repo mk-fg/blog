@@ -1,0 +1,48 @@
+tmux rate-limiting magic against terminal spam/flood lock-ups
+#############################################################
+
+:date: 2014-09-23 23:43
+:tags: sysadmin, unix, rate-limiting
+
+
+Had the issue of spammy binary locking-up terminal for a long time, but never
+bothered to do something about it... until now.
+
+Happens with any terminal I've seen - just run something like this in the shell
+there::
+
+  for n in {1..500000}; do echo "$spam $n"; done
+
+| And for at least several seconds, terminal is totally unresponsive, no matter
+  how many `screen's`_ / `tmux'es`_ are running there.
+| It's usually faster to kill term window via WM and re-attach to whatever was
+  inside from a new one.
+
+xterm_ seem to be one of the most resistant \*terms to this, e.g. terminology_ -
+much less so, which I guess just means that it's more fancy and hence slower to
+draw millions of output lines.
+
+Anyhow, tmuxrc magic::
+
+  set -g c0-change-trigger 150
+  set -g c0-change-interval 100
+
+"man tmux" says that 250/100 are defaults, but it doesn't seem to be true, as
+just setting these "defaults" explicitly here fixes the issue, which exists with
+the default configuration.
+
+Fix just limits rate of tmux output to basically 150 newlines (which is like
+twice my terminal height anyway) per 100 ms, so xterm won't get overflown with
+"rendering megs of text" backlog, remaining apparently-unresponsive (to any
+other output) for a while.
+
+Since I always run tmux as a top-level multiplexer in xterm, totally solved the
+annoyance for me.
+Just wish I've done that much sooner - would've saved me a lot of time and
+probably some rage-burned neurons.
+
+
+.. _screen's: https://www.gnu.org/software/screen/
+.. _tmux'es: http://tmux.sourceforge.net/
+.. _xterm: http://invisible-island.net/xterm/
+.. _terminology: http://www.enlightenment.org/p.php?p=about/terminology
