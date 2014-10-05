@@ -1,0 +1,128 @@
+Simple aufs setup for Arch Linux ARM and boards like RPi, BBB or Cubie
+######################################################################
+
+:date: 2014-10-05 14:17
+:tags: sysadmin, unix, fs, systemd
+
+
+Experimenting with all kinds of arm boards lately (nyms above stand for
+Raspberry Pi, Beaglebone Black and Cubieboard), I can't help but feel a bit
+sorry of microsd cards in each one of them.
+
+These are even worse for non-bulk writes than SSD, having less erase cycles plus
+larger blocks, and yet when used for all fs needs of the board, even typing "ls"
+into shell will usually emit a write (unless shell doesn't keep history, which
+sucks).
+
+Great explaination of how they work `can be found on LWN`_ (as usual).
+
+Easy and relatively hassle-free way to fix the issue is to use aufs, but as
+doing it for the whole rootfs requires initramfs (which is not needed here
+otherwise), it's a lot easier to only use it for commonly-writable parts -
+i.e. /var and /home in most cases.
+
+Home for "root" user is usually /root, so to make it aufs material as well, it's
+better to move that to /home (which probably shouldn't be a separate fs on these
+devices), leaving /root as a symlink to that.
+
+It seem to be impossible to do when logged-in as /root (mv will error with
+EBUSY), but trivial from any other machine::
+
+	mount /dev/sdb2 /mnt # mount microsd
+	cd /mnt
+	mv root home/
+	ln -s home/root
+	cd
+	umount /mnt
+
+As aufs2 is already built into Arch Linux ARM kernel, only thing that's left is
+to add early-boot systemd unit for mounting it,
+e.g. ``/etc/systemd/system/aufs.service``::
+
+	[Unit]
+	DefaultDependencies=false
+
+	[Install]
+	WantedBy=local-fs-pre.target
+
+	[Service]
+	Type=oneshot
+	RemainAfterExit=true
+
+	# Remount /home and /var as aufs
+	ExecStart=/bin/mount -t tmpfs tmpfs /aufs/rw
+	ExecStart=/bin/mkdir -p -m0755 /aufs/rw/var /aufs/rw/home
+	ExecStart=/bin/mount -t aufs -o br:/aufs/rw/var=rw:/var=ro none /var
+	ExecStart=/bin/mount -t aufs -o br:/aufs/rw/home=rw:/home=ro none /home
+
+	# Mount "pure" root to /aufs/ro for syncing changes
+	ExecStart=/bin/mount --bind / /aufs/ro
+	ExecStart=/bin/mount --make-private /aufs/ro
+
+And then create the dirs used there and enable unit::
+
+	mkdir -p /aufs/{rw,ro}
+	systemctl enable aufs
+
+Now, upon rebooting the board, you'll get aufs mounts for /home and /var, making
+all the writes there go to respective /aufs/rw dirs on tmpfs while allowing to
+read all the contents from underlying rootfs.
+
+To make sure systemd doesn't waste extra tmpfs space thinking it can sync logs
+to ``/var/log/journal``, I'd also suggest to do this (before rebooting with aufs
+mounts)::
+
+	rm -rf /var/log/journal
+	ln -s /dev/null /var/log/journal
+
+Can also be done via journald.conf with ``Storage=volatile``.
+
+| One obvious caveat with aufs is, of course, how to deal with things that do
+  expect to have permanent storage in /var - examples can be a pacman (Arch
+  package manager) on system updates, postfix or any db.
+| For stock Arch Linux ARM though, it's only pacman on manual updates.
+
+And depending on the app and how "ok" can loss of this data might be, app dir
+in /var (e.g. /var/lib/pacman) can be either moved + symlinked to /srv or synced
+before shutdown or after it's done with writing (for manual oneshot apps like
+pacman).
+
+For moving stuff back to permanent fs, aubrsync_ from aufs2-util.git can be
+used like this::
+
+	aubrsync move /var/ /aufs/rw/var/ /aufs/ro/var/
+
+As even pulling that from shell history can be a bit tedious, I've made a
+simplier ad-hoc wrapper - `aufs_sync`_ - that can be used (with mountpoints
+similar to presented above) like this::
+
+	# aufs_sync
+	Usage: aufs_sync { copy | move | check } [module]
+	Example (flushes /var): aufs_sync move var
+
+	# aufs_sync check
+	/aufs/rw
+	/aufs/rw/home
+	/aufs/rw/home/root
+	/aufs/rw/home/root/.histfile
+	/aufs/rw/home/.wh..wh.orph
+	/aufs/rw/home/.wh..wh.plnk
+	/aufs/rw/home/.wh..wh.aufs
+	/aufs/rw/var
+	/aufs/rw/var/.wh..wh.orph
+	/aufs/rw/var/.wh..wh.plnk
+	/aufs/rw/var/.wh..wh.aufs
+	(just does "find /aufs/rw")
+
+	# aufs_sync move
+	(does "aubrsync move" for all dirs in /aufs/rw)
+
+Just be sure to check if any new apps might write something important there
+(right after installing these) and do symlinks (to something like /srv) for
+their dirs, as even having "aufs_sync copy" on shutdown definitely won't prevent
+data loss for these on e.g. sudden power blackout or any crashes.
+
+
+.. _can be found on LWN: https://lwn.net/Articles/428584/
+.. _aubrsync: http://aufs.sourceforge.net/aufs2/brsync/README.txt
+.. _aufs_sync: https://github.com/mk-fg/fgtk/#aufs
