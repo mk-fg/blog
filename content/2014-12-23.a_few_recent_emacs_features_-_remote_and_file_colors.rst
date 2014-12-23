@@ -1,0 +1,225 @@
+A few recent emacs features - remote and file colors
+####################################################
+
+:date: 2014-12-23 17:32
+:tags: desktop, lisp, tools
+
+
+I've been using emacs for a while now, and always on a lookout for a features
+that'd be nice to have there.
+Accumulated quite a number of these in my `emacs-setup repo`_ as a result.
+
+| Most of these features start from ideas in other editors or tools (e.g. music
+  players, irc clients, etc - emacs seem to be best for a lot of stuff), or a
+  simplistic proof-of-concept implementation of something similar.
+| I usually add these to my emacs due to sheer fun of coding in lisps, compared
+  to pretty much any other lang family I know of.
+
+Recently added two of these, and wanted to share/log the ideas here, in case
+someone else might find these useful.
+
+
+"Remote" based on emacsclient tool
+``````````````````````````````````
+
+As I use laptop and desktop machines for coding and procrastination
+interchangeably, can have e.g. irc client (ERC_ - seriously the best irc client
+I've seen by far) running on either of these.
+
+But even with ZNC_ bouncer setup (and easy `log-reading tools for it`_), it's
+still a lot of hassle to connect to same irc from another machiine and catch-up
+on chan history there.
+
+Or sometimes there are unsaved buffer changes, or whatever other stuff
+happening, or just stuff you want to do in a remote emacs instance, which would
+be easy if you could just go turn on the monitor, shrug-off screen blanking,
+sometimes disable screen-lock, then switch to emacs and press a few hotkeys
+there... yeah, it doesn't look that easy even when I'm at home and close to the
+thing.
+
+emacs has "emacsclient" thing, that allows you to eval whatever elisp code on a
+remote emacs instance, but it's impossible to use for such simple tasks without
+some convenient wrappers.
+
+And these remote invocation wrappers is what this idea is all about.
+
+Consider terminal dump below, running in an ssh or over tcp to remote emacs
+server (and I'd strongly suggest having ``(server-start)`` right in ~/.emacs,
+though maybe not on tcp socket for security reasons)::
+
+  % ece b
+  * 2014-12-23.a_few_recent_emacs_features_-_remote_and_file_colors.rst
+    fg_remote.el
+    rpc.py
+  * fg_erc.el
+    utils.py
+    #twitter_bitlbee
+    #blazer
+    #exherbo
+    ...
+
+  % ece b remote
+  *ERROR*: Failed to uniquely match buffer by `remote', matches:
+  2014-12-23.a_few_recent_emacs_features_-_remote_and_file_colors.rst,
+  fg_remote.el
+
+  ### whoops... lemme try again
+
+  % ece b fg_rem
+  ...(contents of the buffer, matched by unique name part)...
+
+  % ece erc
+  004 #twitter_bitlbee
+  004 #blazer
+  002 #bordercamp
+
+  ### Showing last (unchecked) irc activity, same as erc-track-mode does (but nicer)
+
+  % ece erc twitter | t
+  [13:36:45]<fijall> hint - you can use gc.garbage in Python to store any sort of ...
+  [14:57:59]<veorq> Going shopping downtown. Pray for me.
+  [15:48:59]<mitsuhiko> I like how if you google for "London Bridge" you get ...
+  [17:15:15]<simonw> TIL the Devonshire word "frawsy" (or is it "frawzy"?) - a ...
+  [17:17:04] *** -------------------- ***
+  [17:24:01]<veorq> RT @collinrm: Any opinions on VeraCrypt?
+  [17:33:31]<veorq> insightful comment by @jmgosney about the Ars Technica hack ...
+  [17:35:36]<veorq> .@jmgosney as you must know "iterating" a hash is in theory ...
+  [17:51:50]<veorq> woops #31c3 via @joernchen ...
+  ~erc/#twitter_bitlbee%
+
+  ### "t" above is an alias for "tail" that I use in all shells, lines snipped jic
+
+  % ece h
+  Available commands:
+    buffer (aliases: b, buff)
+    buffer-names
+    erc
+    erc-mark
+    get-socket-type
+    help (aliases: h, rtfm, wat)
+    log
+    switch-sockets
+
+  % ece h erc-mark
+  (fg-remote-erc-mark PATTERN)
+
+  Put /mark to a specified ERC chan and reset its activity track.
+
+  ### Whole "help" thing is auto-generated, see "fg-remote-help" in fg_remote.el
+
+And so on - anything is trivial to implement as elisp few-liner.
+For instance, missing "buffer-save" command will be::
+
+  (defun fg-remote-buffer-save (pattern)
+    "Saves specified bufffer, matched via `fg-get-useful-buffer'."
+    (with-current-buffer (fg-get-useful-buffer pattern) (save-buffer)))
+  (defalias 'fg-remote-bs 'fg-remote-buffer-save)
+
+| Both "bufffer-save" command and its "bs" alias will instantly appear in "help"
+  and be available for calling via emacs client.
+| Hell, you can "implement" this stuff from terminal and eval on a remote emacs
+  (i.e. just pass code above to ``emacsclient -e``), extending its API in an
+  ad-hoc fashion right there.
+
+"ece" script above is a thin wrapper around "emacsclient" to avoid typing that
+long binary name and "-e" flag with a set of parentheses every time, can be
+found in the root of `emacs-setup repo`_.
+
+| So it's easier to procrastinate in bed whole morning with a laptop than ever.
+| Yup, that's the *real* point of the whole thing.
+
+
+Unique per-file buffer colors
+`````````````````````````````
+
+Stumbled upon this idea in a `deliberate-software blog entry`_ recently.
+
+There, author suggests making static per-code-project colors, but I thought -
+why not have slight (and automatic) per-file-path color alterations for buffer
+background?
+
+Doing that makes file buffers (or any non-file ones too) recognizable, i.e. you
+don't need to look at the path or code inside anymore to instantly know that
+it's that exact file you want (or don't want) to edit - eye/brain picks it up
+automatically.
+
+emacs' color.el already has all the cool stuff for colors - tools for conversion
+to/from `L*a*b* colorspace`_ (humane "perceptual" numbers), `CIEDE2000 color
+diffs`_ (`JUST LOOK AT THIS THING`_), and so on - easy to use these for the
+task.
+
+Result is "fg-color-tweak" function that I now use for slight changes to buffer
+bg, based on md5 hash of the file path and reliably-contrast irc nicknames
+(based also on the hash, used way worse and unreliable "simple" thing for this
+in the past)::
+
+  (fg-color-tweak COLOR &optional SEED MIN-SHIFT MAX-SHIFT (CLAMP-RGB-AFTER 20)
+    (LAB-RANGES ...))
+
+  Adjust COLOR based on (md5 of-) SEED and MIN-SHIFT / MAX-SHIFT lists.
+
+  COLOR can be provided as a three-value (0-1 float)
+  R G B list, or a string suitable for `color-name-to-rgb'.
+
+  MIN-SHIFT / MAX-SHIFT can be:
+   * three-value list (numbers) of min/max offset on L*a*b* in either direction
+   * one number - min/max cie-de2000 distance
+   * four-value list of offsets and distance, combining both options above
+   * nil for no-limit
+
+  SEED can be number, string or nil.
+  Empty string or nil passed as SEED will return the original color.
+
+  CLAMP-RGB-AFTER defines how many attempts to make in picking
+  L*a*b* color with random offset that translates to non-imaginary sRGB color.
+  When that number is reached, last color will be `color-clamp'ed to fit into sRGB.
+
+  Returns color plus/minus offset as a hex string.
+  Resulting color offset should be uniformly distributed between min/max shift limits.
+
+It's a bit complicated under the hood, parsing all the options and limits,
+making sure resulting color is not "imaginary" L*a*b* one and converts to RGB
+without clamping (if possible), while maintaining requested min/max distances,
+doing several hashing rounds if necessary, with fallbacks... etc.
+
+Actual end-result is simple though - deterministic and instantly-recognizable
+color-coding for anything you can think of - just pass the attribute to base
+coding on and desired min/max contrast levels, get back the hex color to use,
+apply it.
+
+| Should you use something like that, I highly suggest taking a moment to look
+  at L*a*b* and HSL color spaces, to understand how colors can be easily tweaked
+  along certain parameters.
+| For example, passing '(0 a b) as min/max-shift to the function above will
+  produce color variants with the same "lightness", which is super-useful to
+  control, making sure you won't ever get out-of-whack colors for
+  e.g. light/dark backgrounds.
+
+
+To summarize...
+```````````````
+
+Coding lispy stuff is super-fun, just for the sake of it ;)
+
+| Actually, speaking of fun, I can't recommend installing magnars' `s.el`_ and
+  `dash.el`_ **right now** highly enough, unless you have these already.
+| They make coding elisp stuff so much more fun and trivial, to a degree that'd
+  be hard to describe, so please at least try coding somethig with these.
+
+All the stuff mentioned above is in (also linked here already) `emacs-setup repo`_.
+
+Cheers!
+
+
+.. _emacs-setup repo: https://github.com/mk-fg/emacs-setup/
+.. _ERC: https://en.wikipedia.org/wiki/ERC_%28software%29
+.. _ZNC: http://znc.in/
+.. _log-reading tools for it: https://github.com/mk-fg/fgtk/#znc-log-reader
+
+.. _deliberate-software blog entry: http://deliberate-software.com/emacs-project-tip/
+.. _L*a*b* colorspace: https://en.wikipedia.org/wiki/Lab_color_space
+.. _CIEDE2000 color diffs: https://en.wikipedia.org/wiki/Color_difference#CIEDE2000
+.. _JUST LOOK AT THIS THING: http://git.savannah.gnu.org/cgit/emacs.git/tree/lisp/color.el?id=ba3189039adc#n267
+
+.. _s.el: https://github.com/magnars/s.el
+.. _dash.el: https://github.com/magnars/s.el
