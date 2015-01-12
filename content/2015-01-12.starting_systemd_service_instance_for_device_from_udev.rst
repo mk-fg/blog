@@ -1,0 +1,64 @@
+Starting systemd service instance for device from udev
+######################################################
+
+:date: 2015-01-12 17:38
+:tags: systemd, udev, hardware, sysadmin, unix
+
+
+Needed to implement a thing that would react on USB Flash Drive inserted (into
+autonomous BBB device) - to get device name, mount fs there, rsync stuff to it,
+unmount.
+
+To avoid whatever concurrency issues (i.e. multiple things screwing with device
+in parallel), proper error logging and other startup things, most obvious thing
+is to wrap the script in a systemd oneshot service.
+
+Only non-immediately-obvious problem for me here was how to pass device to such
+service properly.
+
+With a bit of digging through google results (and even finding one post here
+somehow among them), eventually found "`Pairing udev's SYSTEMD_WANTS and
+systemd's templated units`_" resolved thread, where what seem to be current-best
+approach is specified.
+
+Adapting it for my case and pairing with `generic patterns for
+device-instantiated services`_, resulted in the following configuration.
+
+99-sync-sensor-logs.rules::
+
+	SUBSYSTEM=="block", ACTION=="add", ENV{ID_TYPE}="disk", ENV{DEVTYPE}=="partition",\
+	 PROGRAM="/usr/bin/systemd-escape -p --template=sync-sensor-logs@.service $env{DEVNAME}",\
+	 ENV{SYSTEMD_WANTS}+="%c"
+
+sync-sensor-logs@.service::
+
+	[Unit]
+	BindTo=%i.device
+	After=%i.device
+
+	[Service]
+	Type=oneshot
+	TimeoutStartSec=300
+	ExecStart=/usr/local/sbin/sync-sensor-logs /%I
+
+| This makes things stop if it works for too long or if device vanishes (due to
+  BindTo=) and properly delays script start until device is ready.
+| "sync-sensor-logs" script at the end gets passed original unescaped device
+  name as an argument.
+| Easy to apply all the `systemd.exec(5)`_ and `systemd.service(5)`_ parameters
+  on top of this.
+
+Does not need things like systemctl invocation or manual systemd escaping
+re-implementation either, though running "systemd-escape" still seem to be
+necessary evil there.
+
+systemd-less alternative seem to be having a script that does per-device flock,
+timeout logic and a lot more checks for whether device is ready and/or still
+there, so this approach looks way saner and clearer, with a caveat that one
+should probably be familiar with all these systemd features.
+
+
+.. _Pairing udev's SYSTEMD_WANTS and systemd's templated units: http://thread.gmane.org/gmane.comp.sysutils.systemd.devel/21560/focus=21824
+.. _generic patterns for device-instantiated services: http://0pointer.de/blog/projects/instances.html
+.. _systemd.exec(5): http://www.freedesktop.org/software/systemd/man/systemd.exec.html
+.. _systemd.service(5): http://www.freedesktop.org/software/systemd/man/systemd.service.html
