@@ -1,0 +1,136 @@
+Sample code for using ST7032I I2C/SMBus driver in Midas LCD with python
+#######################################################################
+
+:date: 2015-01-28 14:19
+:tags: hardware, python
+
+
+| There seem to be a surprising lack of python code on the net for this particular
+  device, except for `this nice pi-ras blog post`_, in japanese.
+| So, to give google some more food and a bit of commentary in english to that
+  post - here goes.
+
+I'm using Midas MCCOG21605C6W-SPTLYI 2x16 chars LCD panel, connected to 5V VDD
+and 3.3V BeagleBone Black I2C bus:
+
+.. html::
+
+	<a href="|filename|images/st7032i_midas_i2c_lcd.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/st7032i_midas_i2c_lcd.jpg"
+		title="Simple digital clock code on LCD over ST7032I I2C (clicky!)"
+		alt="simple digital clock on lcd">
+	</a>
+
+
+Code for the above LCD clock "app" (python 2.7)::
+
+	import smbus, time
+
+
+	class ST7032I(object):
+
+		def __init__(self, addr, i2c_chan, **init_kws):
+			self.addr, self.bus = addr, smbus.SMBus(i2c_chan)
+			self.init(**init_kws)
+
+		def _write(self, data, cmd=0, delay=None):
+			self.bus.write_i2c_block_data(self.addr, cmd, list(data))
+			if delay: time.sleep(delay)
+
+		def init(self, contrast=0x10, icon=False, booster=False):
+			assert contrast < 0x40 # 6 bits only, probably not used on most lcds
+			pic_high = 0b0111 << 4 | (contrast & 0x0f) # c3 c2 c1 c0
+			pic_low = ( 0b0101 << 4 |
+				icon << 3 | booster << 2 | ((contrast >> 4) & 0x03) ) # c5 c4
+			self._write([0x38, 0x39, 0x14, pic_high, pic_low, 0x6c], delay=0.01)
+			self._write([0x0c, 0x01, 0x06], delay=0.01)
+
+		def move(self, row=0, col=0):
+			assert 0 <= row <= 1 and 0 <= col <= 15, [row, col]
+			self._write([0b1000 << 4 | (0x40 * row + col)])
+
+		def addstr(self, chars, pos=None):
+			if pos is not None:
+				row, col = (pos, 0) if isinstance(pos, int) else pos
+				self.move(row, col)
+			self._write(map(ord, chars), cmd=0x40)
+
+		def clear(self):
+			self._write([0x01])
+
+
+	if __name__ == '__main__':
+		lcd = ST7032I(0x3e, 2)
+		while True:
+			ts_tuple = time.localtime()
+			lcd.clear()
+			lcd.addstr(time.strftime('date: %y-%m-%d', ts_tuple), 0)
+			lcd.addstr(time.strftime('time: %H:%M:%S', ts_tuple), 1)
+			time.sleep(1)
+
+
+| Note the constants in the "init" function - these are all from
+  "INITIALIZE(5V)" sequence on page-8 of the `Midas LCD datasheet`_ , setting up
+  things like voltage follower circuit, OSC frequency, contrast (not used on my
+  panel), modes and such.
+| Actual reference on what all these instructions do and how they're decoded can
+  be found on page-20 there.
+
+Even with the same exact display, but connected to 3.3V, these numbers should
+probably be a bit different - check the datasheet (e.g. page-7 there).
+
+Also note the "addr" and "i2c_chan" values (0x3E and 2) - these should be taken
+from the board itself.
+
+| "i2c_chan" is the number of the device (X) in /dev/i2c-X, of which there seem
+  to be usually more than one on ARM boards like RPi or BBB.
+| For instance, Beaglebone Black has three I2C buses, two of which are available
+  on the expansion headers (with proper dtbs loaded).
+| See `this post on Fortune Datko blog`_ and/or `this one on minix-i2c blog`_
+  for one way to tell reliably which device in /dev corresponds to which
+  hardware bus and pin numbers.
+
+And the address is easy to get from the datasheet (lcd I have uses only one
+static slave address), or detect via ``i2cdetect -r -y <i2c_chan>``, e.g.::
+
+	# i2cdetect -r -y 2
+	     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+	00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+	10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+	20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+	30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 3e --
+	40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+	50: -- -- -- -- UU UU UU UU -- -- -- -- -- -- -- --
+	60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --
+	70: -- -- -- -- -- -- -- --
+
+Here I have DS1307 RTC on 0x68 and an LCD panel on 0x3E address (again, also
+specified in the datasheet).
+
+| Both "i2cdetect" command-line tool and python "smbus" module are part of
+  i2c-tools project, which is `developed under lm-sensors umbrella`_.
+| On Arch or source-based distros these all come with "i2c-tools" package, but
+  on e.g. debian, python module seem to be split into "python-smbus".
+
+Plugging these bus number and the address for your particular hardware into the
+script above and maybe adjusting the values there for your lcd panel modes
+should make the clock show up and tick every second.
+
+In general, upon seeing tutorial on some random blog (like this one), please
+take it with a grain of salt, because it's highly likely that it was written by
+a fairly incompetent person (like me), since engineers who deal with these
+things every day don't see above steps as any kind of accomplishment - it's a
+boring no-brainer routine for them, and they aren't likely to even think about
+it, much less write tutorials on it (all trivial and obvious, after all).
+
+Nevertheless, hope this post might be useful to someone as a pointer on where to
+look to get such device started, if nothing else.
+
+
+.. _this nice pi-ras blog post: http://pi-ras.blogspot.ru/2013/11/raspberry-pi-i2c.html
+.. _Midas LCD datasheet: http://www.farnell.com/datasheets/1669634.pdf
+.. _this post on Fortune Datko blog: http://datko.net/2013/11/03/bbb_i2c/
+.. _this one on minix-i2c blog: http://minix-i2c.blogspot.ru/2013/07/using-i2c-tools-with-angstrom-linux-on.html
+.. _developed under lm-sensors umbrella: http://www.lm-sensors.org/wiki/I2CTools
