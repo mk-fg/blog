@@ -1,0 +1,129 @@
+Adding hotkey for any addon button in Firefox - one unified way
+###############################################################
+
+:date: 2015-03-11 21:02
+:tags: coffeescript, desktop, web
+
+
+Most Firefox addons add a toolbar button that does something when clicked, or
+you can add such button by dragging it via Customize Firefox interface.
+
+For example, I have a button for (an awesome) `Column Reader extension`_ on the
+right of FF menu bar (which I have always-visible):
+
+.. html::
+
+  <img
+    src="|filename|images/ff_extension_button_target.jpg"
+    title="FF Extension button that I want clicked"
+    alt="ff extension button">
+
+But as far as I can tell, most simple extensions don't bother with some custom
+hotkey-adding interface, so there seem to be no obvious way to "click" that
+button by pressing a hotkey.
+
+In case of Column Reader, this is more important because pressing its button is
+akin to "inspect element" in Firebug or FF Developer Tools - allows to pick any
+box of text on the page, so would be especially nice to call via hotkey + click,
+(as you'd do with Ctrl+Shift+C + click).
+
+As I did struggle with binding hotkeys for specific extensions before (in their
+own quirky ways), found one sure-fire way to do exactly what you'd get on click
+this time - by simulating a click event itself (upon pressing the hotkey).
+
+Whole process can be split into several steps:
+
+* Install Keyconfig_ or similar extension, allowing to bind/run arbitrary
+  JavaScript code on hotkeys.
+
+  One important note here is that such code should run in the JS context of the
+  extension itself, not just some page, as JS from page obviously won't be
+  allowed to send events to Firefox UI.
+
+  Keyconfig is very simple and seem to work perfectly for this purpose - just
+  "Add a new key" there and it'll pop up a window where any privileged JS can be
+  typed/pasted in.
+
+* Install `DOM Inspector`_ extension (`from AMO`_).
+
+  This one will be useful to get button element's "id" (similar to DOM elements'
+  "id" attribute, but for XUL).
+
+  It should be available (probably after FF restart) under "Tools -> Web
+  Developer -> DOM Inspector".
+
+* Run DOM Inspector and find the element-to-be-hotkeyed there.
+
+  Under "File" select "Inspect Chrome Document" and first document there -
+  should update "URL bar" in the inspector window to
+  "chrome://browser/content/browser.xul".
+
+  Now click "Find a node by clicking" button on the left (or under "Edit ->
+  Select Element by Click"), and then just click on the desired UI
+  button/element - doesn't really have to be an extension button.
+
+  It might be necessary to set "View -> Document Viewer -> DOM Nodes" to see XUL
+  nodes on the left, if it's not selected already.
+
+  .. html::
+
+    <img
+      src="|filename|images/ff_extension_button_id.jpg"
+      title="FF Extension button 'id' attribute"
+      alt="ff extension button 'id' attribute">
+
+  There it'd be easy to see all the neighbor elements and this button element.
+
+  Any element in that DOM Inspector frame can be right-clicked and there's
+  "Blink Element" option to show exactly where it is in the UI.
+
+  "id" of any box where click should land will do (highlighted with red in my
+  case on the image above).
+
+* Write/paste JavaScript that would "click" on the element into Keyconfig (or
+  whatever other hotkey-addon).
+
+  I did try HTML-specific ways to trigger events, but none seem to have worked
+  with XUL elements, so JS below uses `nsIDOMWindowUtils XPCOM interface`_,
+  which seem to be designed specifically with such "simulation" stuff in mind
+  (likely for things like `Selenium WebDriver`_).
+
+  JS for my case::
+
+    var el_box = document.getElementById('columnsreader').boxObject;
+    var domWindowUtils =
+      window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+        .getInterface(Components.interfaces.nsIDOMWindowUtils);
+    domWindowUtils.sendMouseEvent('mousedown', el_box.x, el_box.y, 0, 1, 0);
+    domWindowUtils.sendMouseEvent('mouseup', el_box.x, el_box.y, 0, 1, 0);
+
+  "columnsreader" there is an "id" of an element-to-be-clicked, and should
+  probably be substituted for whatever else from the previous step.
+
+  There doesn't seem to be a "click" event, so "mousedown" + "mouseup" it is.
+
+  "0, 1, 0" stuff is: left button, single-click (not sure what it does here), no
+  modifiers.
+
+  If anything goes wrong in that JS, the usual "Tools -> Web Developer ->
+  Browser Console" (Ctrl+Shift+J) window should show errors.
+
+  It should be possible to adjust click position by adding/subtracting pixels
+  from el_box.x / el_box.y, but left-top corner seem to work fine for buttons.
+
+* Save time and frustration by not dragging stupid mouse anymore, using trusty
+  hotkey instead \\o/
+
+| Wish there was some standard "click on whatever to bind it to specified
+  hotkey" UI option in FF (like there is in e.g. `Claws Mail`_), but haven't
+  seen one so far (FF 36).
+| Maybe someone should write addon for that!
+
+
+.. _Column Reader extension: https://addons.mozilla.org/en-US/firefox/addon/column-reader/
+.. _Keyconfig: http://kb.mozillazine.org/Keyconfig_extension
+.. _DOM Inspector: https://developer.mozilla.org/en-US/docs/Tools/Add-ons/DOM_Inspector
+.. _from AMO: https://addons.mozilla.org/en-US/firefox/addon/dom-inspector-6622/
+.. _nsIDOMWindowUtils XPCOM interface: https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIDOMWindowUtils#sendMouseEvent%28%29
+.. _Selenium WebDriver: https://code.google.com/p/selenium/
+.. _Claws Mail: http://www.claws-mail.org/
