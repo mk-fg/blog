@@ -1,0 +1,46 @@
+--- arch/arm/boot/dts/am335x-bone-common.dtsi.bak	2015-03-19 11:43:32.974638349 +0500
++++ arch/arm/boot/dts/am335x-bone-common.dtsi	2015-03-19 12:29:32.241664458 +0500
+@@ -78,6 +78,20 @@
+ 		>;
+ 	};
+ 
++	i2c1_pins: pinmux_i2c1_pins {
++		pinctrl-single,pins = <
++			0x158 (PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE2)
++			0x15c (PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE2)
++		>;
++	};
++
++	i2c2_pins: pinmux_i2c2_pins {
++		pinctrl-single,pins = <
++			0x178 (PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)
++			0x17c (PIN_INPUT_PULLUP | SLEWCTRL_FAST | MUX_MODE3)
++		>;
++	};
++
+ 	uart0_pins: pinmux_uart0_pins {
+ 		pinctrl-single,pins = <
+ 			0x170 (PIN_INPUT_PULLUP | MUX_MODE0)	/* uart0_rxd.uart0_rxd */
+@@ -206,6 +220,22 @@
+ 
+ };
+ 
++&i2c1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2c1_pins>;
++
++	status = "okay";
++	clock-frequency = <400000>;
++};
++
++&i2c2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2c2_pins>;
++
++	status = "okay";
++	clock-frequency = <400000>;
++};
++
+ /include/ "tps65217.dtsi"
+ 
+ &tps {

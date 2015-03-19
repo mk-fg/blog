@@ -5,6 +5,10 @@ Enabling i2c1 on BeagleBone Black without Device Tree overlays
 :tags: hardware, linux
 
 
+**Important:** This way was pretty much made obsolete by Device Tree overlays,
+ which have returned (as expected) in 3.19 kernels - it'd probably be easier to
+ use these in most cases.
+
 `BeagleBone Black board`_ has three i2c buses, two of which are available by
 default on Linux kernel with `patches from RCN`_ (Robert Nelson).
 
@@ -88,9 +92,15 @@ the thing in kernels 3.19 and beyond, if "device tree overlays" patches will
 land there - it should be possible to just load some patch on-the-fly there,
 without all the extra hassle described above.
 
+**Update 2015-03-19:** Device Tree overlays landed in 3.19 indeed, but if
+ migrating to use these is too much hassle for now, here's a `patch for
+ 3.19.1-bone4 am335x-bone-common.dtsi`_ to enable i2c1 and i2c2 on boot (applies
+ in the same way, ``make dtbs``, copy am335x-boneblack.dtb to /boot/dtbs).
+
 
 .. _Beaglebone Black board: http://elinux.org/Beagleboard:BeagleBoneBlack
 .. _patches from RCN: http://rcn-ee.net/deb/sid-armhf/
 .. _they might make a comeback in the future (LWN): https://lwn.net/Articles/616859/
 .. _Arch Linux ARM: http://archlinuxarm.org/
 .. _PKGBUILD dir: https://github.com/archlinuxarm/PKGBUILDs/blob/master/core/linux-am33x/
+.. _patch for 3.19.1-bone4 am335x-bone-common.dtsi: |filename|misc/linux-3.19.1-bone4_am335x-bone-common-dtsi_enable-i2c1-i2c2.patch
