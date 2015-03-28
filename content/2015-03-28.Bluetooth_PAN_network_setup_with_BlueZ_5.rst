@@ -1,0 +1,215 @@
+Bluetooth PAN Network Setup with BlueZ 5.X
+##########################################
+
+:date: 2015-03-28 18:39
+:tags: hardware, linux
+
+
+It probably won't be a surprise to anyone that Bluetooth has profiles to carry
+regular network traffic, and BlueZ_ has support for these since forever, but
+setup process has changed quite a bit between 2.X - 4.X - 5.X BlueZ versions, so
+here's my summary of it with 5.29 (latest from fives atm).
+
+| First step is to get BlueZ itself, and make sure it's 5.X (at least for the
+  purposes of this post), as some enerprisey distros probably still have 4.X if
+  not earlier series, which, again, have different tools and interfaces.
+| Should be easy enough to do with ``bluetoothctl --version``, and if BlueZ
+  doesn't have "bluetoothctl", it's definitely some earlier one.
+
+Hardware in my case was two linux machines with similar USB dongles, one of them
+was RPi (wanted to setup wireless link for that), but that shouldn't really matter.
+
+Aforementioned bluetoothctl allows to easily pair both dongles from cli
+interactively (and with nice colors!), that's what should be done first and
+serves as an authentication, as far as I can tell.
+
+::
+
+	### machine-1
+	% bluetoothctl
+	[NEW] Controller 00:02:72:XX:XX:XX malediction [default]
+	[bluetooth]# power on
+	Changing power on succeeded
+	[CHG] Controller 00:02:72:XX:XX:XX Powered: yes
+	[bluetooth]# discoverable on
+	Changing discoverable on succeeded
+	[CHG] Controller 00:02:72:XX:XX:XX Discoverable: yes
+	[bluetooth]# agent on
+	...
+
+	### machine-2 (snipped)
+	% bluetoothctl
+	[NEW] Controller 00:02:72:YY:YY:YY rpbox [default]
+	[bluetooth]# power on
+	[bluetooth]# scan on
+	[bluetooth]# agent on
+	[bluetooth]# pair 00:02:72:XX:XX:XX
+	[bluetooth]# trust 00:02:72:XX:XX:XX
+	...
+
+Not sure if the "trust" bit is really necessary, and what it does - probably
+allows to setup agent-less connections or something.
+
+As I needed to connect small ARM board to what amounts to an access point, "NAP"
+was the BT-PAN mode of choice for me, but there are also "ad-hoc" modes in BT
+like PANU and GN, which seem to only need a different topology (who connects to
+who) and pass different UUID parameter to BlueZ over dbus.
+
+For setting up a PAN network with BlueZ 5.X, essentially just two dbus calls are
+needed (described in "doc/network-api.txt"), and basic cli tools to do these are
+bundled in "test/" dir with BlueZ sources.
+
+Given that these aren't very suited for day-to-day use (hence the "test" dir)
+and are fairly trivial, did rewrite them as a single script, more suited for my
+purposes - `bt-pan`_.
+
+General idea is that one side (access point in NAP topology) sets up a bridge
+and calls "org.bluez.NetworkServer1.Register()", while the other ("client") does
+"org.bluez.Network1.Connect()".
+
+On the server side (which also applies to GN mode, I think), bluetoothd expects
+a `bridge interface`_ to be setup and configured, to which it adds individual
+"bnepX" interfaces created for each client by itself.
+
+Such bridge gets created with "brctl" (from `bridge-utils`_), and should be
+assigned the server IP and such, then server itself can be started, passing name
+of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call::
+
+	#!/bin/bash
+
+	br=bnep
+
+	[[ -n "$(brctl show $br 2>&1 1>/dev/null)" ]] && {
+		brctl addbr $br
+		brctl setfd $br 0
+		brctl stp $br off
+		ip addr add 10.1.2.3/24 dev $br
+		ip link set $br up
+	}
+
+	exec bt-pan --debug server $br
+
+(as mentioned above, bt-pan_ script is from `fgtk github repo`_)
+
+Just running this script will then setup a proper "bluetooth access point", and
+if done from systemd, should probably be a part of bluetooth.target and get
+stopped along with bluetoothd (as it doesn't make any sense running without it)::
+
+	[Unit]
+	After=bluetooth.service
+	PartOf=bluetooth.service
+
+	[Service]
+	ExecStart=/usr/local/sbin/net.bnep
+
+	[Install]
+	WantedBy=bluetooth.target
+
+On the client side, it's even simplier - BlueZ will just create a "bnepX" device
+and won't need any bridge, as it is just a single connection::
+
+	[Unit]
+	After=bluetooth.service
+	PartOf=bluetooth.service
+
+	[Service]
+	ExecStart=/usr/local/bin/bt-pan client 00:02:72:XX:XX:XX
+
+	[Install]
+	WantedBy=bluetooth.target
+
+On top of "bnepX" device on the client, some dhcp client should probably be
+running, which systemd-networkd will probably handle by default on
+systemd-enabled linuxes, and some dhcpd on the server-side (I used udhcpd from
+busybox_ for that).
+
+Enabling units on both machines make them setup AP and connect on boot, or as
+soon as BT donges get plugged-in/detected.
+
+Fairly trivial setup for a wireless one, especially wrt authentication, and seem
+to work reliably so far.
+
+----------
+
+If case something doesn't work in such a rosy scenario, which kinda happens
+often, first place to look at is probably debug output of bluetoothd itself, which
+can be enabled with systemd via ``systemctl edit bluetooth`` and adding a
+``[Service]`` section with override like ``ExecStart=/usr/lib/bluetooth/bluetoothd -d``,
+then doing daemon-reload and restart of the unit.
+
+This should already produce a ton of debug output, but I generally find
+something like ``bluetoothd[363]: src/device.c:device_bonding_failed() status 14``
+and ``bluetoothd[363]: plugins/policy.c:disconnect_cb() reason 3`` in there,
+which is not super-helpful by itself.
+
+"btmon" tool which also comes with BlueZ provides a much more useful output with
+all the stuff decoded from the air, even colorized for convenience (though you
+won't see it here)::
+
+  ...
+  > ACL Data RX: Handle 11 flags 0x02 dlen 20               [hci0] 17.791382
+        L2CAP: Information Response (0x0b) ident 2 len 12
+          Type: Fixed channels supported (0x0003)
+          Result: Success (0x0000)
+          Channels: 0x0000000000000006
+            L2CAP Signaling (BR/EDR)
+            Connectionless reception
+  > HCI Event: Number of Completed Packets (0x13) plen 5    [hci0] 17.793368
+          Num handles: 1
+          Handle: 11
+          Count: 2
+  > ACL Data RX: Handle 11 flags 0x02 dlen 12               [hci0] 17.794006
+        L2CAP: Connection Request (0x02) ident 3 len 4
+          PSM: 15 (0x000f)
+          Source CID: 64
+  < ACL Data TX: Handle 11 flags 0x00 dlen 16               [hci0] 17.794240
+        L2CAP: Connection Response (0x03) ident 3 len 8
+          Destination CID: 64
+          Source CID: 64
+          Result: Connection pending (0x0001)
+          Status: Authorization pending (0x0002)
+  > HCI Event: Number of Completed Packets (0x13) plen 5    [hci0] 17.939360
+          Num handles: 1
+          Handle: 11
+          Count: 1
+  < ACL Data TX: Handle 11 flags 0x00 dlen 16               [hci0] 19.137875
+        L2CAP: Connection Response (0x03) ident 3 len 8
+          Destination CID: 64
+          Source CID: 64
+          Result: Connection refused - security block (0x0003)
+          Status: No further information available (0x0000)
+  > HCI Event: Number of Completed Packets (0x13) plen 5    [hci0] 19.314509
+          Num handles: 1
+          Handle: 11
+          Count: 1
+  > HCI Event: Disconnect Complete (0x05) plen 4            [hci0] 21.302722
+          Status: Success (0x00)
+          Handle: 11
+          Reason: Remote User Terminated Connection (0x13)
+  @ Device Disconnected: 00:02:72:XX:XX:XX (0) reason 3
+  ...
+
+That at least makes it clear what's the decoded error message is, on which
+protocol layer and which requests it follows - enough stuff to dig into.
+
+BlueZ also includes a crapton of cool tools for all sorts of diagnostics and
+manipulation, which - alas - seem to be missing on some distros, but can be
+built along with the package using ``--enable-tools --enable-experimental``
+configure-options (all under "tools" dir).
+
+I had to resort to these tricks briefly when trying to setup PANU/GN-mode
+connections, but as I didn't really need these, gave up fairly soon on that
+"Connection refused - security block" error - no idea why BlueZ throws it in
+this context and google doesn't seem to help much.
+
+Didn't need these modes though, and I guess it might be an hw issue too - just
+missing support in the firmware, if stuff on this level needs to be handled
+there.
+
+
+.. _BlueZ: http://www.bluez.org/
+.. _bt-pan: https://github.com/mk-fg/fgtk/blob/master/bt-pan
+.. _bridge interface: https://en.wikipedia.org/wiki/Bridging_%28networking%29
+.. _bridge-utils: http://www.linuxfoundation.org/collaborate/workgroups/networking/bridge
+.. _fgtk github repo: https://github.com/mk-fg/fgtk/#bt-pan
+.. _busybox: http://busybox.net/
