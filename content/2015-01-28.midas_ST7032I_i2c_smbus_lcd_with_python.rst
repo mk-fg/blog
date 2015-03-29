@@ -24,51 +24,51 @@ and 3.3V BeagleBone Black I2C bus:
 	</a>
 
 
-Code for the above LCD clock "app" (python 2.7)::
+Code for the above LCD clock "app" (python 2.7):
 
-	import smbus, time
+.. code-block:: python
 
+  import smbus, time
 
-	class ST7032I(object):
+  class ST7032I(object):
 
-		def __init__(self, addr, i2c_chan, **init_kws):
-			self.addr, self.bus = addr, smbus.SMBus(i2c_chan)
-			self.init(**init_kws)
+    def __init__(self, addr, i2c_chan, **init_kws):
+      self.addr, self.bus = addr, smbus.SMBus(i2c_chan)
+      self.init(**init_kws)
 
-		def _write(self, data, cmd=0, delay=None):
-			self.bus.write_i2c_block_data(self.addr, cmd, list(data))
-			if delay: time.sleep(delay)
+    def _write(self, data, cmd=0, delay=None):
+      self.bus.write_i2c_block_data(self.addr, cmd, list(data))
+      if delay: time.sleep(delay)
 
-		def init(self, contrast=0x10, icon=False, booster=False):
-			assert contrast < 0x40 # 6 bits only, probably not used on most lcds
-			pic_high = 0b0111 << 4 | (contrast & 0x0f) # c3 c2 c1 c0
-			pic_low = ( 0b0101 << 4 |
-				icon << 3 | booster << 2 | ((contrast >> 4) & 0x03) ) # c5 c4
-			self._write([0x38, 0x39, 0x14, pic_high, pic_low, 0x6c], delay=0.01)
-			self._write([0x0c, 0x01, 0x06], delay=0.01)
+    def init(self, contrast=0x10, icon=False, booster=False):
+      assert contrast < 0x40 # 6 bits only, probably not used on most lcds
+      pic_high = 0b0111 << 4 | (contrast & 0x0f) # c3 c2 c1 c0
+      pic_low = ( 0b0101 << 4 |
+        icon << 3 | booster << 2 | ((contrast >> 4) & 0x03) ) # c5 c4
+      self._write([0x38, 0x39, 0x14, pic_high, pic_low, 0x6c], delay=0.01)
+      self._write([0x0c, 0x01, 0x06], delay=0.01)
 
-		def move(self, row=0, col=0):
-			assert 0 <= row <= 1 and 0 <= col <= 15, [row, col]
-			self._write([0b1000 << 4 | (0x40 * row + col)])
+    def move(self, row=0, col=0):
+      assert 0 <= row <= 1 and 0 <= col <= 15, [row, col]
+      self._write([0b1000 << 4 | (0x40 * row + col)])
 
-		def addstr(self, chars, pos=None):
-			if pos is not None:
-				row, col = (pos, 0) if isinstance(pos, int) else pos
-				self.move(row, col)
-			self._write(map(ord, chars), cmd=0x40)
+    def addstr(self, chars, pos=None):
+      if pos is not None:
+        row, col = (pos, 0) if isinstance(pos, int) else pos
+        self.move(row, col)
+      self._write(map(ord, chars), cmd=0x40)
 
-		def clear(self):
-			self._write([0x01])
+    def clear(self):
+      self._write([0x01])
 
-
-	if __name__ == '__main__':
-		lcd = ST7032I(0x3e, 2)
-		while True:
-			ts_tuple = time.localtime()
-			lcd.clear()
-			lcd.addstr(time.strftime('date: %y-%m-%d', ts_tuple), 0)
-			lcd.addstr(time.strftime('time: %H:%M:%S', ts_tuple), 1)
-			time.sleep(1)
+  if __name__ == '__main__':
+    lcd = ST7032I(0x3e, 2)
+    while True:
+      ts_tuple = time.localtime()
+      lcd.clear()
+      lcd.addstr(time.strftime('date: %y-%m-%d', ts_tuple), 0)
+      lcd.addstr(time.strftime('time: %H:%M:%S', ts_tuple), 1)
+      time.sleep(1)
 
 
 | Note the constants in the "init" function - these are all from
@@ -93,18 +93,20 @@ from the board itself.
   hardware bus and pin numbers.
 
 And the address is easy to get from the datasheet (lcd I have uses only one
-static slave address), or detect via ``i2cdetect -r -y <i2c_chan>``, e.g.::
+static slave address), or detect via ``i2cdetect -r -y <i2c_chan>``, e.g.:
 
-	# i2cdetect -r -y 2
-	     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
-	00:          -- -- -- -- -- -- -- -- -- -- -- -- --
-	10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-	20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-	30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 3e --
-	40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-	50: -- -- -- -- UU UU UU UU -- -- -- -- -- -- -- --
-	60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --
-	70: -- -- -- -- -- -- -- --
+.. code-block:: console
+
+  # i2cdetect -r -y 2
+       0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+  00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+  10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+  20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+  30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 3e --
+  40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+  50: -- -- -- -- UU UU UU UU -- -- -- -- -- -- -- --
+  60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --
+  70: -- -- -- -- -- -- -- --
 
 Here I have DS1307 RTC on 0x68 and an LCD panel on 0x3E address (again, also
 specified in the datasheet).

@@ -88,7 +88,9 @@ Whole process can be split into several steps:
   which seem to be designed specifically with such "simulation" stuff in mind
   (likely for things like `Selenium WebDriver`_).
 
-  JS for my case::
+  JS for my case:
+
+  .. code-block:: js
 
     var el_box = document.getElementById('columnsreader').boxObject;
     var domWindowUtils =

@@ -39,39 +39,41 @@ ideally) is necessary.
 
 With kernel sources unpacked, the file that you'd want to patch is
 "arch/arm/boot/dts/am335x-boneblack.dts" (or whichever other dtb you're
-loading via uboot)::
+loading via uboot):
 
-	--- am335x-boneblack.dts.bak    2015-01-29 18:20:29.547909768 +0500
-	+++ am335x-boneblack.dts        2015-01-30 20:56:43.129213998 +0500
-	@@ -23,6 +23,14 @@
-	 };
+.. code-block:: diff
 
-	 &ocp {
-	+       /* i2c */
-	+       P9_17_pinmux {
-	+               status = "disabled";
-	+       };
-	+       P9_18_pinmux {
-	+               status = "disabled";
-	+       };
-	+
-	        /* clkout2 */
-	        P9_41_pinmux {
-	                status = "disabled";
-	@@ -33,6 +41,13 @@
-	        };
-	 };
+  --- am335x-boneblack.dts.bak    2015-01-29 18:20:29.547909768 +0500
+  +++ am335x-boneblack.dts        2015-01-30 20:56:43.129213998 +0500
+  @@ -23,6 +23,14 @@
+   };
 
-	+&i2c1 {
-	+       status = "okay";
-	+       pinctrl-names = "default";
-	+       pinctrl-0 = <&i2c1_pins>;
-	+       clock-frequency = <100000>;
-	+};
-	+
-	 &mmc1 {
-	        vmmc-supply = <&vmmcsd_fixed>;
-	 };
+   &ocp {
+  +       /* i2c */
+  +       P9_17_pinmux {
+  +               status = "disabled";
+  +       };
+  +       P9_18_pinmux {
+  +               status = "disabled";
+  +       };
+  +
+          /* clkout2 */
+          P9_41_pinmux {
+                  status = "disabled";
+  @@ -33,6 +41,13 @@
+          };
+   };
+
+  +&i2c1 {
+  +       status = "okay";
+  +       pinctrl-names = "default";
+  +       pinctrl-0 = <&i2c1_pins>;
+  +       clock-frequency = <100000>;
+  +};
+  +
+   &mmc1 {
+          vmmc-supply = <&vmmcsd_fixed>;
+   };
 
 Then "make dtbs" can be used to build dtb files only, and not the whole kernel
 (which would take a while on BBB).
@@ -80,12 +82,14 @@ Resulting \*.dtb (e.g. "am335x-boneblack.dtb" for "am335x-boneblack.dts", in the
 same dir) can be put into "dtbs" on boot partition and loaded from uEnv.txt (or
 whatever uboot configs are included from there).
 
-Reboot, and ``i2cdetect -l`` should show i2c-1::
+Reboot, and ``i2cdetect -l`` should show i2c-1:
 
-	# i2cdetect -l
-	i2c-0   i2c             OMAP I2C adapter                    I2C adapter
-	i2c-1   i2c             OMAP I2C adapter                    I2C adapter
-	i2c-2   i2c             OMAP I2C adapter                    I2C adapter
+.. code-block:: console
+
+  # i2cdetect -l
+  i2c-0   i2c             OMAP I2C adapter                    I2C adapter
+  i2c-1   i2c             OMAP I2C adapter                    I2C adapter
+  i2c-2   i2c             OMAP I2C adapter                    I2C adapter
 
 As I've already mentioned before, this might not be the optimal way to enable
 the thing in kernels 3.19 and beyond, if "device tree overlays" patches will

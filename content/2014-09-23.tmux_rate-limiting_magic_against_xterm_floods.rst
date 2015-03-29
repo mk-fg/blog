@@ -9,9 +9,11 @@ Had the issue of spammy binary locking-up terminal for a long time, but never
 bothered to do something about it... until now.
 
 Happens with any terminal I've seen - just run something like this in the shell
-there::
+there:
 
-  for n in {1..500000}; do echo "$spam $n"; done
+.. code-block:: console
+
+  # for n in {1..500000}; do echo "$spam $n"; done
 
 | And for at least several seconds, terminal is totally unresponsive, no matter
   how many `screen's`_ / `tmux'es`_ are running there.

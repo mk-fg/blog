@@ -26,20 +26,22 @@ device-instantiated services`_, resulted in the following configuration.
 
 99-sync-sensor-logs.rules::
 
-	SUBSYSTEM=="block", ACTION=="add", ENV{ID_TYPE}="disk", ENV{DEVTYPE}=="partition",\
-	 PROGRAM="/usr/bin/systemd-escape -p --template=sync-sensor-logs@.service $env{DEVNAME}",\
-	 ENV{SYSTEMD_WANTS}+="%c"
+  SUBSYSTEM=="block", ACTION=="add", ENV{ID_TYPE}="disk", ENV{DEVTYPE}=="partition",\
+    PROGRAM="/usr/bin/systemd-escape -p --template=sync-sensor-logs@.service $env{DEVNAME}",\
+    ENV{SYSTEMD_WANTS}+="%c"
 
-sync-sensor-logs@.service::
+sync-sensor-logs@.service:
 
-	[Unit]
-	BindTo=%i.device
-	After=%i.device
+.. code-block:: ini
 
-	[Service]
-	Type=oneshot
-	TimeoutStartSec=300
-	ExecStart=/usr/local/sbin/sync-sensor-logs /%I
+  [Unit]
+  BindTo=%i.device
+  After=%i.device
+
+  [Service]
+  Type=oneshot
+  TimeoutStartSec=300
+  ExecStart=/usr/local/sbin/sync-sensor-logs /%I
 
 | This makes things stop if it works for too long or if device vanishes (due to
   BindTo=) and properly delays script start until device is ready.

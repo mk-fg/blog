@@ -191,12 +191,6 @@ blockquote {
 	margin: 0 90px;
 	}
 
-div.codehilite {
-	-moz-border-radius: 5px;
-	-webkit-border-radius: 5px;
-	border-radius: 5px;
-	}
-
 .post pre, .page pre {
 	padding: .5em;
 	font-size: 12px;

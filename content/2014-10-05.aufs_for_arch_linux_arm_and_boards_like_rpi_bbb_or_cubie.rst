@@ -26,18 +26,22 @@ better to move that to /home (which probably shouldn't be a separate fs on these
 devices), leaving /root as a symlink to that.
 
 It seem to be impossible to do when logged-in as /root (mv will error with
-EBUSY), but trivial from any other machine::
+EBUSY), but trivial from any other machine:
 
-	mount /dev/sdb2 /mnt # mount microsd
-	cd /mnt
-	mv root home/
-	ln -s home/root
-	cd
-	umount /mnt
+.. code-block:: console
+
+	# mount /dev/sdb2 /mnt # mount microsd
+	# cd /mnt
+	# mv root home/
+	# ln -s home/root
+	# cd
+	# umount /mnt
 
 As aufs2 is already built into Arch Linux ARM kernel, only thing that's left is
 to add early-boot systemd unit for mounting it,
-e.g. ``/etc/systemd/system/aufs.service``::
+e.g. ``/etc/systemd/system/aufs.service``:
+
+.. code-block:: ini
 
 	[Unit]
 	DefaultDependencies=false
@@ -59,10 +63,12 @@ e.g. ``/etc/systemd/system/aufs.service``::
 	ExecStart=/bin/mount --bind / /aufs/ro
 	ExecStart=/bin/mount --make-private /aufs/ro
 
-And then create the dirs used there and enable unit::
+And then create the dirs used there and enable unit:
 
-	mkdir -p /aufs/{rw,ro}
-	systemctl enable aufs
+.. code-block:: console
+
+	# mkdir -p /aufs/{rw,ro}
+	# systemctl enable aufs
 
 Now, upon rebooting the board, you'll get aufs mounts for /home and /var, making
 all the writes there go to respective /aufs/rw dirs on tmpfs while allowing to
@@ -70,10 +76,12 @@ read all the contents from underlying rootfs.
 
 To make sure systemd doesn't waste extra tmpfs space thinking it can sync logs
 to ``/var/log/journal``, I'd also suggest to do this (before rebooting with aufs
-mounts)::
+mounts):
 
-	rm -rf /var/log/journal
-	ln -s /dev/null /var/log/journal
+.. code-block:: console
+
+	# rm -rf /var/log/journal
+	# ln -s /dev/null /var/log/journal
 
 Can also be done via journald.conf with ``Storage=volatile``.
 
@@ -88,13 +96,17 @@ before shutdown or after it's done with writing (for manual oneshot apps like
 pacman).
 
 For moving stuff back to permanent fs, aubrsync_ from aufs2-util.git can be
-used like this::
+used like this:
 
-	aubrsync move /var/ /aufs/rw/var/ /aufs/ro/var/
+.. code-block:: console
+
+	# aubrsync move /var/ /aufs/rw/var/ /aufs/ro/var/
 
 As even pulling that from shell history can be a bit tedious, I've made a
 simplier ad-hoc wrapper - `aufs_sync`_ - that can be used (with mountpoints
-similar to presented above) like this::
+similar to presented above) like this:
+
+.. code-block:: console
 
 	# aufs_sync
 	Usage: aufs_sync { copy | move | check } [module]
@@ -112,10 +124,10 @@ similar to presented above) like this::
 	/aufs/rw/var/.wh..wh.orph
 	/aufs/rw/var/.wh..wh.plnk
 	/aufs/rw/var/.wh..wh.aufs
-	(just does "find /aufs/rw")
+	--- ... just does "find /aufs/rw"
 
 	# aufs_sync move
-	(does "aubrsync move" for all dirs in /aufs/rw)
+	--- does "aubrsync move" for all dirs in /aufs/rw
 
 Just be sure to check if any new apps might write something important there
 (right after installing these) and do symlinks (to something like /srv) for

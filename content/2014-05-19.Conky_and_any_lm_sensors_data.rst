@@ -73,7 +73,9 @@ wrapper around - i.e. this `sens.c`_ 50-liner, to dump info in a useful way::
 
 It's all lm_sensors seem to know about hw in a simple key-value form.
 
-Still not keen on running that on every conky tick, hence the lua cache::
+Still not keen on running that on every conky tick, hence the lua cache:
+
+.. code-block:: lua
 
   sensors = {
     values=nil,

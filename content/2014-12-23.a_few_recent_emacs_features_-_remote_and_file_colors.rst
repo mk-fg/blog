@@ -45,7 +45,9 @@ And these remote invocation wrappers is what this idea is all about.
 
 Consider terminal dump below, running in an ssh or over tcp to remote emacs
 server (and I'd strongly suggest having ``(server-start)`` right in ~/.emacs,
-though maybe not on tcp socket for security reasons)::
+though maybe not on tcp socket for security reasons):
+
+.. code-block:: console
 
   % ece b
   * 2014-12-23.a_few_recent_emacs_features_-_remote_and_file_colors.rst
@@ -63,7 +65,7 @@ though maybe not on tcp socket for security reasons)::
   2014-12-23.a_few_recent_emacs_features_-_remote_and_file_colors.rst,
   fg_remote.el
 
-  ### whoops... lemme try again
+  --- whoops... lemme try again
 
   % ece b fg_rem
   ...(contents of the buffer, matched by unique name part)...
@@ -73,7 +75,7 @@ though maybe not on tcp socket for security reasons)::
   004 #blazer
   002 #bordercamp
 
-  ### Showing last (unchecked) irc activity, same as erc-track-mode does (but nicer)
+  --- Showing last (unchecked) irc activity, same as erc-track-mode does (but nicer)
 
   % ece erc twitter | t
   [13:36:45]<fijall> hint - you can use gc.garbage in Python to store any sort of ...
@@ -87,7 +89,7 @@ though maybe not on tcp socket for security reasons)::
   [17:51:50]<veorq> woops #31c3 via @joernchen ...
   ~erc/#twitter_bitlbee%
 
-  ### "t" above is an alias for "tail" that I use in all shells, lines snipped jic
+  --- "t" above is an alias for "tail" that I use in all shells, lines snipped jic
 
   % ece h
   Available commands:
@@ -105,7 +107,7 @@ though maybe not on tcp socket for security reasons)::
 
   Put /mark to a specified ERC chan and reset its activity track.
 
-  ### Whole "help" thing is auto-generated, see "fg-remote-help" in fg_remote.el
+  --- Whole "help" thing is auto-generated, see "fg-remote-help" in fg_remote.el
 
 And so on - anything is trivial to implement as elisp few-liner.
 For instance, missing "buffer-save" command will be::

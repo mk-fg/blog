@@ -30,7 +30,9 @@ So, isolation:
   UID is a good way to go.
 
 * That should also allow for it to run in a separate desktop session - i.e. have
-  its own cgroup, to easily contain, control and set limits for games::
+  its own cgroup, to easily contain, control and set limits for games:
+
+  .. code-block:: console
 
     % loginctl user-status steam
     steam (1001)
@@ -99,7 +101,9 @@ seem to be no need to share it with main DE.
 ----------
 
 That should allow to start Steam after ssh'ing to steam@localhost, but process
-can be made much easier (and more foolproof) with e.g. ~/bin/steam as::
+can be made much easier (and more foolproof) with e.g. ~/bin/steam as:
+
+.. code-block:: bash
 
   #!/bin/bash
 
@@ -170,13 +174,17 @@ and plugins - alsa and pulse - in ubuntu "runtime" steam bootstrap setups don't
 work well - either there's no sound or game fails to load at all.
 
 Easy fix is to copy the runtime it uses (32-bit one for me) and cleanup alien
-stuff from there for what's already present in the system, i.e.::
+stuff from there for what's already present in the system, i.e.:
+
+.. code-block:: console
 
   % cp -R .steam/bin32/steam-runtime my-runtime
   % find my-runtime -type f\
     \( -path '*asound*' -o -path '*alsa*' -o -path '*pulse*' \) -delete
 
-And then add something like this to ~steam/.zshrc::
+And then add something like this to ~steam/.zshrc:
+
+.. code-block:: bash
 
   steam() { STEAM_RUNTIME="$HOME"/my-runtime command steam "$@"; }
 

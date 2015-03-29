@@ -2,7 +2,7 @@ Bluetooth PAN Network Setup with BlueZ 5.X
 ##########################################
 
 :date: 2015-03-28 18:39
-:tags: hardware, linux
+:tags: hardware, linux, systemd
 
 
 It probably won't be a surprise to anyone that Bluetooth has profiles to carry
@@ -23,9 +23,9 @@ Aforementioned bluetoothctl allows to easily pair both dongles from cli
 interactively (and with nice colors!), that's what should be done first and
 serves as an authentication, as far as I can tell.
 
-::
+.. code-block:: console
 
-	### machine-1
+	--- machine-1
 	% bluetoothctl
 	[NEW] Controller 00:02:72:XX:XX:XX malediction [default]
 	[bluetooth]# power on
@@ -37,7 +37,7 @@ serves as an authentication, as far as I can tell.
 	[bluetooth]# agent on
 	...
 
-	### machine-2 (snipped)
+	--- machine-2 (snipped)
 	% bluetoothctl
 	[NEW] Controller 00:02:72:YY:YY:YY rpbox [default]
 	[bluetooth]# power on
@@ -73,7 +73,9 @@ a `bridge interface`_ to be setup and configured, to which it adds individual
 
 Such bridge gets created with "brctl" (from `bridge-utils`_), and should be
 assigned the server IP and such, then server itself can be started, passing name
-of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call::
+of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call:
+
+.. code-block:: bash
 
 	#!/bin/bash
 
@@ -93,7 +95,9 @@ of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call:
 
 Just running this script will then setup a proper "bluetooth access point", and
 if done from systemd, should probably be a part of bluetooth.target and get
-stopped along with bluetoothd (as it doesn't make any sense running without it)::
+stopped along with bluetoothd (as it doesn't make any sense running without it):
+
+.. code-block:: ini
 
 	[Unit]
 	After=bluetooth.service
@@ -106,7 +110,9 @@ stopped along with bluetoothd (as it doesn't make any sense running without it):
 	WantedBy=bluetooth.target
 
 On the client side, it's even simplier - BlueZ will just create a "bnepX" device
-and won't need any bridge, as it is just a single connection::
+and won't need any bridge, as it is just a single connection:
+
+.. code-block:: ini
 
 	[Unit]
 	After=bluetooth.service
