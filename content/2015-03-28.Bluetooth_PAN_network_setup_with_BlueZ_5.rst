@@ -131,8 +131,8 @@ to work reliably so far.
 
 ----------
 
-If case something doesn't work in such a rosy scenario, which kinda happens
-often, first place to look at is probably debug output of bluetoothd itself, which
+In case something doesn't work in such a rosy scenario, which kinda happens
+often, first place to look at is probably debug info of bluetoothd itself, which
 can be enabled with systemd via ``systemctl edit bluetooth`` and adding a
 ``[Service]`` section with override like ``ExecStart=/usr/lib/bluetooth/bluetoothd -d``,
 then doing daemon-reload and restart of the unit.
@@ -199,12 +199,11 @@ configure-options (all under "tools" dir).
 
 I had to resort to these tricks briefly when trying to setup PANU/GN-mode
 connections, but as I didn't really need these, gave up fairly soon on that
-"Connection refused - security block" error - no idea why BlueZ throws it in
-this context and google doesn't seem to help much.
+"Connection refused - security block" error (from that "policy.c" plugin) - no
+idea why BlueZ throws it in this context and google doesn't seem to help much,
+maybe polkit thing, idk.
 
-Didn't need these modes though, and I guess it might be an hw issue too - just
-missing support in the firmware, if stuff on this level needs to be handled
-there.
+Didn't need these modes though, so whatever.
 
 
 .. _BlueZ: http://www.bluez.org/
