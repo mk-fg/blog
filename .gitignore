@@ -1,5 +1,6 @@
 /dynamic/legacy_redirect_list.py
 /output
+/cache
 /*.pid
 *.pyc
 *.pyo
