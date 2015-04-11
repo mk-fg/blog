@@ -1,0 +1,68 @@
+Skype setup on amd64 without multilib/multiarch/chroot
+######################################################
+
+:date: 2015-04-11 09:55
+:tags: desktop, exherbo, unix
+
+
+| Did a kinda-overdue migration of a desktop machine to amd64 a few days ago.
+| Exherbo has multiarch_ there, but I didn't see much point in keeping (and
+  maintaining in various ways) a full-blown set of 32-bit libs just for Skype,
+  which I found that I still need occasionally.
+
+Solution I've used before (documented `in the past entry`_) with just grabbing
+32-bit Skype binary and full set of libs it needs from whatever distro still
+works and applies here, not-so-surprisingly.
+
+What I ended up doing is:
+
+* Grab the latest Fedora "32-bit workstation" iso (`Fedora-Live-Workstation-i686-21-5.iso`_).
+
+* Install/run it on a virtual machine (`plain qemu-kvm`_).
+
+* Download "Dynamic" Skype version (distro-independent tar.gz with files) from
+  Skype site to/on a VM, "tar -xf" it.
+
+* ``ldd skype-4.3.0.37/skype | grep 'not found'`` to see which dependency-libs
+  are missing.
+
+* Install missing libs - ``yum install qtwebkit libXScrnSaver``
+
+* scp `build_skype_env.bash`_ (from `skype-space repo`_ that I have from old
+  days of using skype + bitlbee) to vm, run it on a skype-dir -
+  e.g. ``./build_skype_env.bash skype-4.3.0.37``.
+
+  Should finish successfully and produce "skype_env" dir in the current path.
+
+* Copy that "skype_env" dir with all the libs back to pure-amd64 system.
+
+* Since skype binary has "/lib/ld-linux.so.2" as a hardcoded interpreter (as it
+  should be), and pure-amd64 system shouldn't have one (not to mention missing
+  multiarch prefix) - patch it in the binary with patchelf_::
+
+    patchelf --set-interpreter ./ld-linux.so.2 skype
+
+* Run it (from that env dir with all the libs)::
+
+    LD_LIBRARY_PATH=. ./skype --resources=.
+
+  Should "just work" \\o/
+
+| One big caveat is that I don't care about any features there except for simple
+  text messaging, which is probably not how most people use Skype, so didn't
+  test if e.g. audio would work there.
+| Don't think sound should be a problem though, especially since iirc modern
+  skype could use pulseaudio (or even using it by default?).
+
+Given that skype itself a huge opaque binary, I do have AppArmor profile for the
+thing (uses "~/.Skype/env/" dir for bin/libs) - `home.skype`_.
+
+
+.. _multiarch: http://exherbo.org/docs/multiarch.txt
+.. _in the past entry: /2013/01/27/skype-to-irc-gateway-on-a-headless-server-as-a-systemd-user-session-daemon.html
+.. _Fedora-Live-Workstation-i686-21-5.iso: http://download.fedoraproject.org/pub/fedora/linux/releases/21/Workstation/i386/iso/Fedora-Live-Workstation-i686-21-5.iso
+.. _plain qemu-kvm: https://github.com/mk-fg/fgtk/tree/master/vm
+.. _build_skype_env.bash: https://github.com/mk-fg/skype-space/blob/master/build_skype_env.bash
+.. _skype-space repo: https://github.com/mk-fg/skype-space/
+.. _patchelf: https://nixos.org/patchelf.html
+.. _home.skype: https://github.com/mk-fg/apparmor-profiles/blob/master/profiles/home.skype
