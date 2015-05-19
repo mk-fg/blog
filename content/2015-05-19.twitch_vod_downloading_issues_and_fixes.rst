@@ -1,0 +1,175 @@
+twitch.tv VoDs (video-on-demand) downloading issues and fixes
+#############################################################
+
+:date: 2015-05-19 14:53
+:tags: desktop, web, tools, rate-limiting, games
+
+
+Quite often recently VoDs on twitch for me are just unplayable through the flash
+player - no idea what happens at the backend there, but it buffers endlessly at
+any quality level and that's it.
+
+I also need to skip to some arbitrary part in the 7-hour stream (last wcs sc2
+ro32), as I've watched half of it live, which turns out to complicate things a bit.
+
+So the solution is to download the thing, which goes something like this:
+
+* It's just a video, right? Let's grab whatever stream flash is playing (with
+  e.g. FlashGot FF addon).
+
+  | Doesn't work easily, since video is heavily chunked.
+  | It used to be 30-min flv chunks, which are kinda ok, but these days it's
+    forced 4s chunks - apparently backend doesn't even allow downloading more
+    than 4s per request.
+
+* Fine, `youtube-dl`_ it is.
+
+  | Nope. Doesn't allow seeking to time in stream.
+  | There's an open `"Download range" issue`_ for that.
+
+  livestreamer_ wrapper around the thing doesn't allow it either.
+
+* Try to use ``?t=3h30m`` URL parameter - doesn't work, sadly.
+
+* mpv supports youtube-dl and seek, so use that.
+
+  | Kinda works, but only for super-short seeks.
+  | Seeking beyond e.g. 1 hour takes AGES, and every seek after that (even
+    skipping few seconds ahead) takes longer and longer.
+
+* ``youtube-dl --get-url`` gets m3u8 playlist link, use ``ffmpeg -ss <pos>``
+  with it.
+
+  Apparently works exactly same as mpv above - takes like 20-30min to seek to
+  3:30:00 (3.5 hour offset).
+
+  Dunno if it downloads and checks every chunk in the playlist for length
+  sequentially... sounds dumb, but no clue why it's that slow otherwise,
+  apparently just not good with these playlists.
+
+* Grab the m3u8 playlist, change all relative links there into full urls, remove
+  bunch of them from the start to emulate seek, play that with ``ffmpeg | mpv``.
+
+  Works at first, but gets totally stuck a few seconds/minutes into the video,
+  with ffmpeg doing bitrates of ~10 KiB/s.
+
+  youtube-dl apparently gets stuck in a similar fashion, as it does the same
+  ffmpeg-on-a-playlist (but without changing it) trick.
+
+* Fine! Just download all the damn links with curl.
+
+  ``grep '^http:' pls.m3u8 | xargs -n50 curl -s | pv -rb -i5 > video.mp4``
+
+  Makes it painfully obvious why flash player and ffmpeg/youtube-dl get stuck -
+  eventually curl stumbles upon a chunk that downloads at a few KiB/s.
+
+  This "stumbling chunk" appears to be a random one, unrelated to local
+  bandwidth limitations, and just re-trying it fixes the issue.
+
+* Assemble a list of links and use some more advanced downloader that can do
+  parallel downloads, plus detect and retry super-low speeds.
+
+  Naturally, it's aria2_, but with all the parallelism it appears to be
+  impossible to guess which output file will be which with just a cli.
+
+  Mostly due to links having same url-path,
+  e.g. ``index-0000000014-O7tq.ts?start_offset=955228&end_offset=2822819`` with
+  different offsets (pity that backend doesn't seem to allow grabbing range of
+  that \*.ts file of more than 4s) - aria2 just does file.ts, file.ts.1,
+  file.ts.2, etc - which are not in playlist-order due to all the parallel
+  stuff.
+
+* Finally, as acceptance dawns, go and write your own youtube-dl/aria2 wrapper
+  to properly seek necessary offset (according to playlist tags) and
+  download/resume files from there properly, in a parallel yet ordered and
+  controlled fashion.
+
+  This is done by using --on-download-complete hook with passing ordered "gid"
+  numbers for each chunk url, which are then passed to the hook along with the
+  resulting path (and hook renames file properly).
+
+Ended up with the chunk of the stream I wanted, locally (online playback lag
+never goes away!), downloaded super-fast and seekable.
+
+Resulting script is `twitch_vod_fetch`_ (`script source link`_).
+
+Needs `youtube-dl`_ (for --get-url), `requests python module`_ and aria2_ (does
+the actual downloads, in a proper way).
+
+-----
+
+aria2c magic bits in the script:
+
+.. code-block:: python
+
+  aria2c = subprocess.Popen([
+    'aria2c',
+
+    '--stop-with-process={}'.format(os.getpid()),
+    '--enable-rpc=true',
+    '--rpc-listen-port={}'.format(port),
+    '--rpc-secret={}'.format(key),
+
+    '--no-netrc', '--no-proxy',
+    '--max-concurrent-downloads=5',
+    '--max-connection-per-server=5',
+    '--max-file-not-found=5',
+    '--max-tries=8',
+    '--timeout=15',
+    '--connect-timeout=10',
+    '--lowest-speed-limit=100K',
+    '--user-agent={}'.format(ua),
+
+    '--on-download-complete={}'.format(hook),
+  ], close_fds=True)
+
+Didn't bother adding extra options for tweaking these via cli, but might be a
+good idea to adjust timeouts and limits for a particular use-case (see also the
+massive "man aria2c").
+
+Seeking in playlist is easy, as it's essentially a VoD playlist, and every ~4s
+chunk is preceded by e.g. ``#EXTINF:3.240,`` tag, with its exact length, so
+script just skips these as necessary to satisfy --start-pos / --length
+parameters.
+
+Queueing all downloads, each with its own particular gid, is done via JSON-RPC,
+as it seem to be impossible to:
+
+* Specify both link and gid in the --input-file for aria2c.
+* Pass an actual download URL or any sequential number to --on-download-complete
+  hook (except for gid).
+
+So each gid is just generated as "000001", "000002", etc, and hook script is a
+one-liner "mv" command.
+
+-----
+
+Since all stuff in the script is kinda lenghty time-wise - e.g. ``youtube-dl
+--get-url`` takes a while, then the actual downloads, then concatenation, ... -
+it's designed to be Ctrl+C'able at any point.
+
+| Every step just generates a state-file like "my_output_prefix.m3u8", and next
+  one goes on from there.
+| Restaring the script doesn't repeat these, and these files can be freely
+  mangled or removed to force re-doing the step (or to adjust behavior in
+  whatever way).
+
+| Example of useful restart might be removing \*.m3u8.url and \*.m3u8 files if
+  twitch starts giving 404's due to expired links in there.
+| Won't force re-downloading any chunks, will only grab still-missing ones and
+  assemble the resulting file.
+
+End-result is one my_output_prefix.mp4 file with specified video chunk (or full
+video, if not specified), plus all the intermediate litter (to be able to
+restart the process from any point).
+
+[`script source link`_]
+
+
+.. _youtube-dl: https://rg3.github.io/youtube-dl/
+.. _"Download range" issue: https://github.com/rg3/youtube-dl/issues/622
+.. _livestreamer: http://livestreamer.io/
+.. _aria2: http://aria2.sourceforge.net/
+.. _twitch_vod_fetch: https://github.com/mk-fg/fgtk/#twitch_vod_fetch
+.. _script source link: https://github.com/mk-fg/fgtk/blob/master/desktop/media/twitch_vod_fetch
+.. _requests python module: http://docs.python-requests.org/
