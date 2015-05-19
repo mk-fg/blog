@@ -81,12 +81,12 @@ So the solution is to download the thing, which goes something like this:
 
 * Finally, as acceptance dawns, go and write your own youtube-dl/aria2 wrapper
   to properly seek necessary offset (according to playlist tags) and
-  download/resume files from there properly, in a parallel yet ordered and
-  controlled fashion.
+  download/resume files from there, in a parallel yet ordered and controlled
+  fashion.
 
   This is done by using --on-download-complete hook with passing ordered "gid"
   numbers for each chunk url, which are then passed to the hook along with the
-  resulting path (and hook renames file properly).
+  resulting path (and hook renames file to prefix + sequence number).
 
 Ended up with the chunk of the stream I wanted, locally (online playback lag
 never goes away!), downloaded super-fast and seekable.
@@ -94,7 +94,7 @@ never goes away!), downloaded super-fast and seekable.
 Resulting script is `twitch_vod_fetch`_ (`script source link`_).
 
 Needs `youtube-dl`_ (for --get-url), `requests python module`_ and aria2_ (does
-the actual downloads, in a proper way).
+the actual downloads, in the most efficient manner).
 
 -----
 
@@ -162,6 +162,33 @@ it's designed to be Ctrl+C'able at any point.
 End-result is one my_output_prefix.mp4 file with specified video chunk (or full
 video, if not specified), plus all the intermediate litter (to be able to
 restart the process from any point).
+
+-----
+
+One issue I've spotted with the initial version::
+
+  05/19 22:38:28 [ERROR] CUID#77 - Download aborted. URI=...
+  Exception: [AbstractCommand.cc:398] errorCode=1 URI=...
+    -> [RequestGroup.cc:714] errorCode=1 Download aborted.
+    -> [DefaultBtProgressInfoFile.cc:277]
+      errorCode=1 total length mismatch. expected: 1924180, actual: 1789572
+  05/19 22:38:28 [NOTICE] Download GID#0035090000000000 not complete: ...
+
+Seem to be a few of these mismatches (like 5 out of 10k chunks), which don't get
+retried, as aria2 doesn't seem to consider these to be a transient errors (which
+is probably fair).
+
+Probably a twitch bug, as it clearly breaks http there, and browsers shouldn't
+accept such responses either.
+
+Can be fixed by one more hook, I guess - either --on-download-error (to make
+script retry url with that gid), or the one using websocket and getting json
+notification there.
+
+In any case, just running same command again to download a few of these
+still-missing chunks and finish the process works around the issue.
+
+-----
 
 [`script source link`_]
 
