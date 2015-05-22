@@ -188,6 +188,9 @@ notification there.
 In any case, just running same command again to download a few of these
 still-missing chunks and finish the process works around the issue.
 
+**Update 2015-05-22:** Issue clearly persists for vods from different chans,
+so fixed it via simple "retry all failed chunks a few times" loop at the end.
+
 -----
 
 [`script source link`_]
