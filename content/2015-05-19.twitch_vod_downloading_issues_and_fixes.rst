@@ -191,6 +191,10 @@ still-missing chunks and finish the process works around the issue.
 **Update 2015-05-22:** Issue clearly persists for vods from different chans,
 so fixed it via simple "retry all failed chunks a few times" loop at the end.
 
+**Update 2015-05-23:** Apparently it's due to aria2 reusing same files for
+different urls and trying to resume downloads, fixed by passing --out for each
+download queued over api.
+
 -----
 
 [`script source link`_]
