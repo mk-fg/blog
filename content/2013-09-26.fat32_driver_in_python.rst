@@ -5,21 +5,24 @@ FAT32 driver in python
 :tags: fs, python
 
 
-Wrote a driver for still common FAT32 lately, while solving the issue with
+Wrote a driver for still common FAT32 recently, while solving the issue with
 shuffle on cheap "usb stick with microsd slot" mp3 player.
 
-It's kinda amazing how crap firmware in these things can be.
+It's kinda amazing how crappy firmware in these things can be.
 
-Guess one should know better than get such crap with 1-line display, gapful
+Guess one should know better than to get such crap with 1-line display, gapful
 playback, weak battery, rewind at non-accelerating ~3x speed, no ability to pick
 tracks while playing and plenty of other annoying "features", but the main issue
-I've had with the thing by far is missing shuffle - it only plays tracks in
-static order in which they were uploaded (i.e. how they're stored on fs).
+I've had with the thing by far is missing shuffle functionality - it only plays
+tracks in static order in which they were uploaded (i.e. how they're stored on
+fs).
 
 Seems like whoever built the thing made it deliberately hard to shuffle the
 tracks offline - just one sort by name would've made things a lot easier, and
 it's clear that device reads the full dir listing from the time it spends
-reading dirs with lots of files.
+opening dirs with lots of files.
+
+------
 
 Most obvious way to do such "offline shuffle", given how the thing orders files,
 is to re-upload tracks in different order, which is way too slow and wears out
@@ -36,6 +39,8 @@ Given that directory table on FAT32 is just an array (with vfat entries linked
 to dentries after them though), it's kinda easy just to shuffle entries there
 and write data back to clusters from where it was read.
 
+------
+
 One less obvious solution to shuffle, coming from understanding how vfat lfn
 entries work, is that one can actually force fs driver to reorder them by
 randomizing filename length, as it'll be forced to move longer entries to the
@@ -45,25 +50,30 @@ But that idea came a bit too late, and such parser can be useful for extending
 FAT32 to whatever custom fs (with e.g. FUSE or 9p interface) or implementing
 some of the more complex hacks.
 
-It's interestng that fat dentries seem to store `unix-like modes`_ and uid/gid
-instead of some other less-useful attrs, but linux driver doesn't seem to make
-use of it.
+------
 
-| OS'es also don't allow symlinks or hardlinks on fat, while technically it's
-  possible, as long as you keep these read-only - just create dentries that
-  point to the same cluster.
-| Should probably work for both files and dirs and allow to create multiple
-  hierarchies of the same files, like *several* dirs where same tracks are
-  shuffled with different seed, alongside dirs where they're separated by
-  artist/album/genre or whatever other tags.
-| It's very fast and cheap to create these, as each is basically about
-  "(name_length + 32B) * file_count" in size, which is like just 8 KiB for dir
-  structure holding 100+ files.
-| So plan is to extend this small hack to use mutagen_ to auto-generate such
-  hierarchies in the future, or maybe hook it directly into beets_ as an export
-  plugin, combined with transcoding, webui and convenient music-db there.
+It's interestng that fat dentries can (and apparently known to) store `unix-like
+modes`_ and uid/gid instead of some other less-useful attrs, but linux driver
+doesn't seem to make use of it.
 
-Also, finally can tick off "write proper on-disk fs driver" from "things to do
+OS'es also don't allow symlinks or hardlinks on fat, while technically it's
+possible, as long as you keep these read-only - just create dentries that point
+to the same cluster.
+
+Should probably work for both files and dirs and allow to create multiple
+hierarchies of the same files, like *several* dirs where same tracks are
+shuffled with different seed, alongside dirs where they're separated by
+artist/album/genre or whatever other tags.
+
+It's very fast and cheap to create these, as each is basically about
+"(name_length + 32B) * file_count" in size, which is like just 8 KiB for dir
+structure holding 100+ files.
+
+So plan is to extend this small hack to use mutagen_ to auto-generate such
+hierarchies in the future, or maybe hook it directly into beets_ as an export
+plugin, combined with transcoding, webui and convenient music-db there.
+
+Also, can finally tick off "write proper on-disk fs driver" from "things to do
 in life" list ;)
 
 | Link: https://github.com/mk-fg/fgtk/blob/master/desktop/vfat_shuffler
@@ -73,7 +83,7 @@ in life" list ;)
 .. _the script: https://github.com/mk-fg/fgtk/blob/master/desktop/vfat_shuffler
 .. _fat16 parser: https://github.com/construct/construct/blob/master/construct/formats/filesystem/fat16.py
 .. _construct module: http://construct.readthedocs.org/
-.. _unix-like modes: https://en.wikipedia.org/wiki/Vfat#DIR_OFS_14h
+.. _unix-like modes: https://en.wikipedia.org/wiki/Design_of_the_FAT_file_system#DIR_OFS_14h
 .. _mutagen: https://code.google.com/p/mutagen/
 .. _beets: http://beets.readthedocs.org/
 .. _readme section: https://github.com/mk-fg/fgtk/#vfat_shuffler
