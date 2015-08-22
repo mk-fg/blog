@@ -1,0 +1,33 @@
+Quick lzma2 compression showcase
+################################
+
+:date: 2015-08-22 18:58
+:tags: tools, compression
+
+
+On cue from irc, recently ran this experiment::
+
+	% a=(); for n in {1..100}; do f=ls_$n; cp /usr/bin/ls $f; echo $n >> $f; a+=( $f ); done
+	% 7z a test.7z "${a[@]}" >/dev/null
+	% tar -cf test.tar "${a[@]}"
+	% gzip < test.tar > test.tar.gz
+	% xz < test.tar > test.tar.xz
+	% rm -f "${a[@]}"
+
+	% ls -lahS test.*
+	-rw-r--r-- 1 fraggod fraggod  12M Aug 22 19:03 test.tar
+	-rw-r--r-- 1 fraggod fraggod 5.1M Aug 22 19:03 test.tar.gz
+	-rw-r--r-- 1 fraggod fraggod 465K Aug 22 19:03 test.7z
+	-rw-r--r-- 1 fraggod fraggod  48K Aug 22 19:03 test.tar.xz
+
+Didn't realize that gz was **that** bad at such deduplication task.
+
+Also somehow thought (and never really bothered to look it up) that 7z was
+compressing each file individually by default, which clearly is not the case,
+as overall size should be 10x of what 7z produced then.
+
+Docs agree on "solid" mode being the default of course, meaning no easy "pull
+one file out of the archive" unless explicitly changed - useful to know.
+
+Further 10x difference between 7z and xz is kinda impressive, even for such
+degenerate case.
