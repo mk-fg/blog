@@ -24,9 +24,9 @@ handlers:
     static_files: output/index.html
     upload: output/index\.html
 
-  - url: /theme/css/.*\.ttf
+  - url: /theme/css/(.*\.ttf)
     static_files: output/theme/css/\1
-    upload: output/static/misc/.*\.ttf
+    upload: output/theme/css/(.*\.ttf)
     mime_type: application/x-font-ttf
 
   - url: /

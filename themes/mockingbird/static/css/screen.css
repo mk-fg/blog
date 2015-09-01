@@ -59,7 +59,7 @@ table {
 }
 
 body {
-	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif;
+	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif !important;
 	font-size: 14px;
 	line-height: 1.5em;
 	color: #444;
