@@ -1,0 +1,114 @@
+Transparent and easy encryption for files in git repositories
+#############################################################
+
+:date: 2015-09-01 14:09
+:tags: encryption, scm, tools, python, sysadmin
+
+
+Have been installing things to an OS containers (/var/lib/machines) lately, and
+looking for proper configuration management in these.
+
+Large-scale container setups use some hard-to-integrate things like etcd_, where
+you have to template configuration from values in these, which is not very
+convenient and very low effort-to-results ratio (maintenance of that system
+itself) for "10 service containers on 3 hosts" case.
+
+Besides, such centralized value store is a bit backwards for
+one-container-per-service case, where most values in such "central db" are
+specific to one container, and it's much easier to edit end-result configs then
+db values and then templates and then check how it all gets rendered on every
+trivial tweak.
+
+Usual solution I have for these setups is simply putting all confs under git
+control, but leaving all the secrets (e.g. keys, passwords, auth data) out of
+the repo, in case it might be pulled from on other hosts, by different people
+and for purposes which don't need these sensitive bits and might leak them
+(e.g. giving access to contracted app devs).
+
+For more transient container setups, something should definitely keep track of
+these "secrets" however, as "rm -rf /var/lib/machines/..." is much more
+realistic possibility and has its uses.
+
+------
+
+So my (non-original) idea here was to have one "master key" per host - just one
+short string - with which to encrypt all secrets for that host, which can then
+be shared between hosts and specific people (making these public might still be
+a bad idea), if necessary.
+
+This key should then be simply stored in whatever key-management repo, written
+on a sticker and glued to a display, or something.
+
+Git can be (ab)used for such encryption, with its "filter" facilities, which are
+generally used for opposite thing (normalization to one style), but are easy to
+adapt for this case too.
+
+Git filters work by running "clear" operation on selected paths (can be a
+wildcard patterns like "\*.c") every time git itself uses these and "smudge"
+when showing to user and checking them out to a local copy (where they are
+edited).
+
+In case of encryption, "clear" would not be normalizing CR/LF in line endings,
+but rather wrapping contents (or parts of them) into a binary blob, and "smudge"
+should do the opposite, and gitattributes_ patterns would match files to be
+encrypted.
+
+------
+
+Looking for projects that already do that, `found quite a few`_, but still
+decided to write my own tool, because none seem have all the things I wanted:
+
+* Use sane encryption.
+
+  It's AES-CTR in the absolutely best case, and AES-ECB (wtf!?) in some,
+  sometimes openssl is called with "password" on the command line (trivial to
+  spoof in /proc).
+
+  OpenSSL itself is a red flag - hard to believe that someone who knows how bad
+  its API and primitives are still uses it willingly, for non-TLS, at least.
+
+  Expected to find at least one project using AEAD through NaCl or something,
+  but no such luck.
+
+* Have tool manage gitattributes.
+
+  You don't add file to git repo by typing ``/path/to/myfile
+  managed=version-control some-other-flags`` to some config, why should you do
+  it here?
+
+* Be easy to deploy.
+
+  Ideally it'd be a script, not some c++/autotools project to install build
+  tools for or package to every setup.
+
+  Though bash script is maybe taking it a bit too far, given how messy it is for
+  anything non-trivial, secure and reliable in diff environments.
+
+* Have "configuration repository" as intended use-case.
+
+So wrote `git-nerps`_ python script to address all these.
+
+Crypto there is trivial yet solid PyNaCl_ stuff, marking files for encryption is
+as easy as ``git-nerps taint /what/ever/path`` and bootstrapping the thing
+requires nothing more than python, git, PyNaCl (which are norm in any of my
+setups) and ``git-nerps key-gen`` in the repo.
+
+README_ for the project has info on every aspect of how the thing works and more
+on the ideas behind it.
+
+I expect it'll have a few more use-case-specific features and
+convenience-wrapper commands once I'll get to use it in a more realistic cases
+than it has now (initially).
+
+------
+
+[`project link`_]
+
+
+.. _etcd: https://github.com/coreos/etcd
+.. _gitattributes: https://git-scm.com/docs/gitattributes
+.. _found quite a few: https://github.com/mk-fg/git-nerps#links
+.. _git-nerps: https://github.com/mk-fg/git-nerps
+.. _PyNaCl: http://pynacl.readthedocs.org/
+.. _README: https://github.com/mk-fg/git-nerps
+.. _project link: https://github.com/mk-fg/git-nerps
