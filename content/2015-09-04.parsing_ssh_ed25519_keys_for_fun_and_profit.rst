@@ -1,0 +1,86 @@
+Parsing OpenSSH Ed25519 keys for fun and profit
+###############################################
+
+:date: 2015-09-04 21:45
+:tags: encryption, tools, python, sysadmin
+
+
+Adding key derivation to git-nerps_ from OpenSSH_ keys, needed to get the actual
+"secret" or something deterministically (plus in an obvious and stable way)
+derived from it (to then feed into some pbkdf2 and get the symmetric key).
+
+Idea is for liteweight ad-hoc vms/containers to have a single "master secret",
+from which all others (e.g. one for git-nerps' encryption) can be easily derived
+or decrypted, and omnipresent, secure, useful and easy-to-generate ssh key in
+~/.ssh/id_ed25519 seem to be the best candidate.
+
+Unfortunately, standard set of ssh tools from openssh doesn't seem to have
+anything that can get key material or its hash - next best thing is to get
+"fingerprint" or such, but these are derived from public keys, so not what I
+wanted at all (as anyone can derive that, having *public* key, which isn't
+secret).
+
+And I didn't want to hash full openssh key blob, because stuff there isn't
+guaranteed to stay the same when/if you encrypt/decrypt it or do whatever
+ssh-keygen does.
+
+What definitely stays the same is the values that openssh plugs into crypto
+algos, so wrote a full parser for the key format (as specified in PROTOCOL.key
+file in openssh sources) to get that.
+
+While doing so, stumbled upon fairly obvious and interesting application for
+such parser - to get *really* and short easy to backup, read or transcribe
+string which is the actual secret for Ed25519_.
+
+I.e. that's what OpenSSH private key looks like::
+
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+  QyNTUxOQAAACDaKUyc/3dnDL+FS4/32JFsF88oQoYb2lU0QYtLgOx+yAAAAJi1Bt0atQbd
+  GgAAAAtzc2gtZWQyNTUxOQAAACDaKUyc/3dnDL+FS4/32JFsF88oQoYb2lU0QYtLgOx+yA
+  AAAEAc5IRaYYm2Ss4E65MYY4VewwiwyqWdBNYAZxEhZe9GpNopTJz/d2cMv4VLj/fYkWwX
+  zyhChhvaVTRBi0uA7H7IAAAAE2ZyYWdnb2RAbWFsZWRpY3Rpb24BAg==
+  -----END OPENSSH PRIVATE KEY-----
+
+And here's the only useful info in there, enough to restore whole blob above
+from, in the same base64 encoding::
+
+  HOSEWmGJtkrOBOuTGGOFXsMIsMqlnQTWAGcRIWXvRqQ=
+
+Latter, of course, being way more suitable for tried-and-true "write on a
+sticker and glue at the desk" approach.
+Or one can just have a file with one host key per line - also cool.
+
+That's the 32-byte "seed" value, which can be used to derive "ed25519_sk" field
+("seed || pubkey") in that openssh blob, and all other fields are either "none",
+"ssh-ed25519", "magic numbers" baked into format or just padding.
+
+So rolled the parser from git-nerps_ into its own tool - ssh-keyparse_, which
+one can run and get that string above for key in ~/.ssh/id_ed25519, or do some
+simple crypto (as implemented by djb in `ed25519.py`_, not me) to recover full
+key from the seed.
+
+From output serialization formats that tool supports, especially liked the idea
+of `Douglas Crockford's Base32`_ - human-readable one, where all confusing
+l-and-1 or O-and-0 chars are interchangeable, and there's an optional checksum
+(one letter) at the end::
+
+  % ssh-keyparse test-key --base32
+  3KJ8-8PK1-H6V4-NKG4-XE9H-GRW5-BV1G-HC6A-MPEG-9NG0-CW8J-2SFF-8TJ0-e
+
+  % ssh-keyparse test-key --base32-nodashes
+  3KJ88PK1H6V4NKG4XE9HGRW5BV1GHC6AMPEG9NG0CW8J2SFF8TJ0e
+
+base64 (default) is still probably most efficient for non-binary (there's --raw
+otherwise) backup though.
+
+[`ssh-keyparse code link`_]
+
+
+.. _git-nerps: https://github.com/mk-fg/git-nerps
+.. _OpenSSH: http://openssh.com/
+.. _Ed25519: http://bench.cr.yp.to/supercop.html
+.. _ssh-keyparse: https://github.com/mk-fg/fgtk/#ssh-keyparse
+.. _ed25519.py: http://ed25519.cr.yp.to/python/ed25519.py
+.. _Douglas Crockford's Base32: http://www.crockford.com/wrmg/base32.html
+.. _ssh-keyparse code link: https://github.com/mk-fg/fgtk/blob/master/ssh-keyparse
