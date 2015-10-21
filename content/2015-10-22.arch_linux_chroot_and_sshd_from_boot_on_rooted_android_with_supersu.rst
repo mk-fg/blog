@@ -1,0 +1,332 @@
+Arch Linux chroot and sshd from boot on rooted Android with SuperSU
+###################################################################
+
+:date: 2015-10-22 23:48
+:tags: android, sysadmin, linux, mobile, ssh
+
+
+Got myself Android device only recently, and first thing I wanted to do, of
+course, was to ssh into it.
+
+But quick look at the current F-Droid and Play apps shows that they either based
+on a quite limited dropbear_ (though perfectly fine for one-off shell access) or
+"based on openssh code", where `infamous Debian OpenSSL code patch`_ comes to
+mind, not to mention that most look like ad-ridden proprietary piece of crap.
+
+Plus I'd want a proper package manager, shell (zsh), tools and other stuff in
+there, not just some baseline bash and busybox, and chroot with regular linux
+distro is a way to get all that plus standard OpenSSH daemon.
+
+Under the hood, modern Android (5.11 in my case, with CM 12) phone is not much
+more than Java VM running on top of SELinux-enabled (which I opted to keep for
+Android stuff) Linux kernel, on top of some multi-core ARMv7 CPU (quadcore in my
+case, rather identical to one in RPi2).
+
+Steps I took to have sshd running on boot with such device:
+
+* Flush stock firmware (usually loaded with adware and crapware) and install
+  some pre-rooted firmware image from xda-developers.com or 4pda.ru.
+
+  My phone is a second-hand Samsung Galaxy S3 Neo Duos (GT-I9300I), and I picked
+  `resurrection remix`_ CM-based ROM for it, built for this phone from
+  t3123799_, with `Open GApps arm 5.1 Pico`_ (minimal set of google stuff).
+
+  That ROM (like most of them, it appears) comes with bash, busybox and - most
+  importantly - SuperSU_, which runs its unrestricted init, and is crucial to
+  getting chroot-script to start on boot.
+  All three of these are needed.
+
+  Under Windows, there's Odin suite for flashing zip with all the goodies to
+  USB-connected phone booted into "download mode".
+
+  On Linux, there's Heimdall_ (don't forget to install adb with that, e.g. via
+  ``pacman -S android-tools android-udev`` on Arch), which can dd img files for
+  diff phone partitions, but doesn't seem to support "one zip with everything"
+  format that most firmwares come in.
+
+  Instead of figuring out which stuff from zip to upload where with Heimdall,
+  I'd suggest grabbing a must-have TWRP_ recovery.img (small os that boots in
+  "recovery mode", grabbed one for my phone from t2906840_), flashing it with
+  e.g. ``heimdall flash --RECOVERY recovery.twrp-2.8.5.0.img`` and then booting
+  into it to install whatever main OS and apps from zip's on microSD card.
+
+  TWRP_ (or similar CWM_ one) is really useful for a lot of OS-management stuff
+  like app-packs installation (e.g. Open GApps) or removal, updates, backups,
+  etc, so I'd definitely suggest installing one of these as recovery.img as the
+  first thing on any Android device.
+
+* Get or make ARM chroot tarball.
+
+  I did this by bootstrapping a stripped-down ARMv7 `Arch Linux ARM`_ chroot on
+  a Raspberry Pi 2 that I have around:
+
+  .. code-block:: console
+
+    # pacman -Sg base
+
+     ### Look through the list of packages,
+     ###  drop all the stuff that won't ever be useful in chroot on the phone,
+     ###  e.g. pciutils, usbutils, mdadm, lvm2, reiserfsprogs, xfsprogs, jfsutils, etc
+
+     ### pacstrap chroot with whatever is left
+
+    # mkdir droid-chroot
+    # pacstrap -i -d droid-chroot bash bzip2 coreutils diffutils file filesystem \
+        findutils gawk gcc-libs gettext glibc grep gzip iproute2 iputils less \
+        licenses logrotate man-db man-pages nano pacman perl procps-ng psmisc \
+        sed shadow sysfsutils tar texinfo util-linux which
+
+     ### Install whatever was forgotten in pacstrap
+
+    # pacman -r droid-chroot -S --needed atop busybox colordiff dash fping git \
+        ipset iptables lz4 openssh patch pv rsync screen xz zsh fcron \
+        python2 python2-pip python2-setuptools python2-virtualenv
+
+     ### Make a tar.gz out of it all
+
+    # tar -czf droid-chroot.tar.gz droid-chroot
+
+  Same can be obviously done with debootstrap or whatever other distro-of-choice
+  bootstrapping tool, but likely has to be done on a compatible architecture -
+  something that can run ARMv7 binaries, like RPi2 in my case (though VM should
+  do too) - to run whatever package hooks upon installs.
+
+  Easier way (that won't require having spare ARM box or vm) would be to take
+  pre-made image for any ARMv7 platform, from http://os.archlinuxarm.org/os/
+  list or such, but unless there's something very generic (which
+  e.g. "ArchLinuxARM-armv7-latest.tar.gz" seem to be), there's likely be some
+  platform-specific cruft like kernel, modules, firmware blobs, SoC-specific
+  tools and such... nothing that can't be removed at any later point with
+  package manager or simple "rm", of course.
+
+  While architecture in my case is ARMv7, which is quite common nowadays (2015),
+  other devices can have Intel SoCs with x86 or newer 64-bit ARMv8 CPUs.
+  For x86, bootstrapping can obviously be done on pretty much any desktop/laptop
+  machine, if needed.
+
+* Get root shell on device and unpack chroot tarball there.
+
+  ``adb shell`` (``pacman -S android-tools android-udev`` or other distro
+  equivalent, if missing) should get "system" shell on a USB-connected phone.
+
+  (btw, "adb" access have to be enabled on the phone via some common "tap 7
+  times on OS version in Settings-About then go to Developer-options" dance, if
+  not already)
+
+  With SuperSU (or similar "su" package) installed, next step would be running
+  "su" there to get unrestricted root, which should work.
+
+  ``/system`` and ``/data`` should be on ext4 (check ``mount | grep ext4`` for
+  proper list), f2fs or such "proper" filesystem, which is important to have for
+  all the unix permission bits and uid/gid info which e.g. FAT can't handle
+  (loopback img with ext4 can be created in that case, but shouldn't be
+  necessary in case of internal flash storage, which should have proper fs'es
+  already).
+
+  ``/system`` is a bad place for anything custom, as it will be completely
+  flushed on most main-OS changes (when updating ROM from zip with TWRP, for
+  instance), and is mounted with "ro" on boot anyway.
+
+  Any subdir in ``/data`` seem to work fine, though one obvious pre-existing
+  place - ``/data/local`` - is probably a bad idea, as it is used by some
+  Android dev tools already.
+
+  With busybox and proper bash on the phone, unpacking tarball from e.g. microSD
+  card should be easy:
+
+  .. code-block:: console
+
+    # mkdir -m700 /data/chroots
+    # cd /data/chroots
+    # tar -xpf /mnt/sdcard/droid-chroot.tar.gz
+
+  It should already work, too, so...
+
+  .. code-block:: console
+
+    # cd droid-chroot
+    # mount -o bind /dev dev \
+        && mount -o bind /dev/pts dev/pts \
+        && mount -t proc proc proc \
+        && mount -t sysfs sysfs sys
+    # env -i TERM=$TERM SHELL=/bin/zsh HOME=/root $(which chroot) . /bin/zsh
+
+  ...should produce a proper shell in a proper OS, yay! \\o/
+
+  Furthermore, to be able to connect there directly, without adb or USB cable,
+  ``env -i $(which chroot) . /bin/sshd`` should work too.
+
+* Setup init script to run sshd or whatever init-stuff from that chroot on boot.
+
+  Main trick here is to run it with unrestricted SELinux context
+  (unless SELinux is disabled entirely, I guess).
+
+  This makes ``/system/etc/init.d`` using "sysinit_exec" and
+  ``/data/local/userinit.sh`` with "userinit_exec" unsuitable for the task, only
+  something like "init" ("u:r:init:s0") will work.
+
+  `SELinux on Android is documented in Android docs`_, and everything about
+  SELinux in general applies there, of course, but some su-related roles like
+  above "userinit_exec" `actually come with CyanogenMod`_ or whatever similar
+  hacks on top of the base Android OS.
+
+  Most relevant info on this stuff comes with SuperSU though (or rather
+  libsuperuser) - http://su.chainfire.eu/
+
+  That doc has info on how to patch policies, to e.g. transition to unrestricted
+  role for chroot init, setup sub-roles for stuff in there (to also use SELinux
+  in a chroot), which contexts are used where, and - most useful in this case -
+  which custom "init" dirs are used at which stages of the boot process.
+
+  Among other useful stuff, it specifies/describes ``/system/su.d`` init-dir,
+  from which SuperSU runs scripts/binaries with unrestricted "init" context, and
+  very early in the process too, hence it is most suitable for starting chroot
+  from.
+
+  So, again, from root (after "su") shell:
+
+  .. code-block:: console
+
+    # mount -o remount,rw /system
+    # mkdir -m700 /system/su.d
+
+    # cat >/system/su.d/chroots.sh <<EOF
+    #!/system/bin/sh
+    exec /data/local/chroots.bash
+    EOF
+
+    # chmod 700 /system/su.d/chroots.sh
+
+    # cat >/data/local/chroots.bash <<EOF
+    #!/system/xbin/bash
+    export PATH=/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
+
+    log=/data/local/chroots.log
+    [[ $(du -m "$log" | awk '{print $1}') -gt 20 ]] && mv "$log"{,.old}
+    exec >>"$log" 2>&1
+    echo " --- Started $(TZ=UTC date) --- "
+
+    log -p i -t chroots "Starting chroot: droid-chroot"
+    /data/chroots/droid-chroot.sh &
+    disown
+
+    log -p i -t chroots "Finished chroots init"
+
+    echo " --- Finished $(TZ=UTC date) --- "
+    EOF
+
+    # chmod 700 /data/local/chroots.bash
+
+    # cd /data/chroots
+    # mkdir -p droid-chroot/mnt/storage
+    # ln -s droid-chroot/init.sh droid-chroot.sh
+
+    # cat >droid-chroot/init.sh <<EOF
+    #!/system/xbin/bash
+    set -e -o pipefail
+
+    usage() {
+      bin=$(basename $0)
+      echo >&2 "Usage: $bin [ stop | chroot ]"
+      exit ${1:-0}
+    }
+    [[ "$#" -gt 1 || "$1" = -h || "$1" = --help ]] && usage
+
+    cd /data/chroots/droid-chroot
+
+    sshd_pid=$(cat run/sshd.pid 2>/dev/null ||:)
+
+    mountpoint -q dev || mount -o bind /dev dev
+    mountpoint -q dev/pts || mount -o bind /dev/pts dev/pts
+    mountpoint -q proc || mount -t proc proc proc
+    mountpoint -q sys || mount -t sysfs sysfs sys
+    mountpoint -q tmp || mount -o nosuid,nodev,size=20%,mode=1777 -t tmpfs tmpfs tmp
+    mountpoint -q run || mount -o nosuid,nodev,size=20% -t tmpfs tmpfs run
+    mountpoint -q mnt/storage || mount -o bind /data/media/0 mnt/storage
+
+    case "$1" in
+      stop)
+        [[ -z "$sshd_pid" ]] || kill "$sshd_pid"
+        exit 0 ;;
+      chroot)
+        exec env -i\
+          TERM="$TERM" SHELL=/bin/zsh HOME=/root\
+          /system/xbin/chroot . /bin/zsh ;;
+      *) [[ -z "$1" ]] || usage 1 ;;
+    esac
+
+    [[ -n "$sshd_pid" ]]\
+      && kill -0 "$sshd_pid" 2>/dev/null\
+      || exec env -i /system/xbin/chroot . /bin/sshd
+    EOF
+
+    # chmod 700 droid-chroot/init.sh
+
+  To unpack all that wall-of-shell a bit:
+
+  * Very simple ``/system/su.d/chroots.sh`` is created, so that it can easily be
+    replaced if/when ``/system`` gets flushed by some update, and also so that
+    it won't need to be edited (needing rw remount) ever.
+
+  * ``/data/local/chroots.bash`` is an actual init script for whatever chroots,
+    with Android logging stuff (accessible via e.g. ``adb logcat``, useful to
+    check if script was ever started) and simplier more reliable (and rotated)
+    log in ``/data/local/chroots.log``.
+
+  * ``/data/chroots/droid-chroot.sh`` is a symlink to init script in
+    ``/data/chroots/droid-chroot/init.sh``, so that this script can be easily
+    edited from inside of the chroot itself.
+
+  * ``/data/chroots/droid-chroot/init.sh`` is the script that mounts all the
+    stuff needed for the chroot and starts sshd there.
+
+    Can also be run from adb root shell to do the same thing, with "stop" arg to
+    kill that sshd, or with "chroot" arg to do all the mounts and chroot into
+    the thing from whatever current sh.
+
+    Basically everything to with that chroot from now on can/should be done
+    through that script.
+
+  "cat" commands can obviously be replaced with "nano" and copy-paste there, or
+  copying same (or similar) scripts from card or whatever other paths (to avoid
+  pasting them into shell, which might be less convenient than Ctrl+S in
+  $EDITOR).
+
+* Reboot, test sshd, should work.
+
+Anything other than sshd can also be added to that init script, to make some
+full-featured dns + web + mail + torrents server setup start in chroot.
+
+With more than a few daemons, it'd probably be a good idea to start just one
+"daemon babysitter" app from there, such as runit, daemontools or whatever.
+Maybe even systemd will work, though unlikely, given how it needs udev, lots of
+kernel features and apis initialized in its own way, and such.
+
+Obvious caveat for running a full-fledged linux separately from main OS is that
+it should probably be managed through local webui's or from some local terminal
+app, and won't care much about power management and playing nice with Android
+stuff.
+
+Android shouldn't play nice with such parasite OS either, cutting network or
+suspending device when it feels convenient, without any regard for conventional
+apps running there, though can be easily configured not to.
+
+As I'm unlikely to want this device as a phone ever (who needs these, anyway?),
+turning it into something more like wireless RPi2 with a connected management
+terminal (represented by Android userspace) sounds like the only good use for it
+so far.
+
+
+.. _dropbear: https://matt.ucc.asn.au/dropbear/dropbear.html
+.. _infamous Debian OpenSSL code patch: https://www.debian.org/security/2008/dsa-1571
+.. _resurrection remix: http://www.resurrectionremix.com/
+.. _t3123799: http://forum.xda-developers.com/galaxy-s3-neo/development/rom-ressurection-remix-s3-neo-t3123799
+.. _Open GApps arm 5.1 Pico: http://forum.xda-developers.com/android/software/pa-gapps-continuation-t3098071
+.. _SuperSU: http://forum.xda-developers.com/apps/supersu
+.. _Heimdall: http://glassechidna.com.au/products/heimdall/
+.. _TWRP: https://twrp.me/
+.. _t2906840: http://forum.xda-developers.com/showpost.php?p=56085899
+.. _CWM: https://www.clockworkmod.com/rommanager
+.. _Arch Linux ARM: http://archlinuxarm.org/
+.. _SELinux on Android is documented in Android docs: https://source.android.com/devices/tech/security/selinux/
+.. _actually come with CyanogenMod: https://github.com/CyanogenMod/android_vendor_cm/tree/cm-12.0/sepolicy
