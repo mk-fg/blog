@@ -5,6 +5,9 @@ tmux rate-limiting magic against terminal spam/flood lock-ups
 :tags: sysadmin, unix, rate-limiting
 
 
+**Update 2015-11-08:** No longer necessary (or even supported in 2.1) - tmux'
+new "backoff" rate-limiting approach works like a charm with defaults \\o/
+
 Had the issue of spammy binary locking-up terminal for a long time, but never
 bothered to do something about it... until now.
 
