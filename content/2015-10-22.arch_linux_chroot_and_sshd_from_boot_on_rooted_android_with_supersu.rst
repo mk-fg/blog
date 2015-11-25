@@ -2,7 +2,7 @@ Arch Linux chroot and sshd from boot on rooted Android with SuperSU
 ###################################################################
 
 :date: 2015-10-22 23:48
-:tags: android, sysadmin, linux, mobile, ssh
+:tags: android, sysadmin, linux, mobile, ssh, arm
 
 
 Got myself Android device only recently, and first thing I wanted to do, of

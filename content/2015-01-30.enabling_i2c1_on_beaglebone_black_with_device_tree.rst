@@ -2,7 +2,7 @@ Enabling i2c1 on BeagleBone Black without Device Tree overlays
 ##############################################################
 
 :date: 2015-01-30 20:20
-:tags: hardware, linux
+:tags: hardware, linux, arm
 
 
 **Important:** This way was pretty much made obsolete by Device Tree overlays,

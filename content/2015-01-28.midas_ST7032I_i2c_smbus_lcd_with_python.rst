@@ -2,7 +2,7 @@ Sample code for using ST7032I I2C/SMBus driver in Midas LCD with python
 #######################################################################
 
 :date: 2015-01-28 14:19
-:tags: hardware, python
+:tags: hardware, python, arm
 
 
 | There seem to be a surprising lack of python code on the net for this particular

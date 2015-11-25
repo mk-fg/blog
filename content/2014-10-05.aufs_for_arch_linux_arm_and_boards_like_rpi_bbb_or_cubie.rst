@@ -2,7 +2,7 @@ Simple aufs setup for Arch Linux ARM and boards like RPi, BBB or Cubie
 ######################################################################
 
 :date: 2014-10-05 14:17
-:tags: sysadmin, unix, fs, systemd
+:tags: sysadmin, unix, fs, systemd, arm
 
 
 Experimenting with all kinds of arm boards lately (nyms above stand for
