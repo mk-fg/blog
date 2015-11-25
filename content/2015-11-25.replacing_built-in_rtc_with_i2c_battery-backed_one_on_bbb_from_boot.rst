@@ -1,0 +1,188 @@
+Replacing built-in RTC with i2c battery-backed one on BeagleBone Black from boot
+################################################################################
+
+:date: 2015-11-25 14:15
+:tags: hardware, linux, arm
+
+
+`BeagleBone Black`_ (BBB) boards have - and use - RTC (`Real-Time Clock`_ -
+device that tracks wall-clock time, including calendar date and time of day) in
+the SoC, which isn't battery-backed, so looses track of time each time device
+gets power-cycled.
+
+This represents a problem if keeping track of time is necessary and there's no
+network access (or a patchy one) to sync this internal RTC when board boots up.
+
+Easy solution to that, of course, is plugging external RTC device, with plenty
+of cheap chips with various precision available, most common being Dallas/Maxim
+ICs like DS1307 or DS3231 (a better one of the line) with I2C interface, which
+are all supported by Linux "ds1307" module.
+
+Enabling connected chip at runtime can be easily done with a command like this::
+
+  echo ds1307 0x68 >/sys/bus/i2c/devices/i2c-2/new_device
+
+(see `this post on Fortune Datko blog`_ and/or `this one on minix-i2c blog`_ for
+ways to tell reliably which i2c device in /dev corresponds to which bus and pin
+numbers on BBB headers, and how to check/detect/enumerate connected devices
+there)
+
+This obviously doesn't enable device straight from the boot though, which is
+usually accomplished by adding the thing to Device Tree, and earlier with
+e.g. 3.18.x kernels it had to be done by `patching and re-compiling platform dtb
+file`_ used on boot.
+
+But since 3.19.x kernels (and before 3.9.x), easier way seem to be to use Device
+Tree Overlays (usually "/lib/firmware/\*.dtbo" files, compiled by "dtc" from dts
+files), which is kinda like patching Device Tree, only done at runtime.
+
+Code for such patch in my case ("i2c2-rtc-ds3231.dts"), with 0x68 address on
+i2c2 bus and "ds3231" kernel module (alias for "ds1307", but more appropriate
+for my chip)::
+
+  /dts-v1/;
+  /plugin/;
+
+  /* dtc -O dtb -o /lib/firmware/BB-RTC-02-00A0.dtbo -b0 i2c2-rtc-ds3231.dts */
+  /* bone_capemgr.enable_partno=BB-RTC-02 */
+  /* https://github.com/beagleboard/bb.org-overlays */
+
+  / {
+    compatible = "ti,beaglebone", "ti,beaglebone-black", "ti,beaglebone-green";
+    part-number = "BB-RTC-02";
+    version = "00A0";
+
+    fragment@0 {
+      target = <&i2c2>;
+
+      __overlay__ {
+        pinctrl-names = "default";
+        pinctrl-0 = <&i2c2_pins>;
+        status = "okay";
+        clock-frequency = <100000>;
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+
+        rtc: rtc@68 {
+          compatible = "dallas,ds3231";
+          reg = <0x68>;
+        };
+      };
+    };
+  };
+
+As per comment in the overlay file, can be compiled ("dtc" comes from
+"dtc-overlay" package on ArchLinuxARM) to the destination with::
+
+  dtc -O dtb -o /lib/firmware/BB-RTC-02-00A0.dtbo -b0 i2c2-rtc-ds3231.dts
+
+And then loaded on early boot (as soon as rootfs with "/lib/firmware" gets
+mounted) with "bone_capemgr.enable_partno=" cmdline addition, and should be put
+to something like "/boot/uEnv.txt", for example (with dtb path from command above)::
+
+  optargs=bone_capemgr.enable_partno=BB-RTC-02
+
+Docs in `bb.org-overlays repository`_ have more details and examples on how to
+write and manage these.
+
+That should ensure that this second RTC appears as "/dev/rtc1" (rtc0 is an
+internal one) on system startup, but unfortunately it still won't be the first
+one and kernel will already pick up time from internal rtc0 by the time this one
+gets detected.
+
+Furthermore, systemd-enabled userspace (as in e.g. ArchLinuxARM) interacts with
+RTC via systemd-timedated_ and systemd-timesyncd_, which both use "/dev/rtc"
+symlink (and can't be configured to use other devs), which by default udev
+points to rtc0 as well, and rtc1 - no matter how early it appears - gets
+completely ignored there as well.
+
+So two issues are with "system clock" that kernel keeps and userspace daemons
+using wrong RTC, which is default in both cases.
+
+"/dev/rtc" symlink for userspace gets created by udev, according to
+"/usr/lib/udev/rules.d/50-udev-default.rules", and can be overidden by
+e.g. "/etc/udev/rules.d/55-i2c-rtc.rules"::
+
+  SUBSYSTEM=="rtc", KERNEL=="rtc1", SYMLINK+="rtc", OPTIONS+="link_priority=10", TAG+="systemd"
+
+This sets "link_priority" to 10 to override SYMLINK directive for same "rtc" dev
+node name from "50-udev-default.rules", which has link_priority=-100.
+
+Also, ``TAG+="systemd"`` makes systemd track device with its "dev-rtc.device"
+unit (auto-generated, see `systemd.device(5)`_ for more info), which is useful
+to order userspace daemons depending on that symlink to start strictly after
+it's there.
+
+"userspace daemons" in question on a basic Arch are systemd-timesyncd and
+systemd-timedated, of which only systemd-timesyncd starts early on boot, before
+all other services, including systemd-timedated, sysinit.target and
+time-sync.target (for early-boot clock-dependant services).
+
+So basically if proper "/dev/rtc" and system clock gets initialized before
+systemd-timesyncd (or whatever replacement, like ntpd or chrony), correct time
+and rtc device will be used for all system daemons (which start later) from here on.
+
+Adding that extra step can be done as a separate systemd unit (to avoid messing
+with shipped systemd-timesyncd.service), e.g. "i2c-rtc.service":
+
+.. code-block:: ini
+
+  [Unit]
+  ConditionCapability=CAP_SYS_TIME
+  ConditionVirtualization=!container
+  DefaultDependencies=no
+  Wants=dev-rtc.device
+  After=dev-rtc.device
+  Before=systemd-timesyncd.service ntpd.service chrony.service
+
+  [Service]
+  Type=oneshot
+  CapabilityBoundingSet=CAP_SYS_TIME
+  PrivateTmp=yes
+  ProtectSystem=full
+  ProtectHome=yes
+  DeviceAllow=/dev/rtc rw
+  DevicePolicy=closed
+  ExecStart=/usr/bin/hwclock --hctosys
+
+  [Install]
+  WantedBy=time-sync.target
+
+Note that Before= above should include whatever time-sync daemon is used on the
+machine, and there's no harm in listing non-existant or unused units there jic.
+
+Most security-related stuff and conditions are picked from systemd-timesyncd
+unit file, which needs roughly same access permissions as "hwclock" here.
+
+With udev rule and that systemd service (don't forget to "systemctl enable" it),
+boot sequence goes like this:
+
+- Kernel inits internal rtc0 and sets system clock to 1970-01-01.
+- Kernel starts systemd.
+- systemd mounts local filesystems and starts i2c-rtc asap.
+- i2c-rtc, due to Wants/After=dev-rtc.device, starts waiting for /dev/rtc to appear.
+- Kernel detects/initializes ds1307 i2c device.
+- udev creates /dev/rtc symlink and tags it for systemd.
+- systemd detects tagging event and activates dev-rtc.device.
+- i2c-rtc starts, adjusting system clock to realistic value from battery-backed rtc.
+- systemd-timesyncd starts, using proper /dev/rtc and correct system clock value.
+- time-sync.target activates, as it is scheduled to, after systemd-timesyncd and i2c-rtc.
+- From there, boot goes on to sysinit.target, basic.target and starts all the daemons.
+
+udev rule is what facilitates symlink and tagging, i2c-rtc.service unit is what
+makes boot sequence wait for that /dev/rtc to appear and adjusts system clock
+right after that.
+
+Haven't found an up-to-date and end-to-end description with examples anywhere,
+so here it is. Cheers!
+
+
+.. _BeagleBone Black: http://elinux.org/Beagleboard:BeagleBoneBlack
+.. _Real-Time Clock: https://en.wikipedia.org/wiki/Real-time_clock
+.. _this post on Fortune Datko blog: http://datko.net/2013/11/03/bbb_i2c/
+.. _this one on minix-i2c blog: http://minix-i2c.blogspot.ru/2013/07/using-i2c-tools-with-angstrom-linux-on.html
+.. _patching and re-compiling platform dtb file: http://blog.fraggod.net/2015/01/30/enabling-i2c1-on-beaglebone-black-without-device-tree-overlays.html
+.. _bb.org-overlays repository: https://github.com/beagleboard/bb.org-overlays
+.. _systemd-timesyncd: http://www.freedesktop.org/software/systemd/man/systemd-timesyncd.html
+.. _systemd-timedated: http://www.freedesktop.org/software/systemd/man/systemd-timedated.html
+.. _systemd.device(5): http://www.freedesktop.org/software/systemd/man/systemd.device.html
