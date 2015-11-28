@@ -1,0 +1,161 @@
+Raspberry Pi early boot splash / logo screen
+############################################
+
+:date: 2015-11-28 23:19
+:tags: linux, systemd, arm
+
+
+Imagine you have RPi with some target app (e.g. kiosk-mode browser) starting in
+X session, and want to have a full-screen splash for the whole time that device
+will be booting, and no console output or getty's of any kind, and no other
+splash screens in there - only black screen to logo to target app.
+
+In case of average Raspberry Pi boot, there is:
+
+
+- A firmware "color test" splash when device gets powered-on.
+
+  Removed with ``disable_splash=1`` in /boot/config.txt.
+
+
+- "Rainbow-colored square" over-current indicator popping up on the right,
+  regardless of PSU or cables, it seems.
+
+  ``avoid_warnings=1`` in the same config.txt
+
+
+- As kernel boots - Raspberry Pi logo embedded in it.
+
+  ``logo.nologo`` to /boot/cmdline.txt.
+
+  Replacing that logo with proper splash screen is not really an option, as
+  logos that work there have to be tiny - like 80x80 pixels tiny.
+
+  Anything larger than that gives ``fbcon_init: disable boot-logo (boot-logo
+  bigger than screen)``, so in-kernel logo isn't that useful, and it's a pain to
+  embed it there anyway (kernel rebuild!).
+
+
+- Lots of console output - from kernel and init both.
+
+  cmdline.txt: ``console=null quiet``
+
+
+- Getty showing its login prompt.
+
+  ``systemctl disable getty@tty1``
+
+
+- More printk stuff, as various kernel modules get initialized and hardware
+  detected.
+
+  ``console=null`` in cmdline.txt should've removed all that.
+
+  ``loglevel=1 rootfstype=ext4`` helps if ``console=null`` is not an option for
+  whatever reason.
+
+  Need for "rootfstype" is kinda funny, because messages from kernel trying to
+  mount rootfs as ext2/ext3 seem to be emergency-level or something.
+
+
+- Removing all the stuff above should (finally!) get a peaceful black screen,
+  but what about the actual splash image?
+
+  ::
+
+    fbi -d /dev/fb0 --once --noverbose\
+      --autozoom /path/to/image.png </dev/tty1 >/dev/tty1
+
+  Or, in early-boot-systemd terms:
+
+  .. code-block:: ini
+
+    [Unit]
+    DefaultDependencies=no
+    After=local-fs.target
+
+    [Service]
+    StandardInput=tty
+    StandardOutput=tty
+    ExecStart=/usr/bin/fbi -d /dev/fb0\
+      --once --noverbose --autozoom /path/to/image.png
+
+    [Install]
+    WantedBy=sysinit.target
+
+  "fbi" is a tool from fbida_ project.
+
+  First time you run it, you'll probably get::
+
+    ioctl VT_GETSTATE: Inappropriate ioctl for device (not a linux console?)
+
+  A lot of people on the internets seem to suggest something like "just run it
+  from Alt + F1 console", which definitely isn't an option for this case, but
+  I/O redirection to /dev/tty (as shown above) seem to work.
+
+
+- Blank black screen on X startup.
+
+  Running X on a different VT from "fbi" seem to have nice effect that if X will
+  have to be restarted for some reason (e.g. whole user session gets restarted
+  due to target app's watchdog + StartLimitAction=), VT will switch back to a
+  nice logo, not some text console.
+
+  To fix blackness in X before-and-after WM, there're tools like feh_::
+
+    feh --bg-scale /path/to/image.png
+
+  That's not instant though, as X usually takes its time starting up, so see
+  more on it below.
+
+
+- Target app startup cruft - e.g. browser window without anything loaded yet, or
+  worse - something like window elements being drawn.
+
+  * There can be some WM tricks to avoid showing unprepared window, including
+    "start minimized, then maximize", switching "virtual desktops", overlay
+    windows, transparency with compositors, etc.
+
+    Depends heavily on WM, obviously, and needs one that can be controlled from
+    the script (which is rather common among modern standalone WMs).
+
+  * Another trick is to start whole X without switching VT -
+    i.e. ``X -novtswitch vt2`` - and switch to that VT later when both X and app
+    signal that they're ready, or just been given enough time.
+
+    Until switch happens, splash logo is displayed, courtesy of "fbi" tool.
+
+  * On Raspberry Pi in particular, there's a direct-to-display `MMAL API`_,
+    which allows to overlay anything on top of whatever Linux or X draw in their
+    VTs while starting-up.
+
+    This is actually a cool thing - e.g. starting ``omxplayer --no-osd --no-keys
+    /path/to/image.png.mp4`` early on boot (it doesn't need X or anything!) will
+    remove the need for most previous steps, as it will eclipse all the other
+    video output.
+
+    "omxplayer" maybe isn't the best tool for the job, as it can't display still
+    images, but it's fast and liteweight enough.
+
+    Alternative can be e.g. some python script using picamera_, but that'd
+    likely be way slower than omxplayer "playing" still-image video.
+
+    Btw, ffmpeg magic to make image into a video for that purpose::
+
+      ffmpeg -y -loop 1 -i image.png -c:v libx264 -tune stillimage\
+        -an -strict experimental -pix_fmt yuv420p -shortest image.png.mp4
+
+
+- Finally some destination state with target app showing what it's supposed to.
+
+  Yay, we got here!
+
+
+Not a very comprehensive or coherent guide, but might be useful to sweep all the
+RPi nasties under an exquisite and colorful rug ;)
+
+
+.. _fbida: http://www.kraxel.org/blog/linux/fbida/
+.. _feh: http://feh.finalrewind.org/
+.. _MMAL API: http://www.jvcref.com/files/PI/documentation/html/
+.. _picamera: https://picamera.readthedocs.org/en/release-1.10/
