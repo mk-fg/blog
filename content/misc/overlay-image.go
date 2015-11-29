@@ -8,8 +8,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
-	"text/template"
+	"syscall"
 )
 
 
@@ -45,14 +46,13 @@ func resize_image(w, h int, image_path string) (image_path_resized string, err e
 
 func main() {
 	flag.Usage = func() {
-		tpl := template.Must(template.New("test").Parse(""+
-			`usage: {{.cmd}} [ opts ] image-path
+		fmt.Fprintf(os.Stdout,
+			`usage: %s [ opts ] image-path
 
 Set specified image as an overlay screen via OpenVG lib.
 Default is to put this image to the center.
 
-`))
-		tpl.Execute(os.Stdout, map[string]interface{}{"cmd": os.Args[0]})
+`, os.Args[0])
 		flag.PrintDefaults()
 	}
 
@@ -86,34 +86,45 @@ Default is to put this image to the center.
 		}
 	}
 	if err != nil {
-		log.Fatalf("Failed to parse bg-color value (%v): %v", bg_color, err)
+		log.Fatalf("ERROR: Failed to parse bg-color value (%v): %v", bg_color, err)
 	}
 	image_path := flag.Args()[0]
+
+	exit_code := 0
+	defer func() {
+		os.Exit(exit_code)
+	}()
+
 
 	openvg.SaveTerm()
 	w, h := openvg.Init()
 	openvg.RawTerm()
-	defer openvg.RestoreTerm()
 	defer openvg.Finish()
+	defer openvg.RestoreTerm()
 
 	image_conf, err := get_image_conf(image_path)
 	if err == nil && resize && (image_conf.Width != w || image_conf.Height != h) {
 		image_path, err = resize_image(w, h, image_path)
 	}
 	if err != nil {
-		log.Fatalf("Failed to process image (%v): %v", image_path, err)
-	}
-
-	openvg.Start(w, h)
-	openvg.Background(r, g, b)
-	if resize {
-		openvg.Image(0, 0, w, h, image_path)
+		log.Printf("ERROR: Failed to process image (%v): %v", image_path, err)
+		exit_code = 1
 	} else {
-		x, y := openvg.VGfloat(w) / 2 - openvg.VGfloat(image_conf.Width) / 2,
-			openvg.VGfloat(h) / 2 - openvg.VGfloat(image_conf.Height) / 2
-		openvg.Image(x, y, image_conf.Width, image_conf.Height, image_path)
-	}
-	openvg.End()
+		sig_chan := make(chan os.Signal, 1)
+		signal.Notify( sig_chan, os.Interrupt, os.Kill,
+			syscall.SIGHUP, syscall.SIGTERM, syscall.SIGALRM )
 
-	select{}
+		openvg.Start(w, h)
+		openvg.Background(r, g, b)
+		if resize {
+			openvg.Image(0, 0, w, h, image_path)
+		} else {
+			x, y := openvg.VGfloat(w) / 2 - openvg.VGfloat(image_conf.Width) / 2,
+				openvg.VGfloat(h) / 2 - openvg.VGfloat(image_conf.Height) / 2
+			openvg.Image(x, y, image_conf.Width, image_conf.Height, image_path)
+		}
+		openvg.End()
+
+		_ = <-sig_chan
+	}
 }
