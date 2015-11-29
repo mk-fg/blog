@@ -2,7 +2,7 @@ Raspberry Pi early boot splash / logo screen
 ############################################
 
 :date: 2015-11-28 23:19
-:tags: linux, systemd, arm
+:tags: linux, systemd, arm, go
 
 
 Imagine you have RPi with some target app (e.g. kiosk-mode browser) starting in
@@ -125,25 +125,29 @@ In case of average Raspberry Pi boot, there is:
 
     Until switch happens, splash logo is displayed, courtesy of "fbi" tool.
 
-  * On Raspberry Pi in particular, there's a direct-to-display `MMAL API`_,
-    which allows to overlay anything on top of whatever Linux or X draw in their
-    VTs while starting-up.
+  * On Raspberry Pi in particular, there're some direct-to-display `VideoCore
+    APIs`_, which allow to overlay anything on top of whatever Linux or X draw
+    in their VTs while starting-up.
 
     This is actually a cool thing - e.g. starting ``omxplayer --no-osd --no-keys
-    /path/to/image.png.mp4`` early on boot (it doesn't need X or anything!) will
-    remove the need for most previous steps, as it will eclipse all the other
-    video output.
+    /path/to/image.png.mp4`` (mp4 produced from still image) early on boot (it
+    doesn't need X or anything!) will remove the need for most previous steps,
+    as it will eclipse all the other video output.
 
-    "omxplayer" maybe isn't the best tool for the job, as it can't display still
-    images, but it's fast and liteweight enough.
+    "omxplayer" maybe isn't the best tool for the job, as it's not really meant
+    to display still images, but it's fast and liteweight enough.
 
-    Alternative can be e.g. some python script using picamera_, but that'd
-    likely be way slower than omxplayer "playing" still-image video.
+    Better alternative I've found is to use OpenVG API via `openvg lib`_, which
+    has nice Go (golang) version, and wrote an `overlay-image.go`_ tool to
+    utilize it for this simple "display image and hang forever" (to be stopped
+    when boot finishes) purpose.
 
-    Btw, ffmpeg magic to make image into a video for that purpose::
-
-      ffmpeg -y -loop 1 -i image.png -c:v libx264 -tune stillimage\
-        -an -strict experimental -pix_fmt yuv420p -shortest image.png.mp4
+    Aforementioned Go tool has "-resize" flag to scale the image to current
+    display size with "convert" and cache it with ".cache-WxH" suffix, and
+    "-bg-color" option to set margins' color otherwise (for e.g. logo centered
+    with solid color around it).
+    Can be built (be sure to set $GOPATH first) with: ``go get
+    github.com/ajstarks/openvg && go build .``
 
 
 - Finally some destination state with target app showing what it's supposed to.
@@ -155,7 +159,11 @@ Not a very comprehensive or coherent guide, but might be useful to sweep all the
 RPi nasties under an exquisite and colorful rug ;)
 
 
+**Update 2015-11-30:** Added link to `overlay-image.go`_ tool.
+
+
 .. _fbida: http://www.kraxel.org/blog/linux/fbida/
 .. _feh: http://feh.finalrewind.org/
-.. _MMAL API: http://www.jvcref.com/files/PI/documentation/html/
-.. _picamera: https://picamera.readthedocs.org/en/release-1.10/
+.. _VideoCore APIs: http://elinux.org/Raspberry_Pi_VideoCore_APIs
+.. _openvg lib: https://github.com/ajstarks/openvg/
+.. _overlay-image.go: |filename|misc/overlay-image.go
