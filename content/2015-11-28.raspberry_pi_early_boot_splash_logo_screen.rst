@@ -51,8 +51,8 @@ In case of average Raspberry Pi boot, there is:
 
   ``console=null`` in cmdline.txt should've removed all that.
 
-  ``loglevel=1 rootfstype=ext4`` helps if ``console=null`` is not an option for
-  whatever reason.
+  ``consoleblank=0 loglevel=1 rootfstype=ext4`` helps if ``console=null`` is not
+  an option, e.g. because "fbi" should set logo there (see below).
 
   Need for "rootfstype" is kinda funny, because messages from kernel trying to
   mount rootfs as ext2/ext3 seem to be emergency-level or something.
@@ -85,6 +85,8 @@ In case of average Raspberry Pi boot, there is:
 
   "fbi" is a tool from fbida_ project.
 
+  ``console=null`` should NOT be in cmdline for this tool to work (see above).
+
   First time you run it, you'll probably get::
 
     ioctl VT_GETSTATE: Inappropriate ioctl for device (not a linux console?)
@@ -94,7 +96,7 @@ In case of average Raspberry Pi boot, there is:
   I/O redirection to /dev/tty (as shown above) seem to work.
 
 
-- Blank black screen on X startup.
+- Blank black screen and whatever flickering on X startup.
 
   Running X on a different VT from "fbi" seem to have nice effect that if X will
   have to be restarted for some reason (e.g. whole user session gets restarted
@@ -161,9 +163,15 @@ RPi nasties under an exquisite and colorful rug ;)
 
 **Update 2015-11-30:** Added link to `overlay-image.go`_ tool.
 
+**Update 2015-11-30:** A bit different version (cleaned-up, with build-dep on
+"github.com/disintegration/gift" instead of optional call to "convert") of this
+tool `has been added`_ to `openvg lib`_ repo under `"go-client/splash"`_.
+
 
 .. _fbida: http://www.kraxel.org/blog/linux/fbida/
 .. _feh: http://feh.finalrewind.org/
 .. _VideoCore APIs: http://elinux.org/Raspberry_Pi_VideoCore_APIs
 .. _openvg lib: https://github.com/ajstarks/openvg/
 .. _overlay-image.go: |filename|misc/overlay-image.go
+.. _has been added: https://github.com/ajstarks/openvg/pull/38
+.. _"go-client/splash": https://github.com/ajstarks/openvg/blob/master/go-client/splash/splash.go
