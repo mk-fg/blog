@@ -1,0 +1,151 @@
+Resizing first FAT32 partition to microSD card size on boot from Raspberry Pi
+#############################################################################
+
+:date: 2015-12-07 05:35
+:tags: unix, fs, arm, python
+
+
+One other thing I've needed to do recently is to have Raspberry Pi OS resize
+it's /boot FAT32 partition to full card size (i.e. "make it as large as
+possible") from right underneath itself.
+
+RPis have first FAT (fat16 / fat32 / vfat) partition needed by firmware to load
+config.txt and uboot stuff off, and that is the only partition one can see in
+Windows OS when plugging microSD card into card-reader, which is kinda arbitrary
+OS limitation.
+
+Map of the usual ``/dev/mmcblk0`` on RPi (as seen in parted_)::
+
+  Number  Start   End     Size    Type     File system  Flags
+          32.3kB  1049kB  1016kB           Free Space
+   1      1049kB  106MB   105MB   primary  fat16        lba
+   2      106MB   1887MB  1782MB  primary  ext4
+
+Resizing that first partition is naturally difficult, as it is followed by ext4
+one with RPi's OS, but when you want to have small (e.g. <2G) and easy-to-write
+"rpi.img" file for any microSD card, there doesn't seem to be a way around
+that - img have to have as small initial partitions as possible to fit on any
+card.
+
+Things get even more complicated by the fact that there don't seem to be any
+tools around for resizing FAT fs'es, so it has to be re-created from scratch.
+
+There is quite an easy way around all these issues however, which can be
+summed-up as a sequence of the following steps:
+
+- Start while rootfs is mounted read-only or when it can be remounted as such,
+  i.e. on early boot.
+
+  ``Before=systemd-remount-fs.service local-fs-pre.target`` in systemd terms.
+
+- Grab sfdisk/parted map of the microSD and check if there's "Free Space" chunk
+  left after last (ext4/os) partition.
+
+  If there is, there's likely a lot of it, as SD cards increase in 2x size
+  factors, so 4G image written on larger card will have 4+ gigs there, in fact a
+  lot more for 16G or 32G cards.
+
+  Or there can be only a few megs there, in case of matching card size, where
+  it's usually a good idea to make slightly smaller images, as actual cards do
+  vary in size a bit.
+
+- "dd" whole rootfs to the end of the microSD card.
+
+  This is safe with read-only rootfs, and dumb "dd" approach to copying it (as
+  opposed to dmsetup + mkfs + cp) seem to be simpliest and least error-prone.
+
+- Update partition table to have rootfs in the new location (at the very end of
+  the card) and boot partition covering rest of the space.
+
+- Initiate reboot, so that OS will load from the new rootfs location.
+
+- Starting on early-boot again, remount rootfs rw if necessary, temporary copy
+  all contents of boot partition (which should still be small) to rootfs.
+
+- Run mkfs.vfat on the new large boot partition and copy stuff back to it from
+  rootfs.
+
+- Reboot once again, in case whatever boot timeouts got triggered.
+
+- Avoid running same thing on all subsequent boots.
+
+  E.g. touch ``/etc/boot-resize-done`` and have
+  ``ConditionPathExists=!/etc/boot-resize-done`` in the systemd unit file.
+
+That should do it \\o/
+
+`resize-rpi-fat32-for-card`_ (in `fgtk repo`_) is a script I wrote to do all of
+this stuff, exactly as described.
+
+systemd unit file for the thing (can also be printed by running script with
+"--print-systemd-unit" option):
+
+.. code-block:: ini
+
+  [Unit]
+  DefaultDependencies=no
+  After=systemd-fsck-root.service
+  Before=systemd-remount-fs.service -.mount local-fs-pre.target local-fs.target
+  ConditionPathExists=!/etc/boot-resize-done
+
+  [Service]
+  Type=oneshot
+  RemainAfterExit=yes
+  ExecStart=/usr/local/bin/resize-rpi-fat32-for-card
+
+  [Install]
+  WantedBy=local-fs.target
+
+It does use ``lsblk -Jnb`` JSON output to get rootfs device and partition, and
+get whether it's mounted read-only, then ``parted -ms /dev/... unit B print
+free`` to grab machine-readable map of the device.
+
+``sfdisk -J`` (also JSON output) could've been better option than parted (extra
+dep, which is only used to get that one map), except it doesn't conveniently
+list "free space" blocks and device size, pity.
+
+If partition table doesn't have extra free space at the end, "fsstat" tool from
+sleuthkit_ is used to check whether FAT filesystem covers whole partition and
+needs to be resized.
+
+After that, and only if needed, either "dd + sfdisk" or "cp + mkfs.vfat + cp
+back" sequence gets executed, followed by a reboot command.
+
+Extra options for the thing:
+
+- "--skip-ro-check" - don't bother checkin/forcing read-only rootfs before "dd"
+  step, which should be fine, if there's no activity there (e.g. early boot).
+
+- "--done-touch-file" - allows to specify location of file to create (if
+  missing) when "no resize needed" state gets reached.
+
+  Script doesn't check whether this file exists and always does proper checks of
+  partition table and "fsstat" when deciding whether something has to be done,
+  only creates the file at the end (if it doesn't exist already).
+
+- "--overlay-image" uses `splash.go`_ tool `that I've mentioned earlier`_ (be
+  sure to compile it first, ofc) to set some "don't panic, fs resize in
+  progress" image (resized/centered and/or with text and background) during the
+  whole process, using RPi's OpenVG GPU API, covering whatever console output.
+
+- Misc other stuff for setup/debug - "--print-systemd-unit", "--debug",
+  "--reboot-delay".
+
+  Easy way to debug the thing with these might be to add ``StandardOutput=tty``
+  to systemd unit's Service section and ``... --debug --reboot-delay 60``
+  options there, or possibly adding extra ``ExecStart=/bin/sleep 60`` after the
+  script (and changing its ``ExecStart=`` to ``ExecStart=-``, so delay will
+  still happen on errors).
+
+  This should provide all the info on what's happening in the script (has plenty
+  of debug output) to the console (one on display or UART).
+
+One more link to the script: `resize-rpi-fat32-for-card`_
+
+
+.. _parted: http://www.gnu.org/software/parted/parted.html
+.. _resize-rpi-fat32-for-card: https://github.com/mk-fg/fgtk/blob/master/scraps/resize-rpi-fat32-for-card
+.. _fgtk repo: https://github.com/mk-fg/fgtk
+.. _sleuthkit: http://www.sleuthkit.org/sleuthkit
+.. _splash.go: https://github.com/ajstarks/openvg/blob/master/go-client/splash/splash.go
+.. _that I've mentioned earlier: http://blog.fraggod.net/2015/11/28/raspberry-pi-early-boot-splash-logo-screen.html
