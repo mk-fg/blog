@@ -1,0 +1,39 @@
+GHG - simplier GnuPG (gpg) replacement for file encryption
+##########################################################
+
+:date: 2015-12-08 20:30
+:tags: python, encryption, fail
+
+
+Have been using gpg_ for many years now, many times a day, as I keep lot of stuff
+in .gpg files, but still can't seem to get used to its quirky interface and
+practices.
+
+Most notably, it's "trust" thing, keyrings and arcane key editing, expiration
+dates, gpg-agent interaction and encrypted keys are all sources of dread and
+stress for me.
+
+Last drop, following the tradition of many disastorous interactions with the
+tool, was me loosing my master signing key password, despite it being written
+down on paper and working before. #fail ;(
+
+Certainly my fault, but as I'll be replacing the damn key anyway, why not throw
+out the rest of that incomprehensible tangle of pointless and counter-productive
+practices and features I never use?
+
+Took ~6 hours to write a replacement ghg_ tool - same thing as gpg, except with
+simple and sane key management (which doesn't assume you entering anything,
+ever!!!), none of that web-of-trust or signing crap, good (and non-swappable)
+djb crypto, and only for file encryption.
+
+Does everything I've used gpg for from the command-line, and has one flat file
+for all the keys, so no more hassle with --edit-key nonsense.
+
+Highly suggest to anyone who ever had trouble and frustration with gpg to check
+`ghg project`_ out or write their own (trivial!) tool, and ditch the old thing -
+life's too short to deal with that constant headache.
+
+
+.. _gpg: https://www.gnupg.org/
+.. _ghg: https://github.com/mk-fg/ghg/
+.. _ghg project: https://github.com/mk-fg/ghg/
