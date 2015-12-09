@@ -2,7 +2,7 @@ A few recent emacs features - remote and file colors
 ####################################################
 
 :date: 2014-12-23 17:32
-:tags: desktop, lisp, tools
+:tags: desktop, lisp, tools, emacs
 
 
 I've been using emacs for a while now, and always on a lookout for a features

@@ -2,7 +2,7 @@ GHG - simplier GnuPG (gpg) replacement for file encryption
 ##########################################################
 
 :date: 2015-12-08 20:30
-:tags: python, encryption, fail
+:tags: python, encryption, tools, fail
 
 
 Have been using gpg_ for many years now, many times a day, as I keep lot of stuff
