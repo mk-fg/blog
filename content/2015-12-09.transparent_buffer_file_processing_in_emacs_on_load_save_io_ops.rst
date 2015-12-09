@@ -1,0 +1,64 @@
+Transparent buffer/file processing in emacs on load/save/whatever-io ops
+########################################################################
+
+:date: 2015-12-09 05:24
+:tags: lisp, emacs, tools, encryption
+
+
+Following-up on my `gpg replacement endeavor`_, also needed to add transparent
+decryption for buffers loaded from `\*.ghg`_ files, and encryption when writing
+stuff back to these.
+
+`git filters`_ (defined via gitattributes file) do same thing when interacting
+with the repo.
+
+Such thing is already done by a few exising elisp modules, such as jka-compr.el
+for auto-compression-mode (opening/saving .gz and similar files as if they were
+plaintext), and epa.el for transparent gpg encryption.
+
+While these modules do this The Right Way by adding "file-name-handler-alist"
+entry, googling for a small ad-hoc boilerplate, found quite a few examples that
+do it via hooks, which seem rather unreliable and with esp. bad failure modes
+wrt transparent encryption.
+
+So, in the interest of providing right-er boilerplate for the task (and because
+I tend to like elisp) - here's `fg_sec.el example`_ (from `mk-fg/emacs-setup`_)
+of how it can be implemented cleaner, in similar fashion to epa and jka-compr.
+
+Code calls ``ghg -do`` when visiting/reading files (with contents piped to
+stdin) and ``ghg -eo`` (with stdin/stdout buffers) when writing stuff back.
+
+Entry-point/hook there is "file-name-handler-alist", where regexp to match
+\*.ghg gets added to call "ghg-io-handler" for every i/o operation (including
+path ops like "expand-file-name" or "file-exists-p" btw), with only
+"insert-file-contents" (read) and "write-region" (write) being overidden.
+
+Unlike jka-compr though, no temporary files are used in this implementation,
+only temp buffers, and "insert-file-contents" doesn't put unauthenticated data
+into target buffer as it arrives, patiently waiting for subprocess to exit with
+success code first.
+
+Fairly sure that this bit of elisp can be used for any kind of processing, by
+replacing "ghg" binary with anything else that can work as a pipe (stdin ->
+processing -> stdout), which opens quite a lot of possibilities.
+
+For example, all JSON files can be edited as a `pretty YAML version`_, without
+strict syntax and all the brackets of JSON, or the need to process/convert them
+purely in elisp's json-mode or something - just plug ``python -m pyaml`` and
+``python -m json`` commands for these two i/o ops and it should work.
+
+Suspect there's gotta be something that'd make such filters easier in MELPA_
+already, but haven't been able to spot anything right away, maybe should put up
+a package there myself.
+
+[`fg_sec.el code link`_]
+
+
+.. _gpg replacement endeavor: http://blog.fraggod.net/2015/12/08/ghg-simplier-gnupg-gpg-replacement-for-file-encryption.html
+.. _*.ghg: https://github.com/mk-fg/ghg/
+.. _git filters: https://git-scm.com/docs/gitattributes#__code_filter_code
+.. _fg_sec.el example: https://github.com/mk-fg/emacs-setup/blob/master/core/fg_sec.el
+.. _fg_sec.el code link: https://github.com/mk-fg/emacs-setup/blob/master/core/fg_sec.el
+.. _mk-fg/emacs-setup: https://github.com/mk-fg/emacs-setup/
+.. _pretty YAML version: https://github.com/mk-fg/pretty-yaml/
+.. _MELPA: https://melpa.org/
