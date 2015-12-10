@@ -63,6 +63,11 @@ Given that these aren't very suited for day-to-day use (hence the "test" dir)
 and are fairly trivial, did rewrite them as a single script, more suited for my
 purposes - `bt-pan`_.
 
+**Update 2015-12-10:** There's also "bneptest" tool, which comes as a part of
+e.g. "bluez-utils" package on Arch, which seem to do same thing with its "-s"
+and "-c" options, just haven't found it at the time (or maybe it's a more recent
+addition).
+
 General idea is that one side (access point in NAP topology) sets up a bridge
 and calls "org.bluez.NetworkServer1.Register()", while the other ("client") does
 "org.bluez.Network1.Connect()".
@@ -93,6 +98,14 @@ of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call:
 
 (as mentioned above, bt-pan_ script is from `fgtk github repo`_)
 
+**Update 2015-12-10:** This is "net.bnep" script, as referred-to in
+"net-bnep.service" unit just below.
+
+**Update 2015-12-10:** These days, systemd can easily create and configure
+bridge, forwarding and all the interfaces involved, even running built-in DHCP
+server there - see "man systemd.netdev" and "man systemd.network", for how to do
+that, esp. examples at the end of both.
+
 Just running this script will then setup a proper "bluetooth access point", and
 if done from systemd, should probably be a part of bluetooth.target and get
 stopped along with bluetoothd (as it doesn't make any sense running without it):
@@ -109,6 +122,10 @@ stopped along with bluetoothd (as it doesn't make any sense running without it):
 	[Install]
 	WantedBy=bluetooth.target
 
+**Update 2015-12-10:** Put this into e.g. ``/etc/systemd/system/net-bnep.service``
+and enable to start with "bluetooth.target" (see "man systemd.special") by
+running ``systemctl enable net-bnep.service``.
+
 On the client side, it's even simplier - BlueZ will just create a "bnepX" device
 and won't need any bridge, as it is just a single connection:
 
@@ -124,6 +141,14 @@ and won't need any bridge, as it is just a single connection:
 	[Install]
 	WantedBy=bluetooth.target
 
+**Update 2015-12-10:** Can be ``/etc/systemd/system/net-bnep-client.service``,
+don't forget to enable it (creates symlink in "bluetooth.target.wants"), same as
+for other unit above (which should be running on the other machine).
+
+**Update 2015-12-10:** Created "bnepX" device is also trivial to setup with
+systemd on the client side, see e.g. "Example 2" at the end of "man
+systemd.network".
+
 On top of "bnepX" device on the client, some dhcp client should probably be
 running, which systemd-networkd will probably handle by default on
 systemd-enabled linuxes, and some dhcpd on the server-side (I used udhcpd from
@@ -134,6 +159,9 @@ soon as BT donges get plugged-in/detected.
 
 Fairly trivial setup for a wireless one, especially wrt authentication, and seem
 to work reliably so far.
+
+**Update 2015-12-10:** Tried to clarify a few things above for people not very
+familiar with systemd, where noted. See systemd docs for more info on all this.
 
 ----------
 
