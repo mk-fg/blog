@@ -1,0 +1,96 @@
+Tool to interleave and colorize lines from multiple log (or any other) files
+############################################################################
+
+:date: 2015-12-29 05:08
+:tags: python, tools
+
+
+There's multitail_ thing to **tail** multiple logs, potentially interleaved, in
+one curses window, which is a painful-to-impossible to browse through, as you'd
+do with simple "less".
+
+There's lnav_ for parsing and normalizing a bunch of logs, and continuously
+monitoring these, also interactive.
+
+There's rainbow_ to color specific lines based on regexp, which can't really do
+any interleaving.
+
+And this has been bugging me for a while - there seem to be no easy way to get this:
+
+.. html::
+
+	<a href="|filename|images/liac_interleaved_colorized_output.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/liac_interleaved_colorized_output.jpg"
+		title="Interleaved/colorized output for several log files"
+		alt="interleaved_and_colorized_output_image">
+	</a>
+
+This is an interleaved output from several timestamped log files, for events
+happening at nearly the same time (which can be used to establish the sequence
+between these and correlate output of multiple tools/instances/etc), browsable
+via the usual "less" (or whatever other $PAGER) in an xterm window.
+
+In this case, logfiles are from "btmon" (bluetooth sniffer tool), "bluetoothd"
+(bluez) debug output and an output from gdb attached to that bluetoothd pid
+(showing stuff described in `previous entry about gdb`_).
+
+Output for neither of these tools have timestamps by default, but this is easy
+to fix by piping it through any tool which would add them into every line,
+svlogd_ for example.
+
+To be concrete (and to show one important thing about such log-from-output
+approach), here's how I got these particular logs::
+
+	# mkdir -p debug_logs/{gdb,bluetoothd,btmon}
+
+	# gdb -ex 'source gdb_device_c_ftrace.txt' -ex q --args\
+		/usr/lib/bluetooth/bluetoothd --nodetach --debug\
+		1> >(svlogd -r _ -ttt debug_logs/gdb)\
+		2> >(svlogd -r _ -ttt debug_logs/bluetoothd)
+
+	# stdbuf -oL btmon |\
+		svlogd -r _ -ttt debug_logs/btmon
+
+Note that "btmon" runs via coreutils stdbuf_ tool, which can be critical for
+anything that writes to its stdout via libc's ``fwrite()``, i.e. can have
+buffering enabled there, which causes stuff to be output delayed and in batches,
+not how it'd appear in the terminal (where line buffering is used), resulting in
+incorrect timestamps, unless stdbuf_ or any other option disabling such
+buffering is used.
+
+With three separate logs from above snippet, natural thing you'd want is to see
+these all at the same time, so for each logical "event", there'd be output from
+btmon (network packet), bluetoothd (debug logging output) and gdb's function
+call traces.
+
+It's easy to concatenate all three logs and sort them to get these interleaved,
+but then it can be visually hard to tell which line belongs to which file,
+especially if they are from several instances of the same app (not really the
+case here though).
+
+Simple fix is to add per-file distinct color to each line of each log, but then
+you can't sort these, as color sequences get in the way, it's non-trivial to do
+even that, and it all adds-up to a script.
+
+Seem to be hard to find any existing tools for the job, so wrote a script to do
+it - liac_ (in the usual mk-fg/fgtk github repo), which was used to produce
+output in the image above - that is, interleave lines (using any field for
+sorting btw), add tags for distinct ANSI colors to ones belonging to different
+files and optional prefixes.
+
+Thought it might be useful to leave a note for anyone looking for something
+similar.
+
+[`script source link`_]
+
+
+.. _multitail: https://www.vanheusden.com/multitail/
+.. _lnav: https://lnav.readthedocs.org/
+.. _rainbow: https://github.com/nicoulaj/rainbow
+.. _previous entry about gdb: http://blog.fraggod.net/2015/12/29/getting-log-of-all-function-calls-from-specific-source-file-using-gdb.html
+.. _svlogd: http://smarden.org/runit/svlogd.8.html
+.. _stdbuf: https://www.gnu.org/software/coreutils/manual/html_node/stdbuf-invocation.html
+.. _liac: https://github.com/mk-fg/fgtk/#liac
+.. _script source link: https://github.com/mk-fg/fgtk/blob/master/liac
