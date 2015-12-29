@@ -1,0 +1,80 @@
+Getting log of all function calls from specific source file using gdb
+#####################################################################
+
+:date: 2015-12-29 04:20
+:tags: bash, c, unix, tools
+
+
+Maybe I'm doing debugging wrong, but messing with code written by other people,
+first question for me is usually not "what happens in function X" (done by
+setting a breakpoint on it), but rather "which file/func do I look into".
+
+I.e. having an observable effect - like "GET_REPORT messages get sent on HID
+level to bluetooth device, and replies are ignored", it's easy to guess that
+it's either linux kernel or bluetoothd - part of BlueZ.
+
+Question then becomes "which calls in app happen at the time of this observable
+effect", and luckily there's an easy, but not very well-documented (unless my
+google is that bad) way to see it via gdb_ for C apps.
+
+For scripts, it's way easier of course, e.g. in python you can do ``python -m
+trace ...`` and it can dump even every single line of code it runs.
+
+First of all, app in question has to be compiled with "-g" option and not
+"stripped", of course, which should be easy to set via CFLAGS, usually, defining
+these in distro-specific ways if rebuilding a package to include that (e.g. for
+Arch - have ``debug !strip`` in OPTIONS line from ``/etc/makepkg.conf``).
+
+Then running app under gdb can be done via something like ``gdb --args someapp
+arg1 arg2`` (and typing "r" there to start it), but if the goal is to get a log
+of all function calls (and not just in a "call graph" way profiles like gprof
+do) from a specific file, first - interactivity has to go, second - breakpoints
+have to be set for all these funcs and then logged when app runs.
+
+Alas, there seem to be no way to add break point to every func in a file.
+
+One common suggestion (does NOT work, don't copy-paste!) I've seen is doing
+``rbreak device\.c:`` ("rbreak" is a regexp version of "break") to match
+e.g. ``profiles/input/device.c:extract_hid_record`` (as well as all other funcs
+there), which would be "filename:funcname" pattern in my case, but it doesn't
+work and shouldn't work, as "rbreak" only matches "filename".
+
+So trivial script is needed to a) get list of funcs in a source file (just name
+is enough, as C has only one namespace), and b) put a breakpoint on all of them.
+
+This is luckily quite easy to do via ctags_, with this one-liner::
+
+  % ctags -x --c-kinds=fp profiles/input/device.c |
+    awk 'BEGIN {print "set pagination off\nset height 0\nset logging on\n\n"}\
+      {print "break", $1 "\ncommands\nbt 5\necho ------------------\\n\\n\nc\nend\n"}\
+      END {print "\n\nrun"}' > gdb_device_c_ftrace.txt
+
+Should generate a script for gdb, starting with "set pagination off" and
+whatever else is useful for logging, with "commands" block after every "break",
+running "bt 5" (displays backtrace) and echoing a nice-ish separator (bunch of
+hyphens), ending in "run" command to start the app.
+
+Resulting script can/should be fed into gdb with something like this::
+
+  % gdb -ex 'source gdb_device_c_ftrace.txt' -ex q --args\
+    /usr/lib/bluetooth/bluetoothd --nodetach --debug
+
+This will produce the needed list of all the calls to functions from that
+"device.c" file into "gdb.txt" and have output of the app interleaved with these
+in stdout/stderr (which can be redirected, or maybe closed with more gdb
+commands in txt file or before it with "-ex"), and is non-interactive.
+
+From here, seeing where exactly the issue seem to occur, one'd probably want to
+look thru the code of the funcs in question, run gdb interactively and inspect
+what exactly is happening there.
+
+Definitely nowhere near the magic some people script gdb with, but haven't found
+similar snippets neatly organized anywhere else, so here they go, in case
+someone might want to do the exact same thing.
+
+Can also be used to log a bunch of calls from multiple files, of course, by
+giving "ctags" more files to parse.
+
+
+.. _gdb: https://www.gnu.org/software/gdb/
+.. _ctags: http://ctags.sourceforge.net/
