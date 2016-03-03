@@ -1,0 +1,28 @@
+Python 3 killer feature - asyncio
+#################################
+
+:date: 2016-03-03 21:40
+:tags: python
+
+
+I've been really conservative with the whole py2 -> py3 migration (shiny new
+langs don't seem to be my thing), but one feature that finally makes it worth
+the effort is well-integrated - by now (Python-3.5 with its "async" and "await"
+statements) - asyncio_ eventloop framework.
+
+Basically, it's a twisted_ core, including eventloop hooked into standard
+socket/stream ops, sane futures implementation, all the
+Transports/Protocols/Tasks base classes and such concepts, standardized right
+there in Python's stdlib.
+
+On one hand, baking this stuff into language core seem to be somewhat backwards,
+but I think it's actually really smart thing to do - not only it eliminates
+whole "tech zoo" problem nodejs ecosystem has, but also gets rid of "require
+huge twisted blob or write my own half-assed eventloop base" that pops-up in
+every second script, even the most trivial ones.
+
+Makes it worth starting any py script with py3 shebang for me, at last \\o/
+
+
+.. _asyncio: https://docs.python.org/3/library/asyncio.html
+.. _twisted: https://twistedmatrix.com/
