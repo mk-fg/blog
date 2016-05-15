@@ -1,0 +1,85 @@
+Debounce bogus repeated mouse clicks in Xorg with xbindkeys
+###########################################################
+
+:date: 2016-05-15 20:58
+:tags: desktop, lisp, hardware, tools
+
+
+My current Razer E-Blue mouse had this issue since I've got it - Mouse-2 /
+BTN_MIDDLE / middle-click (useful mostly as "open new tab" in browsers and
+"paste" in X) sometimes produces two click events (in rapid succession) instead
+of one.
+
+It was more rare before, but lately it feels like it's harder to make it click
+once than twice.
+
+Seem to be either hardware problem with debouncing circuitry or logic in the
+controller, or maybe a button itself not mashing switch contacts against each
+other hard enough... or soft enough (i.e. non-elastic), actually, given that
+they shouldn't "bounce" against each other.
+
+Since there's no need to double-click that wheel-button ever, it looks rather
+easy to debounce the click on Xorg input level, by ignoring repeated button
+up/down events after producing the first full "click".
+
+Easiest solution of that kind that I've found was to use guile (scheme) script
+with xbindkeys_ tool to keep that click-state data and perform clicks
+selectively, using xdotool_:
+
+.. code-block:: scheme
+
+  (define razer-delay-min 0.2)
+  (define razer-wait-max 0.5)
+  (define razer-ts-start #f)
+  (define razer-ts-done #f)
+  (define razer-debug #f)
+
+  (define (mono-time)
+    "Return monotonic timestamp in seconds as real."
+    (+ 0.0 (/ (get-internal-real-time) internal-time-units-per-second)))
+
+  (xbindkey-function '("b:8") (lambda ()
+    (let ((ts (mono-time)))
+      (when
+        ;; Enforce min ts diff between "done" and "start" of the next one
+        (or (not razer-ts-done) (>= (- ts razer-ts-done) razer-delay-min))
+        (set! razer-ts-start ts)))))
+
+  (xbindkey-function '(Release "b:8") (lambda ()
+    (let ((ts (mono-time)))
+      (when razer-debug
+        (format #t "razer: ~a/~a delay=~a[~a] wait=~a[~a]\n"
+          razer-ts-start razer-ts-done
+          (and razer-ts-done (- ts razer-ts-done)) razer-delay-min
+          (and razer-ts-start (- ts razer-ts-start)) razer-wait-max))
+      (when
+        (and
+          ;; Enforce min ts diff between previous "done" and this one
+          (or (not razer-ts-done) (>= (- ts razer-ts-done) razer-delay-min))
+          ;; Enforce max "click" wait time
+          (and razer-ts-start (<= (- ts razer-ts-start) razer-wait-max)))
+        (set! razer-ts-done ts)
+        (when razer-debug (format #t "razer: --- click!\n"))
+        (run-command "xdotool click 2")))))
+
+Note that xbindkeys actually grabs "b:8" here, which is a "mouse button 8", as
+if it was "b:2", then "xdotool click 2" command will recurse into same code, so
+wheel-clicker should be bound to button 8 in X for that to work.
+
+Rebinding buttons in X is trivial to do on-the-fly, using standard "xinput" tool
+- e.g. ``xinput set-button-map "My Mouse" 1 8 3`` (`xinitrc.input script`_ can
+be used as an extended example).
+
+Running "xdotool" to do actual clicks at the end seem a bit wasteful, as
+xbindkeys already hooks into similar functionality, but unfortunately there's no
+"send input event" calls exported to guile scripts (as of 1.8.6, at least).
+
+Still, works well enough as it is, fixing that rather annoying issue.
+
+[`xbindkeysrc.scm on github`_]
+
+
+.. _xbindkeys: http://www.nongnu.org/xbindkeys/xbindkeys.html
+.. _xdotool: http://www.semicomplete.com/projects/xdotool/
+.. _xinitrc.input script: https://github.com/mk-fg/de-setup/blob/master/bin/xinitrc.input
+.. _xbindkeysrc.scm on github: https://github.com/mk-fg/de-setup/blob/master/xbindkeys.scm
