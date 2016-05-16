@@ -84,6 +84,7 @@ Steps I took to have sshd running on boot with such device:
 
      ### Make a tar.gz out of it all
 
+    # rm -f droid-chroot/var/cache/pacman/pkg/*
     # tar -czf droid-chroot.tar.gz droid-chroot
 
   Same can be obviously done with debootstrap or whatever other distro-of-choice
@@ -155,6 +156,12 @@ Steps I took to have sshd running on boot with such device:
 
   Furthermore, to be able to connect there directly, without adb or USB cable,
   ``env -i $(which chroot) . /bin/sshd`` should work too.
+
+  For sshd in particular, one useful thing to do here is::
+
+    # $(which chroot) . /bin/ssh-keygen -A
+
+  ...to populate /etc/ssh with keys, which are required to start sshd.
 
 * Setup init script to run sshd or whatever init-stuff from that chroot on boot.
 
@@ -315,6 +322,9 @@ As I'm unlikely to want this device as a phone ever (who needs these, anyway?),
 turning it into something more like wireless RPi2 with a connected management
 terminal (represented by Android userspace) sounds like the only good use for it
 so far.
+
+**Update 2016-05-16:** Added note on ssh-keygen and rm for pacman package cache
+after pacstrap.
 
 
 .. _dropbear: https://matt.ucc.asn.au/dropbear/dropbear.html
