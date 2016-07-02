@@ -6,13 +6,13 @@ Resizing first FAT32 partition to microSD card size on boot from Raspberry Pi
 
 
 One other thing I've needed to do recently is to have Raspberry Pi OS resize
-it's /boot FAT32 partition to full card size (i.e. "make it as large as
-possible") from right underneath itself.
+its /boot FAT32 partition to full card size (i.e. "make it as large as possible")
+from right underneath itself.
 
-RPis have first FAT (fat16 / fat32 / vfat) partition needed by firmware to load
-config.txt and uboot stuff off, and that is the only partition one can see in
-Windows OS when plugging microSD card into card-reader, which is kinda arbitrary
-OS limitation.
+RPis usually have first FAT (fat16 / fat32 / vfat) partition needed by firmware
+to load config.txt and uboot stuff off, and that is the only partition one can
+see in Windows OS when plugging microSD card into card-reader (which is a kinda
+arbitrary OS limitation).
 
 Map of the usual ``/dev/mmcblk0`` on RPi (as seen in parted_)::
 
