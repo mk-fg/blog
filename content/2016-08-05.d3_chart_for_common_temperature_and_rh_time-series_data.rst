@@ -1,0 +1,74 @@
+D3 chart for common temperature/rh time-series data
+###################################################
+
+:date: 2016-08-05 15:02
+:tags: web, js, vis
+
+
+More D3 tomfoolery!
+
+It's been a while since I touched the thing, but recently been asked to make a
+simple replacement for processing common-case time-series from temperature +
+relative-humidity (calling these "t" and "rh" here) sensors (DHT22, sht1x, or what
+have you), that's been painstakingly done in MS Excel (from tsv data) until now.
+
+So here's the plot:
+
+.. html::
+
+	<a href="|filename|images/d3_t_rh_chart.jpg">
+	<img
+		style="width: 520px;"
+		src="|filename|images/d3_t_rh_chart.jpg"
+		title="d3 t/rh chart"
+		alt="d3 t/rh chart image">
+	</a>
+
+| Interactive version can be run directly from `mk-fg/fgtk`_: `d3-temp-rh-sensor-tsv-series-chart.html`_
+| Bunch of real-world data samples for the script: `d3-temp-rh-sensor-tsv-series-chart.zip`_
+
+Misc feats of the thing, in no particular order:
+
+- Single-html `d3.v4.js`_ + ES6_ webapp (assembed by `html-embed script`_) that
+  can be opened from localhost or any static httpd on the net.
+
+- Drag-and-drop or multi-file browse/pick box, for uploading any number of tsv
+  files (in whatever order, possibly with gaps in data) instantly to JS on the page.
+
+- Line chart with two Y axes (one for t, one for rh).
+
+- Smaller "overview" chart below that, where one can "brush" needed timespan
+  (i.e. subset of uploaded data) for all the other charts and readouts.
+
+- Mouseover "vertical line" display snapping to specific datapoints.
+
+- List of basic stats for picked range - min/max, timespan, value count.
+
+- Histograms for value distribution, to easily see typical values for picked
+  timespan, one for t and rh.
+
+Kinda love this sort of interactive vis stuff, and it only takes a bunch of
+hours to put it all together with d3, as opposed to something like rrdtool,
+its dead images and quirky mini-language.
+
+Also, surprisingly common use-case for this particular chart, as having such
+sensors connected to some RPi is pretty much first thing people usually want to
+do (or maybe close second after LEDs and switches).
+
+Will probably look a bit further to make it into an offline-first `Service
+Worker`_ app, just for the heck of it, see how well this stuff works these days.
+
+No point to this post, other than forgetting to write stuff for months is **bad** ;)
+
+| [`d3-temp-rh-sensor-tsv-series-chart.html`_]
+| [`d3-temp-rh-sensor-tsv-series-chart.zip`_]
+
+
+.. _d3.v4.js: https://github.com/d3/d3/blob/master/API.md
+.. _ES6: https://github.com/DrkSephy/es6-cheatsheet
+.. _html-embed script: https://github.com/mk-fg/fgtk/#html-embed
+.. _Service Worker: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers
+.. _sht1x-chart.html: https://github.com
+.. _mk-fg/fgtk: https://github.com/mk-fg/fgtk/
+.. _d3-temp-rh-sensor-tsv-series-chart.html: https://rawgit.com/mk-fg/fgtk/master/scraps/d3-temp-rh-sensor-tsv-series-chart.html
+.. _d3-temp-rh-sensor-tsv-series-chart.zip: https://github.com/mk-fg/fgtk/raw/master/scraps/d3-temp-rh-sensor-tsv-series-chart.sample.zip
