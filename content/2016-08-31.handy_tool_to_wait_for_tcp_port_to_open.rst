@@ -1,0 +1,74 @@
+Handy tool to wait for remote TCP port to open
+##############################################
+
+:date: 2016-08-31 23:42
+:tags: tools, python
+
+
+Lack of some basic tool to "wait for connection" in linux toolkit always annoyed
+me to no end.
+
+.. code-block:: console
+
+	root@alarm~:~# reboot
+	Shared connection to 10.0.1.75 closed.
+
+	% ssh root@10.0.1.75
+
+	...time passes, ssh doesn't do anything...
+
+	ssh: connect to host 10.0.1.75 port 22: No route to host
+
+	% ssh root@10.0.1.75
+	ssh: connect to host 10.0.1.75 port 22: Connection refused
+	% ssh root@10.0.1.75
+	ssh: connect to host 10.0.1.75 port 22: Connection refused
+	% ssh root@10.0.1.75
+	ssh: connect to host 10.0.1.75 port 22: Connection refused
+
+	...[mashing Up/Enter] start it up already!...
+
+	% ssh root@10.0.1.75
+	ssh: connect to host 10.0.1.75 port 22: Connection refused
+	% ssh root@10.0.1.75
+
+	root@alarm~:~#
+
+	...finally!
+
+| Working a lot with ARM boards, can have this thing repeating few dozen times a day.
+| Same happens on every power-up, after fiddling with sd cards, etc.
+
+And usually know for a fact that I'll want to reconnect to the thing in question
+asap and continue what I was doing there, but trying luck a few times with
+unresponsive or insta-failing ssh is rather counter-productive and just annoying.
+
+Instead:
+
+.. code-block:: console
+
+  % tping 10.0.1.75 && ssh root@10.0.1.75
+  root@alarm~:~#
+
+That's it, no ssh timing-out or not retrying fast enough, no "Connection
+refused" nonsense.
+
+tping_ (`code link`_) is a trivial ad-hoc script that opens new TCP connection
+to specified host/port every second (default for -r/--retry-delay) and polls
+connections for success/error/timeout (configurable) in-between, exiting as soon
+as first connection succeeds, which in example above means that sshd is now
+ready for sure.
+
+Doesn't need extra privileges like icmp pingers do, simple no-deps python3 script.
+
+Used fping_ as ``fping -qr20 10.0.1.75 && ssh root@10.0.1.75`` before finally
+taking time to write that thing, but it does what it says on the tin - icmp
+ping, and usually results in "Connection refused" error from ssh, as there's gap
+between network and sshd starting.
+
+One of these "why the hell it's not in coreutils or util-linux" tools for me now.
+
+
+.. _tping: https://github.com/mk-fg/fgtk/#tping
+.. _code link: https://github.com/mk-fg/fgtk/blob/master/tping
+.. _fping: https://fping.org/
