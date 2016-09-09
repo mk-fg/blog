@@ -70,5 +70,5 @@ No point to this post, other than forgetting to write stuff for months is **bad*
 .. _Service Worker: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers
 .. _sht1x-chart.html: https://github.com
 .. _mk-fg/fgtk: https://github.com/mk-fg/fgtk/
-.. _d3-temp-rh-sensor-tsv-series-chart.html: https://rawgit.com/mk-fg/fgtk/master/scraps/d3-temp-rh-sensor-tsv-series-chart.html
+.. _d3-temp-rh-sensor-tsv-series-chart.html: https://mk-fg.github.io/fgtk/scraps/d3-temp-rh-sensor-tsv-series-chart.html
 .. _d3-temp-rh-sensor-tsv-series-chart.zip: https://github.com/mk-fg/fgtk/raw/master/scraps/d3-temp-rh-sensor-tsv-series-chart.sample.zip
