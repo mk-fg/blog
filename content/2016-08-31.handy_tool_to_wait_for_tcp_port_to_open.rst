@@ -1,5 +1,5 @@
-Handy tool to wait for remote TCP port to open
-##############################################
+Handy tool to wait for remote TCP port to open - TCP "ping"
+###########################################################
 
 :date: 2016-08-31 23:42
 :tags: tools, python
@@ -53,11 +53,11 @@ Instead:
 That's it, no ssh timing-out or not retrying fast enough, no "Connection
 refused" nonsense.
 
-tping_ (`code link`_) is a trivial ad-hoc script that opens new TCP connection
-to specified host/port every second (default for -r/--retry-delay) and polls
-connections for success/error/timeout (configurable) in-between, exiting as soon
-as first connection succeeds, which in example above means that sshd is now
-ready for sure.
+tping_ (`code link`_, name is ping + fping + tcp ping) is a trivial ad-hoc
+script that opens new TCP connection to specified host/port every second
+(default for -r/--retry-delay) and polls connections for success/error/timeout
+(configurable) in-between, exiting as soon as first connection succeeds, which
+in example above means that sshd is now ready for sure.
 
 Doesn't need extra privileges like icmp pingers do, simple no-deps python3 script.
 
