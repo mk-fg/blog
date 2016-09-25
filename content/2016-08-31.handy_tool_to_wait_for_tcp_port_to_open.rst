@@ -10,31 +10,31 @@ me to no end.
 
 .. code-block:: console
 
-	root@alarm~:~# reboot
-	Shared connection to 10.0.1.75 closed.
+  root@alarm~:~# reboot
+  Shared connection to 10.0.1.75 closed.
 
-	% ssh root@10.0.1.75
+  % ssh root@10.0.1.75
 
-	...time passes, ssh doesn't do anything...
+  ...time passes, ssh doesn't do anything...
 
-	ssh: connect to host 10.0.1.75 port 22: No route to host
+  ssh: connect to host 10.0.1.75 port 22: No route to host
 
-	% ssh root@10.0.1.75
-	ssh: connect to host 10.0.1.75 port 22: Connection refused
-	% ssh root@10.0.1.75
-	ssh: connect to host 10.0.1.75 port 22: Connection refused
-	% ssh root@10.0.1.75
-	ssh: connect to host 10.0.1.75 port 22: Connection refused
+  % ssh root@10.0.1.75
+  ssh: connect to host 10.0.1.75 port 22: Connection refused
+  % ssh root@10.0.1.75
+  ssh: connect to host 10.0.1.75 port 22: Connection refused
+  % ssh root@10.0.1.75
+  ssh: connect to host 10.0.1.75 port 22: Connection refused
 
-	...[mashing Up/Enter] start it up already!...
+  ...[mashing Up/Enter] start it up already!...
 
-	% ssh root@10.0.1.75
-	ssh: connect to host 10.0.1.75 port 22: Connection refused
-	% ssh root@10.0.1.75
+  % ssh root@10.0.1.75
+  ssh: connect to host 10.0.1.75 port 22: Connection refused
+  % ssh root@10.0.1.75
 
-	root@alarm~:~#
+  root@alarm~:~#
 
-	...finally!
+  ...finally!
 
 | Working a lot with ARM boards, can have this thing repeating few dozen times a day.
 | Same happens on every power-up, after fiddling with sd cards, etc.

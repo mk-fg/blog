@@ -1,0 +1,79 @@
+nftables re-injected IPSec matching without xt_policy
+#####################################################
+
+:date: 2016-09-25 18:49
+:tags: linux, ipsec, encryption, tools
+
+
+As of linux-4.8, something like xt_policy is still - unfortunately - on the
+`nftables TODO list`_, so to match traffic pre-authenticated via IPSec, some
+workaround is needed.
+
+Obvious one is to keep using iptables/ip6tables to mark IPSec packets with old
+xt_policy module, as these rules interoperate with nftables_ just fine, with
+only important bit being ordering of iptables hooks vs nft chain priorities,
+which are rather easy to find in "netfilter_ipv{4,6}.h" files, e.g.::
+
+  enum nf_ip_hook_priorities {
+    NF_IP_PRI_FIRST = INT_MIN,
+    NF_IP_PRI_CONNTRACK_DEFRAG = -400,
+    NF_IP_PRI_RAW = -300,
+    NF_IP_PRI_SELINUX_FIRST = -225,
+    NF_IP_PRI_CONNTRACK = -200,
+    NF_IP_PRI_MANGLE = -150,
+    NF_IP_PRI_NAT_DST = -100,
+    NF_IP_PRI_FILTER = 0,
+    NF_IP_PRI_SECURITY = 50,
+    NF_IP_PRI_NAT_SRC = 100,
+    NF_IP_PRI_SELINUX_LAST = 225,
+    NF_IP_PRI_CONNTRACK_HELPER = 300,
+    NF_IP_PRI_CONNTRACK_CONFIRM = INT_MAX,
+    NF_IP_PRI_LAST = INT_MAX,
+  };
+
+(see also `Netfilter-packet-flow.svg`_ by Jan Engelhardt for general overview of
+the iptables hook positions, nftables allows to define any number of chains
+before/after these)
+
+So marks from iptables/ip6tables rules like these::
+
+  *raw
+  :PREROUTING ACCEPT [0:0]
+  :OUTPUT ACCEPT [0:0]
+  -A PREROUTING -m policy --dir in --pol ipsec --mode transport -j MARK --or-mark 0x101
+  -A OUTPUT -m policy --dir out --pol ipsec --mode transport -j MARK --or-mark 0x101
+  COMMIT
+
+Will be easy to match in priority=0 input/ouput hooks (as NF_IP_PRI_RAW=-300) of
+nft ip/ip6/inet tables (e.g. ``mark and 0x101 == 0x101 accept``)
+
+But that'd split firewall configuration between iptables/nftables, adding more
+hassle to keep whole "iptables" thing initialized just for one or two rules.
+
+xfrm transformation (like ipsec esp decryption in this case) seem to preserve
+all information about the packet intact, including packet marks (but not
+conntrack states, which track esp connection), which - as suggested by Florian
+Westphal in #netfilter - can be utilized to match post-xfrm packets in nftables
+by this preserved mark field.
+
+E.g. having this (strictly before ``ct state {established, related} accept`` for
+stateful firewalls, as each packet has to be marked)::
+
+  define cm.ipsec = 0x101
+  add rule inet filter input ip protocol esp mark set mark or $cm.ipsec
+  add rule inet filter input ip6 nexthdr esp mark set mark or $cm.ipsec
+  add rule inet filter input mark and $cm.ipsec == $cm.ipsec accept
+
+Will mark and accept both still-encrypted esp packets (IPv4/IPv6) and their
+decrypted payload.
+
+Note that this assumes that all IPSec connections are properly authenticated and
+trusted, so be sure not to use anything like that if e.g. opportunistic
+encryption is enabled.
+
+Much simplier nft-only solution, though still not a full substitute for what
+xt_policy does, of couse.
+
+.. _nftables: https://wiki.nftables.org/
+.. _nftables TODO list: http://git.netfilter.org/nftables/tree/TODO
+.. _Netfilter-packet-flow.svg: https://upload.wikimedia.org/wikipedia/commons/3/37/Netfilter-packet-flow.svg

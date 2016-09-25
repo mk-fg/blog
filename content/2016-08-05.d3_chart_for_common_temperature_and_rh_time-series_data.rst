@@ -16,13 +16,13 @@ So here's the plot:
 
 .. html::
 
-	<a href="|filename|images/d3_t_rh_chart.jpg">
-	<img
-		style="width: 520px;"
-		src="|filename|images/d3_t_rh_chart.jpg"
-		title="d3 t/rh chart"
-		alt="d3 t/rh chart image">
-	</a>
+  <a href="|filename|images/d3_t_rh_chart.jpg">
+  <img
+    style="width: 520px;"
+    src="|filename|images/d3_t_rh_chart.jpg"
+    title="d3 t/rh chart"
+    alt="d3 t/rh chart image">
+  </a>
 
 | Interactive version can be run directly from `mk-fg/fgtk`_: `d3-temp-rh-sensor-tsv-series-chart.html`_
 | Bunch of real-world data samples for the script: `d3-temp-rh-sensor-tsv-series-chart.zip`_
