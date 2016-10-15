@@ -1,0 +1,48 @@
+Redirecting hosts or replacing files just for one app with mount namespaces
+###########################################################################
+
+:date: 2016-10-16 02:20
+:tags: linux, tools
+
+
+My problem was this: how do you do essentially a split-horizon DNS for different
+apps in the same desktop session.
+
+E.g. have claws-mail_ mail client go to localhost for someserver.com (because it
+has port forwarded thru "ssh -L"), while the rest of them (e.g. browser and
+such) keep using normal public IP.
+
+Usually one'd use /etc/hosts for something like that, but it applies to all apps
+on the machine, of course.
+
+Next obvious option (mostly because it's been around forever) is to LD_PRELOAD
+something that'd either override getaddrinfo() or open() for /etc/hosts, but
+that sounds like work and not included in unit-linux (yet?).
+
+Easiest and newest (well, new-ish, CLONE_NEWNS has been around since linux-3.8
+and 2013) way to do that is to run the thing in its own "mount namespace", which
+sounds weird until you combine that with the fact that you can bind-mount files
+(like that /etc/hosts one).
+
+So, the magic line is::
+
+  # unshare -m sh -c\
+    'mount -o bind /etc/hosts.forwarding /etc/hosts
+      && exec sudo -EHin -u myuser -- exec claws-mail'
+
+Needs /etc/hosts.forwarding replacement-file for this app, which it will see as
+a proper /etc/hosts, along with root privileges (or CAP_SYS_ADMIN) for CLONE_NEWNS.
+
+Crazy "sudo -EHin" shebang is to tell sudo not to drop much env, but still
+behave kinda as if on login, run zshrc and all that.
+"su - myuser" or "systemctl shell myuser@ -- ..." can also be used there.
+
+Replacing files like /etc/nsswitch.conf or /etc/{passwd,group} that way, one can
+also essentially do any kind of per-app id-mapping - cool stuff.
+
+Of course, these days sufficiently paranoid or advanced people might as well run
+every app in its own set of namespaces anyway, and have pretty much everything
+per-app that way, why the hell not.
+
+
+.. _claws-mail: http://www.claws-mail.org/
