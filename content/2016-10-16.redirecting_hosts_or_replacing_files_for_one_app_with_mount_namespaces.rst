@@ -17,7 +17,7 @@ on the machine, of course.
 
 Next obvious option (mostly because it's been around forever) is to LD_PRELOAD
 something that'd either override getaddrinfo() or open() for /etc/hosts, but
-that sounds like work and not included in unit-linux (yet?).
+that sounds like work and not included in util-linux (yet?).
 
 Easiest and newest (well, new-ish, CLONE_NEWNS has been around since linux-3.8
 and 2013) way to do that is to run the thing in its own "mount namespace", which
@@ -35,7 +35,7 @@ a proper /etc/hosts, along with root privileges (or CAP_SYS_ADMIN) for CLONE_NEW
 
 Crazy "sudo -EHin" shebang is to tell sudo not to drop much env, but still
 behave kinda as if on login, run zshrc and all that.
-"su - myuser" or "systemctl shell myuser@ -- ..." can also be used there.
+"su - myuser" or "machinectl shell myuser@ -- ..." can also be used there.
 
 Replacing files like /etc/nsswitch.conf or /etc/{passwd,group} that way, one can
 also essentially do any kind of per-app id-mapping - cool stuff.
