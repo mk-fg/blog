@@ -136,7 +136,7 @@ and won't need any bridge, as it is just a single connection:
 	PartOf=bluetooth.service
 
 	[Service]
-	ExecStart=/usr/local/bin/bt-pan client 00:02:72:XX:XX:XX
+	ExecStart=/usr/local/bin/bt-pan client --wait 00:02:72:XX:XX:XX
 
 	[Install]
 	WantedBy=bluetooth.target
