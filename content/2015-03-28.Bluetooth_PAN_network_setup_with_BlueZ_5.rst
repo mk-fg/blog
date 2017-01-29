@@ -25,27 +25,27 @@ serves as an authentication, as far as I can tell.
 
 .. code-block:: console
 
-	--- machine-1
-	% bluetoothctl
-	[NEW] Controller 00:02:72:XX:XX:XX malediction [default]
-	[bluetooth]# power on
-	Changing power on succeeded
-	[CHG] Controller 00:02:72:XX:XX:XX Powered: yes
-	[bluetooth]# discoverable on
-	Changing discoverable on succeeded
-	[CHG] Controller 00:02:72:XX:XX:XX Discoverable: yes
-	[bluetooth]# agent on
-	...
+  --- machine-1
+  % bluetoothctl
+  [NEW] Controller 00:02:72:XX:XX:XX malediction [default]
+  [bluetooth]# power on
+  Changing power on succeeded
+  [CHG] Controller 00:02:72:XX:XX:XX Powered: yes
+  [bluetooth]# discoverable on
+  Changing discoverable on succeeded
+  [CHG] Controller 00:02:72:XX:XX:XX Discoverable: yes
+  [bluetooth]# agent on
+  ...
 
-	--- machine-2 (snipped)
-	% bluetoothctl
-	[NEW] Controller 00:02:72:YY:YY:YY rpbox [default]
-	[bluetooth]# power on
-	[bluetooth]# scan on
-	[bluetooth]# agent on
-	[bluetooth]# pair 00:02:72:XX:XX:XX
-	[bluetooth]# trust 00:02:72:XX:XX:XX
-	...
+  --- machine-2 (snipped)
+  % bluetoothctl
+  [NEW] Controller 00:02:72:YY:YY:YY rpbox [default]
+  [bluetooth]# power on
+  [bluetooth]# scan on
+  [bluetooth]# agent on
+  [bluetooth]# pair 00:02:72:XX:XX:XX
+  [bluetooth]# trust 00:02:72:XX:XX:XX
+  ...
 
 Not sure if the "trust" bit is really necessary, and what it does - probably
 allows to setup agent-less connections or something.
@@ -82,19 +82,19 @@ of that bridge to BlueZ over dbus in "org.bluez.NetworkServer1.Register()" call:
 
 .. code-block:: bash
 
-	#!/bin/bash
+  #!/bin/bash
 
-	br=bnep
+  br=bnep
 
-	[[ -n "$(brctl show $br 2>&1 1>/dev/null)" ]] && {
-		brctl addbr $br
-		brctl setfd $br 0
-		brctl stp $br off
-		ip addr add 10.1.2.3/24 dev $br
-		ip link set $br up
-	}
+  [[ -n "$(brctl show $br 2>&1 1>/dev/null)" ]] && {
+    brctl addbr $br
+    brctl setfd $br 0
+    brctl stp $br off
+    ip addr add 10.1.2.3/24 dev $br
+    ip link set $br up
+  }
 
-	exec bt-pan --debug server $br
+  exec bt-pan --debug server $br
 
 (as mentioned above, bt-pan_ script is from `fgtk github repo`_)
 
@@ -112,15 +112,15 @@ stopped along with bluetoothd (as it doesn't make any sense running without it):
 
 .. code-block:: ini
 
-	[Unit]
-	After=bluetooth.service
-	PartOf=bluetooth.service
+  [Unit]
+  After=bluetooth.service
+  PartOf=bluetooth.service
 
-	[Service]
-	ExecStart=/usr/local/sbin/net.bnep
+  [Service]
+  ExecStart=/usr/local/sbin/net.bnep
 
-	[Install]
-	WantedBy=bluetooth.target
+  [Install]
+  WantedBy=bluetooth.target
 
 **Update 2015-12-10:** Put this into e.g. ``/etc/systemd/system/net-bnep.service``
 and enable to start with "bluetooth.target" (see "man systemd.special") by
@@ -131,15 +131,15 @@ and won't need any bridge, as it is just a single connection:
 
 .. code-block:: ini
 
-	[Unit]
-	After=bluetooth.service
-	PartOf=bluetooth.service
+  [Unit]
+  After=bluetooth.service
+  PartOf=bluetooth.service
 
-	[Service]
-	ExecStart=/usr/local/bin/bt-pan client --wait 00:02:72:XX:XX:XX
+  [Service]
+  ExecStart=/usr/local/bin/bt-pan client --wait 00:02:72:XX:XX:XX
 
-	[Install]
-	WantedBy=bluetooth.target
+  [Install]
+  WantedBy=bluetooth.target
 
 **Update 2015-12-10:** Can be ``/etc/systemd/system/net-bnep-client.service``,
 don't forget to enable it (creates symlink in "bluetooth.target.wants"), same as
