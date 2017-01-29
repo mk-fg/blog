@@ -1,0 +1,216 @@
+Proxying ssh user connections to gitolite host transparently
+############################################################
+
+:date: 2017-01-29 12:39
+:tags: scm, ssh, sysadmin, tools
+
+
+Recently bumped into apparently not well-supported scenario of accessing
+gitolite_ instance **transparently** on a host that is only accessible through
+some other gateway (often called "bastion" in ssh context) host.
+
+Something like this::
+
+  +---------------+
+  |               |   git@myhost.net:myrepo
+  |  dev-machine  ---------------------------+
+  |               |                          |
+  +---------------+                          |
+                                +------------v------+
+        git@gitolite:myrepo     |                   |
+    +----------------------------  myhost.net (gw)  |
+    |                           |                   |
+  +-v-------------------+       +-------------------+
+  |                     |
+  |    gitolite (gl)    |
+  |  host/container/vm  |
+  |                     |
+  +---------------------+
+
+Here gitolite instance might be running on a separate machine, or on the same
+"myhost.net", but inside a container or vm with separate sshd daemon.
+
+From any dev-machine you want to simply use ``git@myhost.net:myrepo`` to access
+repositories, but naturally that won't work because in normal configuration
+you'd hit sshd on gw host (myhost.net) and not on gl host.
+
+There are quite a few common options to work around this:
+
+- Use separate public host/IP for gitolite, e.g. git.myhost.net (!= myhost.net).
+
+- TCP port forwarding or similar tricks.
+
+  E.g. simply forward ssh port connections in a "gw:22 -> gl:22" fashion,
+  and have gw-specific sshd listen on some other port, if necessary.
+
+  This can be fairly easy to use with something like this for odd-port sshd
+  in ~/.ssh/config::
+
+    Host myhost.net
+      Port 1234
+    Host git.myhost.net
+      Port 1235
+
+  Can also be configured in git via remote urls like
+  ``ssh://git@myhost.net:1235/myrepo``.
+
+- Use ssh port forwarding to essentially do same thing as above, but with
+  resulting git port accessible on localhost.
+
+- Configure ssh to use ProxyCommand, which will login to gw host and setup
+  forwarding through it.
+
+All of these, while suitable for some scenarios, are still nowhere near what
+I'd call "transparent", and require some additional configuration for each git
+client beyond just ``git add remote origin git@myhost.net:myrepo``.
+
+One advantage of such lower-level forwarding is that ssh authentication to
+gitolite is only handled on gitolite host, gw host has no clue about that.
+
+If dropping this is not a big deal (e.g. because gw host has root access to
+everything in gl container anyway), there is a rather easy way to forward only
+``git@myhost.net`` connections from gw to gl host, authenticating them only on gw
+instead, described below.
+
+----------
+
+Gitolite works by building ~/.ssh/authorized_keys file with essentially
+``command="gitolite-shell gl-key-id" <gl-key>`` for each public key pushed to
+gitolite-admin repository.
+
+Hence to proxy connections from gw, similar key-list should be available there,
+with key-commands ssh'ing into gitolite user/host and running above commands there
+(with original git commands also passed through SSH_ORIGINAL_COMMAND env-var).
+
+To keep such list up-to-date, post-update trigger/hook for gitolite-admin repo
+is needed, which can use same ``git@gw`` login (with special "gl auth admin"
+key) to update key-list on gw host.
+
+Steps to implement/deploy whole thing:
+
+- ``useradd -m git`` on gw and run ``ssh-keygen -t ed25519`` on both gw and gl
+  hosts for git/gitolite user.
+
+- Setup all connections for ``git@gw`` to be processed via single "gitolite
+  proxy" command, disallowing anything else, exactly like gitolite does for its
+  users on gl host.
+
+  `gitolite-proxy.py script`_ (python3) that I came up with for this purpose can be
+  found here: https://github.com/mk-fg/gitolite-ssh-user-proxy/
+
+  It's rather simple and does two things:
+
+  - When ran with --auth-update argument, receives gitolite authorized_keys list,
+    and builds local ~/.ssh/authorized_keys from it and authorized_keys.base file.
+
+  - Similar to gitolite-shell, when ran as ``gitolite-proxy key-id``, ssh'es
+    into gl host, passing key-id and git command to it.
+
+    This is done in straightforward ``os.execlp('ssh', 'ssh', '-qT', ...)``
+    manner, no extra processing or any error-prone stuff like that.
+
+  For --auth-update, ~/.ssh/authorized_keys.base file on gw should have this single
+  line (split over two lines for readability, must be all on one line for ssh!)::
+
+    command="/usr/local/bin/gitolite-proxy --auth-update",no-port-forwarding
+      ,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAA...4u3FI git@gl
+
+  Here ``ssh-ed25519 AAA...4u3FI git@gl`` is the key from ~git/.ssh/id_ed25519.pub
+  on gitolite host.
+
+  ``cp -a ~git/.ssh/authorized_keys{.base,}`` can be done to have initial
+  auth-file, not yet populated with gitolite-specific keys/commands.
+
+- From gitolite (gl) host and user, run: ``ssh -qT git@gw < ~/.ssh/authorized_keys``
+
+  This is to test gitolite-proxy setup above - should populate
+  ~git/.ssh/authorized_keys on gw host and print back gw host key and proxy
+  script to run as command="..." for it.
+
+- Add hook that'd run after gitolite-admin repository updates on gl host.
+
+  It also must run after gitolite updates authorized_keys file, i.e. after
+  ``post-compile/ssh-authkeys`` trigger.
+
+  Best way (see notes at the end) I've found with current gitolite-3.6.6 is to:
+
+  - Patch and enable repo-specific-hooks trigger that runs after ssh-authkeys on
+    POST_COMPILE.
+
+    Patch for it to run (instead of ignoring) post-update for gitolite-admin -
+    `gitolite.repo-specific-hooks.patch`_ (same gitolite-ssh-user-proxy_ repo).
+
+    Can be applied by::
+
+      patch -p1 \
+        /usr/lib/gitolite/triggers/repo-specific-hooks \
+        < gitolite.repo-specific-hooks.patch
+
+    Uncomment repo-specific-hooks under ENABLE in ~/.gitolite.rc (on gl host) to
+    enable this (patched) trigger.
+
+  - Enable post-update hook for gitolite-admin repo, which will run ssh command
+    similar to the test one above, uploading authorized_keys list to gw host
+    after gitolite updates it.
+
+    Hook script (20 lines of bash) - `gitolite-admin.post-update.ssh-proxy-auth-sync.sh`_
+    (also part of gitolite-ssh-user-proxy_ repo).
+
+    Can be done according to gitolite docs here:
+    http://gitolite.com/gitolite/gitolite.html#v3.6-variation-repo-specific-hooks
+
+    With patch above in place, it can be done in a following way:
+
+    - Uncomment ``LOCAL_CODE => "$rc{GL_ADMIN_BASE}/local",`` in ~/.gitolite.rc (on gl host).
+
+    - Commit the hook script as ``local/hooks/repo-specific/admin.ssh-proxy-auth-sync`` file
+      into gitolite-admin repository.
+
+    - Enable that script via ``conf/gitolite.conf`` in gitolite-admin repo, i.e.::
+
+        repo gitolite-admin
+          ...
+          option hook.post-update = admin.ssh-proxy-auth-sync
+
+    Same process as for any repo-specific-hooks basically, except for patch in
+    the previous step, which allows to run post-update hook for gitolite-admin
+    repo, disabled as a special case in stock gitolite (because gitolite itself
+    is a post-update hook for that repo).
+
+Once proxy-command is in place on gw and gitolite-admin hook runs at least once
+(to setup gw->gl access and proxy-command), ``git@gw`` (``git@myhost.net``) ssh
+login spec can be used in exactly same way as ``git@gl``.
+
+That is, fully transparent access to gitolite on a different host through that
+one user, while otherwise allowing to use sshd on a gw host, without any
+forwarding tricks necessary for git clients.
+
+----------
+
+There might be a way to avoid patching gitolite repo-specific-hooks trigger,
+i.e. by somehow adding custom trigger to the end of POST_COMPILE or something
+like that, but ~/.gitolite.rc seem to only add triggers to the start of that
+list (can be checked with ``gitolite query-rc POST_COMPILE``), after
+``post-compile/ssh-authkeys``, which won't cut it.
+
+gitolite-admin post-update git-hook is gitolite itself, which is why it's likely
+not allowed as a special case in repo-specific-hooks (comments there don't
+really say why), but above patch uses that to its advantage, simply running the
+script from gitolite itself, which works with repo-specific-hooks trigger
+because it's the last one on POST_COMPILE.
+
+Might open a PR for that patch, see if maybe something like that can be
+implemented in stock gitolite, though not sure if it's common enough use-case
+for that.
+
+----------
+
+Whole project, with maybe more refined process description and/or whatever fixes
+can be found on github here: https://github.com/mk-fg/gitolite-ssh-user-proxy/
+
+
+.. _gitolite: http://gitolite.com/
+.. _gitolite-proxy.py script: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite-proxy.py
+.. _gitolite-ssh-user-proxy: https://github.com/mk-fg/gitolite-ssh-user-proxy/
+.. _gitolite-admin.post-update.ssh-proxy-auth-sync.sh: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite-admin.post-update.ssh-proxy-auth-sync.sh
+.. _gitolite.repo-specific-hooks.patch: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite.repo-specific-hooks.patch
