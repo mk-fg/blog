@@ -100,17 +100,21 @@ Steps to implement/deploy whole thing:
 
   It's rather simple and does two things:
 
-  - When ran with --auth-update argument, receives gitolite authorized_keys list,
+  - When run with --auth-update argument, receives gitolite authorized_keys list,
     and builds local ~/.ssh/authorized_keys from it and authorized_keys.base file.
 
-  - Similar to gitolite-shell, when ran as ``gitolite-proxy key-id``, ssh'es
+  - Similar to gitolite-shell, when run as ``gitolite-proxy key-id``, ssh'es
     into gl host, passing key-id and git command to it.
 
-    This is done in straightforward ``os.execlp('ssh', 'ssh', '-qT', ...)``
+    This is done in a straightforward ``os.execlp('ssh', 'ssh', '-qT', ...)``
     manner, no extra processing or any error-prone stuff like that.
 
-  For --auth-update, ~/.ssh/authorized_keys.base file on gw should have this single
-  line (split over two lines for readability, must be all on one line for ssh!)::
+  When installing it (to e.g. ``/usr/local/bin/gitolite-proxy`` as used below),
+  be sure to set/update "gl_host_login = ..." line at the top there.
+
+  For --auth-update, ~/.ssh/authorized_keys.base (note .base) file on gw should
+  have this single line (split over two lines for readability, must be all on
+  one line for ssh!)::
 
     command="/usr/local/bin/gitolite-proxy --auth-update",no-port-forwarding
       ,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAA...4u3FI git@gl
@@ -118,64 +122,32 @@ Steps to implement/deploy whole thing:
   Here ``ssh-ed25519 AAA...4u3FI git@gl`` is the key from ~git/.ssh/id_ed25519.pub
   on gitolite host.
 
-  ``cp -a ~git/.ssh/authorized_keys{.base,}`` can be done to have initial
-  auth-file, not yet populated with gitolite-specific keys/commands.
+  Also run::
+
+    # install -m0600 -o git -g git ~git/.ssh/authorized_keys{.base,}
+    # install -m0600 -o git -g git ~git/.ssh/authorized_keys{.base,.old}
+
+  | To have initial auth-file, not yet populated with gitolite-specific keys/commands.
+  | Note that only these two files need to be writable for git user on gw host.
 
 - From gitolite (gl) host and user, run: ``ssh -qT git@gw < ~/.ssh/authorized_keys``
 
   This is to test gitolite-proxy setup above - should populate
   ~git/.ssh/authorized_keys on gw host and print back gw host key and proxy
-  script to run as command="..." for it.
+  script to run as command="..." for it (ignore them, will be installed by trigger).
 
-- Add hook that'd run after gitolite-admin repository updates on gl host.
+- Add trigger that'd run after gitolite-admin repository updates on gl host.
 
-  It also must run after gitolite updates authorized_keys file, i.e. after
-  ``post-compile/ssh-authkeys`` trigger.
+  - On gl host, put this to ~git/.gitolite.rc right before ENABLE line::
 
-  Best way (see notes at the end) I've found with current gitolite-3.6.6 is to:
+      LOCAL_CODE => "$rc{GL_ADMIN_BASE}/local",
+      POST_COMPILE => ['push-authkeys'],
 
-  - Patch and enable repo-specific-hooks trigger that runs after ssh-authkeys on
-    POST_COMPILE.
+  - Commit/push push-authkeys_ trigger script (also from gitolite-ssh-user-proxy_ repo)
+    to gitolite-admin repo as ``local/triggers/push-authkeys``,
+    updating gw_proxy_login line in there.
 
-    Patch for it to run (instead of ignoring) post-update for gitolite-admin -
-    `gitolite.repo-specific-hooks.patch`_ (same gitolite-ssh-user-proxy_ repo).
-
-    Can be applied by::
-
-      patch -p1 \
-        /usr/lib/gitolite/triggers/repo-specific-hooks \
-        < gitolite.repo-specific-hooks.patch
-
-    Uncomment repo-specific-hooks under ENABLE in ~/.gitolite.rc (on gl host) to
-    enable this (patched) trigger.
-
-  - Enable post-update hook for gitolite-admin repo, which will run ssh command
-    similar to the test one above, uploading authorized_keys list to gw host
-    after gitolite updates it.
-
-    Hook script (20 lines of bash) - `gitolite-admin.post-update.ssh-proxy-auth-sync.sh`_
-    (also part of gitolite-ssh-user-proxy_ repo).
-
-    Can be done according to gitolite docs here:
-    http://gitolite.com/gitolite/gitolite.html#v3.6-variation-repo-specific-hooks
-
-    With patch above in place, it can be done in a following way:
-
-    - Uncomment ``LOCAL_CODE => "$rc{GL_ADMIN_BASE}/local",`` in ~/.gitolite.rc (on gl host).
-
-    - Commit the hook script as ``local/hooks/repo-specific/admin.ssh-proxy-auth-sync`` file
-      into gitolite-admin repository.
-
-    - Enable that script via ``conf/gitolite.conf`` in gitolite-admin repo, i.e.::
-
-        repo gitolite-admin
-          ...
-          option hook.post-update = admin.ssh-proxy-auth-sync
-
-    Same process as for any repo-specific-hooks basically, except for patch in
-    the previous step, which allows to run post-update hook for gitolite-admin
-    repo, disabled as a special case in stock gitolite (because gitolite itself
-    is a post-update hook for that repo).
+  gitolite docs on adding triggers: http://gitolite.com/gitolite/gitolite.html#triggers
 
 Once proxy-command is in place on gw and gitolite-admin hook runs at least once
 (to setup gw->gl access and proxy-command), ``git@gw`` (``git@myhost.net``) ssh
@@ -185,32 +157,14 @@ That is, fully transparent access to gitolite on a different host through that
 one user, while otherwise allowing to use sshd on a gw host, without any
 forwarding tricks necessary for git clients.
 
-----------
-
-There might be a way to avoid patching gitolite repo-specific-hooks trigger,
-i.e. by somehow adding custom trigger to the end of POST_COMPILE or something
-like that, but ~/.gitolite.rc seem to only add triggers to the start of that
-list (can be checked with ``gitolite query-rc POST_COMPILE``), after
-``post-compile/ssh-authkeys``, which won't cut it.
-
-gitolite-admin post-update git-hook is gitolite itself, which is why it's likely
-not allowed as a special case in repo-specific-hooks (comments there don't
-really say why), but above patch uses that to its advantage, simply running the
-script from gitolite itself, which works with repo-specific-hooks trigger
-because it's the last one on POST_COMPILE.
-
-Might open a PR for that patch, see if maybe something like that can be
-implemented in stock gitolite, though not sure if it's common enough use-case
-for that.
-
-----------
-
-Whole project, with maybe more refined process description and/or whatever fixes
+Whole project, with maybe a bit more refined process description and/or whatever fixes
 can be found on github here: https://github.com/mk-fg/gitolite-ssh-user-proxy/
+
+Huge thanks to sitaramc (gitolite author) for `suggesting how to best setup gitolite triggers
+for this purpose on the ML <https://groups.google.com/forum/#!topic/gitolite/E1DUbS8MlPc>`_.
 
 
 .. _gitolite: http://gitolite.com/
 .. _gitolite-proxy.py script: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite-proxy.py
 .. _gitolite-ssh-user-proxy: https://github.com/mk-fg/gitolite-ssh-user-proxy/
-.. _gitolite-admin.post-update.ssh-proxy-auth-sync.sh: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite-admin.post-update.ssh-proxy-auth-sync.sh
-.. _gitolite.repo-specific-hooks.patch: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/gitolite.repo-specific-hooks.patch
+.. _push-authkeys: https://github.com/mk-fg/gitolite-ssh-user-proxy/blob/master/push-authkeys.sh
