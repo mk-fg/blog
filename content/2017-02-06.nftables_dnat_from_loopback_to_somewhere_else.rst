@@ -1,0 +1,45 @@
+nftables dnat from loopback to somewhere else
+#############################################
+
+:date: 2017-02-06 15:43
+:tags: linux, tools
+
+
+Honestly didn't think NAT'ing traffic from "lo" interface was even possible,
+because traffic to host's own IP doesn't go through \*ROUTING chains with iptables,
+and never used "-j DNAT" with OUTPUT, which apparently works there as well.
+
+And then also, according to e.g. `Netfilter-packet-flow.svg`_, unlike with
+nat-prerouting, nat-output goes after routing decision was made, so no point
+mangling IPs there, right?
+
+Wrong, totally possible to redirect "OUT=lo" stuff to go out of e.g. "eth0" with
+the usual dnat/snat, with something like this::
+
+  table ip nat {
+    chain in { type nat hook input priority -160; }
+    chain out { type nat hook output priority -160; }
+    chain pre { type nat hook prerouting priority -90; }
+    chain post { type nat hook postrouting priority 110; }
+  }
+
+  add rule ip nat out oifname lo \
+    ip saddr $own-ip ip daddr $own-ip \
+    tcp dport {80, 443} dnat $somehost
+  add rule ip nat post oifname eth0 \
+    ip saddr $own-ip ip daddr $somehost \
+    tcp dport {80, 443} masquerade
+
+Note the bizarre ``oifname lo ip saddr $own-ip ip daddr $own-ip`` thing.
+
+One weird quirk - if "in" (arbitrary name, nat+input hook is the important bit)
+chain isn't defined, dnat will only work one-way, not rewriting IPs in response packets.
+
+One explaination wrt routing decision here might be arbitrary priorities that
+nftables allows to set for hooks (and -160 is before iptables mangle stuff).
+
+| So, from-loopback-and-back forwarding, huh.
+| To think of all the redundant socats and haproxies I've seen and used for this purpose earlier...
+
+
+.. _Netfilter-packet-flow.svg: https://upload.wikimedia.org/wikipedia/commons/3/37/Netfilter-packet-flow.svg
