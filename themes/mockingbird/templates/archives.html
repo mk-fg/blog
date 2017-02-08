@@ -6,19 +6,20 @@
 
 				<h1>Archives</h1>
 
-				{#- hold on to your butts! #}
+				{# Have to be done like this because of scope for template vars #}
+				{% set ctx = {} -%}
 
-				{% set month = None -%}
 				{%- for article in dates -%}
-				{% set cmonth = article.date.date().replace(day=1) %}
-				{%- if not month -%}
-				{%   set month = cmonth %}
+					{% set cmonth = article.date.date().replace(day=1) %}
+
+					{%- if not ctx.get('month') -%}
+						{% do ctx.update(month=cmonth) %}
 
 				<h4 class="date">{{ article.date.strftime("%b %Y") }}</h4>
 				<div class="post archives">
 					<ul>
-				{%- elif cmonth < month -%}
-				{%   set month = cmonth %}
+					{%- elif cmonth < ctx.get('month') -%}
+						{% do ctx.update(month=cmonth) %}
 
 					</ul>
 					<br />
@@ -27,9 +28,11 @@
 				<h4 class="date">{{ article.date.strftime("%b %Y") }}</h4>
 				<div class="post archives">
 					<ul>
-				{%- endif %}
+					{%- endif %}
 
-						<li>{{ article.date.strftime("%d") }}: <a href="{{ SITEURL }}/{{ article.url }}">{{ article.title | truncate(70) }}</a></li>
+						<li>{{ article.date.strftime("%d") }}:
+							<a href="{{ SITEURL }}/{{ article.url }}">{{ article.title | truncate(70) }}</a>
+						</li>
 				{%- endfor %}
 
 					</ul>

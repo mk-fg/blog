@@ -41,6 +41,7 @@ LINKS = [
 PLUGINS = [
 	'plugins.html_rst_directive',
 	'plugins.sitemap' ]
+JINJA_EXTENSIONS = ['jinja2.ext.do']
 
 SITEMAP = dict(
 	format='xml',
