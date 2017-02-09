@@ -7,18 +7,18 @@
 				<h1>Archives</h1>
 
 				{# Have to be done like this because of scope for template vars #}
-				{% set ctx = {} -%}
+				{% set ctx = {'month': None} -%}
 
 				{%- for article in dates -%}
 					{% set cmonth = article.date.date().replace(day=1) %}
 
-					{%- if not ctx.get('month') -%}
+					{%- if not ctx.month -%}
 						{% do ctx.update(month=cmonth) %}
 
 				<h4 class="date">{{ article.date.strftime("%b %Y") }}</h4>
 				<div class="post archives">
 					<ul>
-					{%- elif cmonth < ctx.get('month') -%}
+					{%- elif cmonth < ctx.month -%}
 						{% do ctx.update(month=cmonth) %}
 
 					</ul>
