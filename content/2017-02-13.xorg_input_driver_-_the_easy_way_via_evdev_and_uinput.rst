@@ -1,0 +1,95 @@
+Xorg input driver - the easy way, via evdev and uinput
+######################################################
+
+:date: 2017-02-13 10:54
+:tags: linux, desktop, hardware, python
+
+
+Got to reading short stories in `Column Reader`_ from laptop screen before sleep
+recently, and for an extra-lazy points, don't want to drag my hand to keyboard
+to flip pages (or columns, as the case might be).
+
+| Easy fix - get any input device and bind stuff there to keys you'd normally use.
+| As it happens, had Xbox 360 controller around for that.
+
+Hard part is figuring out how to properly do it all in Xorg - need to build
+xf86-input-joystick first (somehow not in Arch core), then figure out how to
+make it act like a dumb event source, not some mouse emulator, and then stuff
+like xev_ and xbindkeys_ will probably help.
+
+This is way more complicated than it needs to be, and gets even more so when you
+factor-in all the Xorg driver quirks, xev's somewhat cryptic nature (modifier
+maps, keysyms, etc), fact that xbindkeys can't actually do "press key" actions
+(have to use stuff like xdotool for that), etc.
+
+All the while reading these events from linux itself is as trivial as ``evtest
+/dev/input/event11`` (or ``for event in dev.read_loop(): ...``) and sending them
+back is just ``ui.write(e.EV_KEY, e.BTN_RIGHT, 1)`` via uinput device.
+
+Hence whole binding thing can be done by a tiny python loop that'd read events
+from whatever specified evdev and write corresponding (desired) keys to uinput.
+
+So instead of +1 pre-naptime story, hacked together a script to do just that -
+evdev-to-xev_ (python3/asyncio) - which reads mappings from simple YAML and runs
+the loop.
+
+For example, to bind right joystick's (on the same XBox 360 controller) extreme
+positions to cursor keys, plus triggers, d-pad and bumper buttons there::
+
+  map:
+
+    ## Right stick
+    # Extreme positions are ~32_768
+    ABS_RX <-30_000: left
+    ABS_RX >30_000: right
+    ABS_RY <-30_000: up
+    ABS_RY >30_000: down
+
+    ## Triggers
+    # 0 (idle) to 255 (fully pressed)
+    ABS_Z >200: left
+    ABS_RZ >200: right
+
+    ## D-pad
+    ABS_HAT0Y -1: leftctrl leftshift equal
+    ABS_HAT0Y 1: leftctrl minus
+    ABS_HAT0X -1: pageup
+    ABS_HAT0X 1: pagedown
+
+    ## Bumpers
+    BTN_TL 1: [h,e,l,l,o,space,w,o,r,l,d,enter]
+    BTN_TR 1: right
+
+  timings:
+    hold: 0.02
+    delay: 0.02
+    repeat: 0.5
+
+| Run with e.g.: ``evdev-to-xev -c xbox-scroller.yaml /dev/input/event11``
+| (see also ``less /proc/bus/input/devices`` and ``evtest /dev/input/event11``).
+| Running the thing with no config will print example one with comments/descriptions.
+
+Given how all iterations of X had to work with whatever input they had at the
+time, plus not just on linux, even when evdev was around, hard to blame it for
+having a bit of complexity on top of way simplier input layer underneath.
+
+In linux, aforementioned Xbox 360 gamepad is supported by "xpad" module (so that
+you'd get evdev node for it), and /dev/uinput for simulating arbitrary evdev
+stuff is "uinput" module.
+
+| Script itself needs python3 and python-evdev_, plus evtest_ can be useful.
+| No need for any extra Xorg drivers beyond standard evdev.
+
+Most similar tool to such script seem to be actkbd_, though afaict, one'd still
+need to run xdotool from it to simulate input :O=
+
+Github link: `evdev-to-xev script`_ (in the usual mk-fg/fgtk scrap-heap)
+
+.. _Column Reader: https://addons.mozilla.org/en-US/firefox/addon/column-reader/
+.. _xev: https://www.x.org/archive/X11R7.7/doc/man/man1/xev.1.xhtml
+.. _xbindkeys: http://www.nongnu.org/xbindkeys/
+.. _evdev-to-xev: https://github.com/mk-fg/fgtk/#evdev-to-xev
+.. _python-evdev: https://python-evdev.readthedocs.org/
+.. _evtest: https://cgit.freedesktop.org/evtest/
+.. _actkbd: http://users.softlab.ece.ntua.gr/~thkala/projects/actkbd/
+.. _evdev-to-xev script: https://github.com/mk-fg/fgtk/blob/master/desktop/evdev-to-xev
