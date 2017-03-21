@@ -1,0 +1,71 @@
+Running glusterfs in a user namespace (uid-mapped container)
+############################################################
+
+:date: 2017-03-21 15:30
+:tags: sysadmin, nfs, replication
+
+
+Traditionally glusterd (glusterfs_ storage node) runs as root without any kind of
+namespacing, and that's suboptimal for two main reasons:
+
+- Grossly-elevated privileges (it's root) for just using net and storing files.
+- Inconvenient to manage in the root fs/namespace.
+
+Apart from being historical thing, glusterd uses privileges for three things
+that I know of:
+
+- Set appropriate uid/gid on stored files.
+- setxattr() with "trusted" namespace for all kinds of glusterfs xattrs.
+- Maybe running nfsd? Not sure about this one, didn't use its nfs access.
+
+For my purposes, only first two are useful, and both can be easily satisfied in
+non-uid-mapped contained, e.g. systemd-nspawn without -U.
+
+With `user_namespaces(7)`_, first requirement is also satisfied, as chown works
+for pseudo-root user inside namespace, but second one will never work without
+some kind of namespace-private fs or xattr-mapping namespace.
+
+"user" xattr namespace works fine there though, so rather obvious fix is to make
+glusterd use those instead, and it has no obvious downsides, at least if backing
+fs is used only by glusterd.
+
+xattr names are unfortunately used quite liberally in the gluster codebase, and
+don't have any macro for prefix, but finding all "trusted" outside of tests/docs
+with grep is rather easy, seem to be no caveats there either.
+
+| Patch for glusterfs-3.10.0: `glusterfs-3.10.0--xattr-user-namespace.patch`_
+| Would be cool to see something like that upstream eventually.
+
+It won't work unless all nodes are using patched glusterfs version though,
+as non-patched nodes will be sending SETXATTR/XATTROP for trusted.\* xattrs.
+
+Two extra scripts that can be useful with this patch and existing setups:
+
+- `glusterfs-xattr-trusted-to-user.py`_
+- `patch-nspawn-ids`_ (`short patch-nspawn-ids description`_)
+
+First one is to copy trusted.\* xattrs to user.\*, and second one to set upper
+16 bits of uid/gid to systemd-nspawn container id value.
+
+Both allow to pass fs from old root glusterd to a user-xattr-patched glusterd
+inside uid-mapped container (i.e. bind-mount it there), without loosing anything.
+Both operations are also reversible - can just nuke user.\* stuff or upper part
+of uid/gid values to revert everything back.
+
+| One more random bit of ad-hoc trivia - use ``getfattr -Rd -m '.*' /srv/glusterfs-stuff``
+| (getfattr without ``-m '.*'`` hack hides trusted.\* xattrs)
+
+Note that I didn't test this trick extensively (yet?), and only use simple
+distribute-replicate configuration here anyway, so probably a bad idea to run
+something like this blindly in an important and complicated production setup.
+
+Also wow, it's been 7 years since I've written here about glusterfs last,
+time (is made of) flies :)
+
+
+.. _glusterfs: http://gluster.org/
+.. _user_namespaces(7): http://man7.org/linux/man-pages/man7/user_namespaces.7.html
+.. _glusterfs-3.10.0--xattr-user-namespace.patch: |filename|misc/glusterfs-3.10.0--xattr-user-namespace.patch
+.. _glusterfs-xattr-trusted-to-user.py: |filename|misc/glusterfs-xattr-trusted-to-user.py
+.. _patch-nspawn-ids: https://github.com/mk-fg/fgtk/blob/master/patch-nspawn-ids
+.. _short patch-nspawn-ids description: https://github.com/mk-fg/fgtk/#patch-nspawn-ids
