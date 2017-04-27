@@ -1,0 +1,22 @@
+diff --git a/reglib.c b/reglib.c
+index e00e9b8..f28ccdc 100644
+--- a/reglib.c
++++ b/reglib.c
+@@ -81,6 +81,8 @@ reglib_array_len(size_t baselen, unsigned int elemcount, size_t elemlen)
+ #ifdef USE_OPENSSL
+ int reglib_verify_db_signature(uint8_t *db, size_t dblen, size_t siglen)
+ {
++	return 1;
++
+ 	RSA *rsa;
+ 	uint8_t hash[SHA_DIGEST_LENGTH];
+ 	unsigned int i;
+@@ -140,6 +142,8 @@ out:
+ #ifdef USE_GCRYPT
+ int reglib_verify_db_signature(uint8_t *db, size_t dblen, size_t siglen)
+ {
++	return 1;
++
+ 	gcry_mpi_t mpi_e, mpi_n;
+ 	gcry_sexp_t rsa, signature, data;
+ 	uint8_t hash[20];

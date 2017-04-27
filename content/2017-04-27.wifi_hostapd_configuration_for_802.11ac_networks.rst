@@ -1,0 +1,191 @@
+WiFi hostapd configuration for 802.11ac networks
+################################################
+
+:date: 2017-04-27 10:25
+:tags: linux
+
+
+Running Wireless AP on linux is pretty much always done through handy `hostapd
+tool`_, which sets the necessary driver parameters and handles authentication
+and key management aspects of an infrastructure mode access point operation.
+
+Its `configuration file`_ has plenty of options, which get initialized to a
+rather conserative defaults, resulting in suboptimal bendwidth with anything
+from this decade, e.g. 802.11n or 802.11ac cards/dongles.
+
+Furthermore, it seem to assume decent amount of familiarity with IEEE standards
+on WiFi protocols, which are mostly paywalled (though can easily be pirated ofc,
+just use google).
+
+Specifically, channel selection for VHT (802.11ac) there is a bit of a
+nightmare, as hostapd code not only has (undocumented afaict) whitelist for
+these, but also needs more than one parameter to set them.
+
+I'm not an expert on wireless links and wifi specifically, just had to setup one
+recently (and even then, without going into STBC, Beamforming and such), so
+don't take this info as some kind of authoritative "how it must be done" guide -
+just my 2c and nothing more.
+
+Anyway, first of all, to get VHT ("Very High Throughput") aka 802.11ac mode at
+all, following hostapd config can be used as a baseline::
+
+  # https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf
+
+  ssid=my-test-ap
+  wpa_passphrase=set-ap-password
+
+  country_code=US
+  # ieee80211d=1
+  # ieee80211h=1
+
+  interface=wlan0
+  driver=nl80211
+
+  wpa=2
+  wpa_key_mgmt=WPA-PSK
+  rsn_pairwise=CCMP
+
+  logger_syslog=0
+  logger_syslog_level=4
+  logger_stdout=-1
+  logger_stdout_level=0
+
+  hw_mode=a
+  ieee80211n=1
+  require_ht=1
+  ieee80211ac=1
+  require_vht=1
+
+  vht_oper_chwidth=1
+  channel=36
+  vht_oper_centr_freq_seg0_idx=42
+
+There, important bits are obviously stuff at the top - ssid and wpa_passphrase.
+
+But also country_code, as it will apply all kinds of restrictions on 5G channels
+that one can use.
+
+ieee80211d/ieee80211h are related to these country_code restrictions, and are
+probably necessary for some places and when/if `DFS (dynamic frequency selection)`_
+is used, but more on that later.
+
+If that config doesn't work (started with e.g. ``hostapd myap.conf``), and not
+just due to some channel conflict or regulatory domain (i.e. country_code) error,
+probably worth running hostapd command with -d option and seeing where it fails
+exactly, though most likely after ``nl80211: Set freq ... (ht_enabled=1,
+vht_enabled=1, bandwidth=..., cf1=..., cf2=...)`` log line (and list of options
+following it), with some "Failed to set X: Invalid argument" error from kernel
+driver.
+
+When that's the case, if it's not just bogus channel (see below), probably worth
+to stop right here and see why driver rejects this basic stuff - could be that
+it doesn't actually supports running AP and/or VHT mode (esp. for proprietary ones)
+or something, which should obviously be addressed first.
+
+VHT (Very High Throughput mode, aka 802.11ac, page 214 in 802.11ac-2013.pdf) is
+extension of HT (High Throughput aka 802.11n) mode and can use 20 MHz, 40 MHz,
+80 MHz, 160 MHz and 80+80 MHz channel widths, which basically set following caps
+on bandwidth:
+
+- 20 MHz - 54 Mbits/s
+- 40 MHz - 150-300 Mbits/s
+- 80 MHz - 300+ Mbits/s
+- 160 MHz or 80+80 MHz (two non-contiguous 80MHz chans) - moar!!!
+
+Most notably, 802.11ac **requires** to support only up to 80MHz-wide chans, with
+160 and 80+80 being optional, so pretty much guaranteed to be not supported by
+95% of cheap-ish dongles, even if they advertise "full 802.11ac support!",
+"USB 3.0!!!"  or whatever - forget it.
+
+"vht_oper_chwidth" parameter sets channel width to use, so "vht_oper_chwidth=1"
+(80 MHz) is probably safe choice for ac here.
+
+Unless ACS - Automatic Channel Selection - is being used (which is maybe a good
+idea, but not described here at all), both "channel" and
+"vht_oper_centr_freq_seg0_idx" parameters must be set (and also
+"vht_oper_centr_freq_seg1_idx" for 80+80 vht_oper_chwidth=3 mode).
+
+"vht_oper_centr_freq_seg0_idx" is "dot11CurrentChannelCenterFrequencyIndex0"
+from 802.11ac-2013.pdf (22.3.7.3 on page 248 and 22.3.14 on page 296),
+while "channel" option is "dot11CurrentPrimaryChannel".
+
+Relation between these for 80MHz channels is the following one::
+
+  vht_oper_centr_freq_seg0_idx = channel + 6
+
+Where "channel" can only be picked from the following list (see
+hw_features_common.c in hostapd sources)::
+
+  36 44 52 60 100 108 116 124 132 140 149 157 184 192
+
+And vht_oper_centr_freq_seg0_idx can only be one of::
+
+  42 58 106 122 138 155
+
+Furthermore, picking anything but 36/42 and 149/155 is probably restricted by
+DFS and/or driver, and if you have any other 5G APs around, can also be
+restricted by conflicts with these, as detected/reported by hostapd on start.
+
+Which is kinda crazy - you've got your fancy 802.11ac hardware and maybe can't
+even use it because hostapd refuses to use any channels if there's other 5G AP
+or two around.
+
+BSS conflicts (with other APs) are detected on start only and are easy to
+patch-out with `hostapd-2.6-no-bss-conflicts.patch`_ - just 4 lines to
+hw_features.c and hw_features_common.c there, should be trivial to adopt for any
+newer hostpad version.
+
+But that still leaves all the DFS/no-IR and whatever regdb-special channels locked,
+which is safe for legal reasons, but also easy to patch-out in crda (loader tool
+for regdb) and wireless-regdb (info on regulatory domains, e.g. US and such)
+packages, e.g.:
+
+- `crda-3.18-remove-sig-check.patch`_
+- `wireless-regdb-2016.06.10-regdb-US-unlock.patch`_
+
+crda patch is needed to disable signature check on loaded db.txt file,
+and alternatively different public key can be used there, but it's less hassle this way.
+
+Note that using DFS/no-IR-marked frequencies with these patches is probably
+breaking the law, though no idea if and where these are actually enforced.
+
+Also, if crda/regdb is not installed or country_code not picked, "00" regulatory
+domain is used by the kernel, which is the most restrictive subset (to be ok to
+use anywhere), and is probably never a good idea.
+
+All these tweaks combined should already provide ~300 Mbits/s (half-duplex) on
+a single 80 MHz channel (any from the lists above).
+
+Beyond that, I think "vht_capab" set should be tweaked to enable STBC/LDPC
+(space-time block coding) capabilities - i.e. using multiple RX/TX antennas -
+which are all disabled by default, and beamforming stuff.
+
+These are all documented in `hostapd.conf`_, but dongles and/or rtl8812au driver
+I've been using didn't have support for any of that, so didn't go there myself.
+
+There's also bunch of wmm_* and tx_queue_* parameters, which seem to be for QoS
+(prioritizing some packets over others when at 100% capacity).
+Tinkering with these doesn't affect iperf3 resutls obviously, and maybe should
+be done in linux QoS subsystem ("tc" tool) instead anyway.
+Plenty of snippets for tweaking them are available on mailing lists and such,
+but should probably be adjusted for specific traffic/setup.
+
+One last important bandwidth optimization for both AP and any clients (stations)
+is disabling all the power saving stuff with ``iw dev wlan0 set power_save off``.
+
+Failing to do that can completely wreck performance, and can usually be done
+via kernel module parameter in /etc/modprobe.d/ instead of running "iw".
+
+No patches or extra configuration for `wpa_supplicant`_ (tool for infra-mode
+"station" client) are necessary - it will connect just fine to anything and pick
+whatever is advertised, if hw supports all that stuff.
+
+
+.. _hostapd tool: https://w1.fi/hostapd/
+.. _configuration file: https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf
+.. _DFS (dynamic frequency selection): https://en.wikipedia.org/wiki/Channel_allocation_schemes#DFS
+.. _hostapd-2.6-no-bss-conflicts.patch: |filename|misc/hostapd-2.6-no-bss-conflicts.patch
+.. _crda-3.18-remove-sig-check.patch: |filename|misc/crda-3.18-remove-sig-check.patch
+.. _wireless-regdb-2016.06.10-regdb-US-unlock.patch: |filename|misc/wireless-regdb-2016.06.10-regdb-US-unlock.patch
+.. _hostapd.conf: https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf
+.. _wpa_supplicant: https://w1.fi/wpa_supplicant/

@@ -1,0 +1,41 @@
+diff --git a/src/ap/hw_features.c b/src/ap/hw_features.c
+index 16887ac..040b34c 100644
+--- a/src/ap/hw_features.c
++++ b/src/ap/hw_features.c
+@@ -310,6 +310,7 @@ static void ieee80211n_check_scan(struct hostapd_iface *iface)
+ 	wpa_scan_results_free(scan_res);
+ 
+ 	iface->secondary_ch = iface->conf->secondary_channel;
++	oper40 = 1;
+ 	if (!oper40) {
+ 		wpa_printf(MSG_INFO, "20/40 MHz operation not permitted on "
+ 			   "channel pri=%d sec=%d based on overlapping BSSes",
+@@ -774,7 +775,7 @@ static int hostapd_is_usable_chan(struct hostapd_iface *iface,
+ 		if (chan->chan != channel)
+ 			continue;
+ 
+-		if (!(chan->flag & HOSTAPD_CHAN_DISABLED))
++		/* if (!(chan->flag & HOSTAPD_CHAN_DISABLED)) */
+ 			return 1;
+ 
+ 		wpa_printf(MSG_DEBUG,
+diff --git a/src/common/hw_features_common.c b/src/common/hw_features_common.c
+index 9c37ea6..9e7d047 100644
+--- a/src/common/hw_features_common.c
++++ b/src/common/hw_features_common.c
+@@ -195,6 +195,7 @@ int check_40mhz_5g(struct hostapd_hw_modes *mode,
+ 		else if (bss->freq == sec_freq)
+ 			sec_bss++;
+ 	}
++	pri_bss = 1;
+ 	if (sec_bss && !pri_bss) {
+ 		wpa_printf(MSG_INFO,
+ 			   "Switch own primary and secondary channel to get secondary channel with no Beacons from other BSSes");
+@@ -216,6 +217,7 @@ int check_40mhz_5g(struct hostapd_hw_modes *mode,
+ 			break;
+ 		}
+ 	}
++	match = 1;
+ 	if (!match) {
+ 		for (i = 0; i < scan_res->num; i++) {
+ 			struct wpa_scan_res *bss = scan_res->res[i];
