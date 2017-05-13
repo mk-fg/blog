@@ -1,0 +1,231 @@
+ssh reverse tunnel ("ssh -R") caveats and tricks
+################################################
+
+:date: 2017-05-14 01:37
+:tags: ssh, sysadmin, tools
+
+
+"ssh -R" a is kinda obvious way to setup reverse access tunnel from something
+remote that one'd need to access, e.g. raspberry pi booted from supplied img
+file somewhere behind the router on the other side of the world.
+
+Being part of OpenSSH, it's available on any base linux system, and trivial to
+automate on startup via loop in a shell script, crontab or a systemd unit, e.g.:
+
+.. code-block:: ini
+
+  [Unit]
+  Wants=network.service
+  After=network.service
+
+  [Service]
+  Type=simple
+  User=ssh-reverse-access-tunnel
+  Restart=always
+  RestartSec=10
+  ExecStart=/usr/bin/ssh -oControlPath=none -oControlMaster=no \
+    -oServerAliveInterval=6 -oServerAliveCountMax=10 -oConnectTimeout=180 \
+    -oPasswordAuthentication=no -oNumberOfPasswordPrompts=0 \
+    -NnT -R "1234:localhost:22" tun-user@tun-host
+
+  [Install]
+  WantedBy=multi-user.target
+
+On the other side, ideally in a dedicated container or VM, there'll be sshd
+"tun-user" with an access like this (as a single line)::
+
+  command="echo >&2 'No shell access!'; exit 1",no-port-forwarding,
+    no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 ...
+
+Or have sshd_config section with same restrictions and only keys in
+authorized_keys, e.g.::
+
+  Match User tun-*
+   # GatewayPorts yes
+   AllowTcpForwarding no
+   X11Forwarding no
+   AllowAgentForwarding no
+   PermitTTY no
+   ForceCommand echo 'no shell access!'; exit 1
+
+And that's it, right?
+
+No additional stuff needed, "ssh -R" will connect reliably on boot, keep
+restarting and reconnecting in case of any errors, even with keepalives to
+detect dead connections and restart asap.
+
+Nope!
+
+There's a bunch of common pitfalls listed below.
+
+
+- Problem 1:
+
+  When device with a tunnel suddenly dies for whatever reason - power or network
+  issues, kernel panic, stray "kill -9" or what have you - connection on sshd
+  machine will hang around for a while, as keepalive options are only used by
+  the client.
+
+  Along with (dead) connection, listening port will stay open as well, and "ssh
+  -R" from e.g. power-cycled device will not be able to bind it, and that client
+  won't treat it as a fatal error either!
+
+  Result: reverse-tunnels don't survive any kind of non-clean reconnects.
+
+  Fix:
+
+  - TCPKeepAlive in sshd_config - to detect dead connections there faster,
+    though probably still not fast enough for e.g. emergency reboot.
+
+  - Detect and kill sshd pids without listening socket, forcing "ssh -R" to
+    reconnect until it can actually bind one.
+
+  - If TCPKeepAlive is not good or reliable enough, kill all sshd pids
+    associated with listening sockets that don't produce the usual
+    "SSH-2.0-OpenSSH_7.4" greeting line.
+
+
+- Problem 2:
+
+  Running sshd on any reasonably modern linux, you get systemd session for each
+  connection, and killing sshd pids as suggested above will leave logind
+  sessions from these, potentially creating hundreds or thousands of them over
+  time.
+
+  Solution:
+
+  - "UsePAM no" to disable pam_systemd.so along with the rest of the PAM.
+
+  - Dedicated PAM setup for ssh tunnel logins on this dedicated system, not
+    using pam_systemd.
+
+  - Occasional cleanup via loginctl list-sessions/terminate-session for ones
+    that are in "closing"/"abandoned" state.
+
+  Killing sshd pids might be hard to avoid on fast non-clean reconnect, since
+  reconnected "ssh -R" will hang around without a listening port forever,
+  as mentioned.
+
+
+- Problem 3:
+
+  If these tunnels are not configured on per-system basis, but shipped in some
+  img file to use with multiple devices, they'll all try to bind same listening
+  port for reverse-tunnels, so only one of these will work.
+
+  Fixes:
+
+  - More complex script to generate listening port for "ssh -R" based on
+    machine id, i.e. serial, MAC, local IP address, etc.
+
+  - Get free port to bind to out-of-band from the server somehow.
+
+    Can be through same ssh connection, by checking ss/netstat output or
+    /proc/net/tcp there, if commands are allowed there (probably a bad idea for
+    random remote devices).
+
+
+- Problem 4:
+
+  Device identification in the same "mutliple devices" scenario.
+
+  I.e. when someone sets up 5 RPi boards on the other end, how to tell which
+  tunnel leads to each specific board?
+
+  Can usually be solved by:
+
+  - Knowing/checking quirks specific to each board, like dhcp hostname,
+    IP address, connected hardware, stored files, power-on/off timing, etc.
+
+  - Blinking LEDs via /sys/class/leds, ``ethtool --identify`` or GPIO pins.
+
+  - Output on connected display - just "wall" some unique number
+    (e.g. reverse-tunnel port) or put it to whatever graphical desktop.
+
+
+- Problem 5:
+
+  Round-trip through some third-party VPS can add significant console lag,
+  making it rather hard to use.
+
+  More general problem than with just "ssh -R", but when doing e.g. "EU -> US ->
+  RU" trip and back, console becomes quite unusable without something like
+  mosh_, which can't be used over that forwarded tcp port anyway!
+
+  Kinda defeats the purpose of the whole thing, though laggy console (with an
+  option to upgrade it, once connected) is still better than nothing.
+
+
+Not an exhaustive or universally applicable list, of course, but hopefully shows
+that it's actually more hassle than "just run ssh -R on boot" to have something
+robust here.
+
+So choice of ubiquitous / out-of-the-box "ssh -R" over installing some dedicated
+tunneling thing like OpenVPN is not as clear-cut in favor of the former as it
+would seem, taking all such quirks (handled well by dedicated tunneling apps)
+into consideration.
+
+
+As I've bumped into all of these by now, addressed them by:
+
+- ssh-tunnels-cleanup_ script to (optionally) do three things, in order:
+
+  - Find/kill sshd pids without associated listening socket
+    ("ssh -R" that re-connected quickly and couldn't bind one).
+
+  - Probe all sshd listening sockets with nmap and make sure there's an
+    "SSH-2.0-..." banner there, otherwise kill.
+
+  - Cleanup all dead loginctl sessions, if any.
+
+  Only affects/checks sshd pids for specific user prefix (e.g. "tun-"), to avoid
+  touching anything but dedicated tunnels.
+
+  | https://github.com/mk-fg/fgtk#ssh-tunnels-cleanup
+  | https://github.com/mk-fg/fgtk/blob/master/ssh-tunnels-cleanup
+
+- ssh-reverse-mux-server_ / ssh-reverse-mux-client_ scripts.
+
+  For listening port negotiation with ssh server,
+  using bunch of (authenticated) UDP packets.
+
+  Essentially a wrapper for "ssh -R" on the client, to also pass all the
+  required options, replacing ExecStart= line in above systemd example
+  with e.g.::
+
+    ExecStart=/usr/local/bin/ssh-reverse-mux-client \
+      --mux-port=2200 --ident-rpi -s pkt-mac-key.aGPwhpya tun-user@tun-host
+
+  ssh-reverse-mux-server on the other side will keep .db file of --ident strings
+  (--ident-rpi uses hash of RPi board serial from /proc/cpuinfo) and allocate
+  persistent port number (from specified range) to each one, which client will
+  use with actual ssh command.
+
+  Simple symmetric key (not very secret) is used to put MAC into packets and
+  ignore any noise traffic on either side that way.
+
+  https://github.com/mk-fg/fgtk#ssh-reverse-mux
+
+- Hook in ssh-reverse-mux-client_ above to blink bits of allocated port on some
+  available LED.
+
+  Sample script to do the morse-code-like bit-blinking:
+  https://github.com/mk-fg/fgtk/blob/master/scraps/led-blink-arg
+
+  And additional hook option for command above:
+  ``... -c 'sudo -n led-blink-arg -l led0 -n 2/4-2200'``
+
+  (with last ``arg-num / bits - decrement`` spec there to blink only last 4 bits
+  of the second passed argument, which is listening port, e.g. "1011" for "2213")
+
+
+Given how much OpenSSH does already, having all this functionality there
+(or even some hooks for that) would probably be too much to ask.
+
+...at least until it gets rewritten as some systemd-accessd component :P
+
+
+.. _ssh-tunnels-cleanup: https://github.com/mk-fg/fgtk/blob/master/ssh-tunnels-cleanup
+.. _ssh-reverse-mux-server: https://github.com/mk-fg/fgtk/blob/master/ssh-reverse-mux-server
+.. _ssh-reverse-mux-client: https://github.com/mk-fg/fgtk/blob/master/ssh-reverse-mux-client
+.. _mosh: https://mosh.org/
