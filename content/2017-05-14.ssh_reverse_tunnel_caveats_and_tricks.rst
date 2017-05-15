@@ -209,11 +209,12 @@ As I've bumped into all of these by now, addressed them by:
 - Hook in ssh-reverse-mux-client_ above to blink bits of allocated port on some
   available LED.
 
-  Sample script to do the morse-code-like bit-blinking:
-  https://github.com/mk-fg/fgtk/blob/master/scraps/led-blink-arg
+  | Sample script to do the morse-code-like bit-blinking:
+  | https://github.com/mk-fg/fgtk/blob/master/scraps/led-blink-arg
 
-  And additional hook option for command above:
-  ``... -c 'sudo -n led-blink-arg -l led0 -n 2/4-2200'``
+  And additional hook option for command above::
+
+    ... -c 'sudo -n led-blink-arg -f -l led0 -n 2/4-2200'
 
   (with last ``arg-num / bits - decrement`` spec there to blink only last 4 bits
   of the second passed argument, which is listening port, e.g. "1011" for "2213")
