@@ -1,0 +1,27 @@
+Emacs slow font rendering fail
+##############################
+
+:date: 2017-05-15 10:35
+:tags: emacs, desktop, fail
+
+
+Mostly use unorthodox variable-width font for coding, but do need monospace
+sometimes, e.g. for jagged YAML files or .rst.
+
+Had weird issue with my emacs for a while, where switching to monospace font
+will slow window/frame rendering significantly, to a noticeable degree, having
+stuff blink and lag, making e.g. holding key to move cursor impossible, etc.
+
+Usual profiling showed that it's an actual rendering via C code, so kinda hoped
+that it'd go away in one of minor releases, but nope - turned out to be the
+dumbest thing in ~/.emacs::
+
+  (set-face-font 'fixed-pitch "DejaVu Sans Mono-7.5")
+
+That one line is what slows stuff down to a crawl in monospace ("fixed-pitch")
+configuration, just due to non-integer font size, apparently.
+
+Probably not emacs' fault either, just xft or some other lower-level rendering
+lib, and a surprising little quirk that can affect high-level app experience a lot.
+
+Changing font size there to 8 or 9 gets rid of the issue. Oh well...
