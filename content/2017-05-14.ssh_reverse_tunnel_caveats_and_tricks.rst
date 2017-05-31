@@ -42,7 +42,6 @@ authorized_keys, e.g.::
 
   Match User tun-*
    # GatewayPorts yes
-   AllowTcpForwarding no
    X11Forwarding no
    AllowAgentForwarding no
    PermitTTY no
