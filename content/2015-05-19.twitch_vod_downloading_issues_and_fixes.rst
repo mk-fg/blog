@@ -93,8 +93,9 @@ never goes away!), downloaded super-fast and seekable.
 
 Resulting script is `twitch_vod_fetch`_ (`script source link`_).
 
-Needs `youtube-dl`_ (for --get-url), `requests python module`_ and aria2_ (does
-the actual downloads, in the most efficient manner).
+**Update 2017-06-01:** rewritten it using python3/asyncio since then, so stuff
+related to specific implementation details here is only relevant for old py2 version
+(can be pulled from git history, if necessary).
 
 -----
 
