@@ -1,0 +1,44 @@
+acme-cert-tool for easy end-to-end https cert management
+########################################################
+
+:date: 2017-06-09 17:08
+:tags: sysadmin, tools, web, encryption, python
+
+
+Tend to mention random trivial tools I write here, but somehow forgot about this
+one - `acme-cert-tool`_.
+
+Implemented it a few months back when setting-up TLS on, and wasn't satisfied by
+any existing things for ACME / `Let's Encrypt`_ cert management.
+
+Wanted to find some simple python3 script that's a bit less hacky than
+acme-tiny_, not a bloated framework with dozens of useless deps like certbot_
+and has ECC certs covered, but came up empty.
+
+acme-cert-tool has all that in a single script with just one dep on a standard
+py crypto toolbox (cryptography.io), and does everything through a single
+command, e.g. something like::
+
+  % ./acme-cert-tool.py --debug -gk le-staging.acc.key cert-issue \
+    -d /srv/www/.well-known/acme-challenge le-staging.cert.pem mydomain.com
+
+...to get signed cert for mydomain.com, doing all the generation, registration
+and authorization stuff as necessary, and caching that stuff in
+"le-staging.acc.key" too, not doing any extra work there either.
+
+Add ``&& systemctl reload nginx`` to that, put into crontab or .timer and done.
+
+There are bunch of other commands mostly to play with accounts and such, plus
+options for all kinds of cert and account settings, e.g. ``... -e
+myemail@mydomain.com -c rsa-2048 -c ec-384`` to also have cert with rsa key
+generated for random outdated clients and add email for notifications (if not
+added already).
+
+| README on `acme-cert-tool`_ github page and -h/--help output should have more details:
+| https://github.com/mk-fg/acme-cert-tool/
+
+
+.. _acme-cert-tool: https://github.com/mk-fg/acme-cert-tool/
+.. _Let's Encrypt: https://letsencrypt.org/
+.. _acme-tiny: https://github.com/diafygi/acme-tiny
+.. _certbot: https://github.com/certbot/certbot/
