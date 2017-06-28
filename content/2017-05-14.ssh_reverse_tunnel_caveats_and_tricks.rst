@@ -34,7 +34,7 @@ automate on startup via loop in a shell script, crontab or a systemd unit, e.g.:
 On the other side, ideally in a dedicated container or VM, there'll be sshd
 "tun-user" with an access like this (as a single line)::
 
-  command="echo >&2 'No shell access!'; exit 1",no-port-forwarding,
+  command="echo >&2 'No shell access!'; exit 1",
     no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 ...
 
 Or have sshd_config section with same restrictions and only keys in
