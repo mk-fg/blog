@@ -172,8 +172,8 @@ As I've bumped into all of these by now, addressed them by:
   - Find/kill sshd pids without associated listening socket
     ("ssh -R" that re-connected quickly and couldn't bind one).
 
-  - Probe all sshd listening sockets with nmap and make sure there's an
-    "SSH-2.0-..." banner there, otherwise kill.
+  - Probe all sshd listening sockets with ncat (nc that comes with nmap) and
+    make sure there's an "SSH-2.0-..." banner there, otherwise kill.
 
   - Cleanup all dead loginctl sessions, if any.
 
