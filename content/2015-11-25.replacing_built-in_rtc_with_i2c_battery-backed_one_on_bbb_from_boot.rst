@@ -71,21 +71,47 @@ for my chip)::
     };
   };
 
-As per comment in the overlay file, can be compiled ("dtc" comes from
-"dtc-overlay" package on ArchLinuxARM) to the destination with::
+As per comment in the overlay file, can be compiled ("dtc" comes from same-name
+package on ArchLinuxARM) to the destination with::
 
   dtc -O dtb -o /lib/firmware/BB-RTC-02-00A0.dtbo -b0 i2c2-rtc-ds3231.dts
+
+**Update 2017-09-19:** This will always produce a warning for each "fragment"
+section, safe to ignore.
 
 And then loaded on early boot (as soon as rootfs with "/lib/firmware" gets
 mounted) with "bone_capemgr.enable_partno=" cmdline addition, and should be put
 to something like "/boot/uEnv.txt", for example (with dtb path from command above)::
 
-  optargs=bone_capemgr.enable_partno=BB-RTC-02
+  setenv bootargs "... bone_capemgr.enable_partno=BB-RTC-02"
 
 Docs in `bb.org-overlays repository`_ have more details and examples on how to
 write and manage these.
 
-That should ensure that this second RTC appears as "/dev/rtc1" (rtc0 is an
+**Update 2017-09-19:**
+
+  Modern ArchLinuxARM always uses initramfs image, which is starting rootfs,
+  where kernel will look up stuff in /lib/firmware, so all \*.dtbo files loaded
+  via bone_capemgr.enable_partno= must be included there.
+
+  With Arch-default mkinitcpio, it's easy to do via FILES= in
+  "/etc/mkinitcpio.conf" - e.g. ``FILES="/lib/firmware/BB-RTC-02-00A0.dtbo"`` -
+  and re-running the usual ``mkinitcpio -g /boot/initramfs-linux.img`` command.
+
+  If using e.g. i2c-1 instead (with ``&bb_i2c1_pins``), BB-I2C1 should also be
+  included and loaded there, strictly before rtc overlay.
+
+**Update 2017-09-19:**
+
+  bone_capemgr seem to be broken in linux-am33x packages past 4.9, and produces
+  kernel BUG instead of loading any overlays - be sure to try loading that dtbo
+  at runtime (checking dmesg) before putting it into cmdline, as that might make
+  system unbootable.
+
+  | Workaround is to downgrade kernel to 4.9.
+  | Could be that it's just some change needed in dt-patch above for newer kernels.
+
+That should ensure that this second RTC appears as "/dev/rtc1" (rtc0 is the
 internal one) on system startup, but unfortunately it still won't be the first
 one and kernel will already pick up time from internal rtc0 by the time this one
 gets detected.
@@ -143,10 +169,13 @@ with shipped systemd-timesyncd.service), e.g. "i2c-rtc.service":
   ProtectHome=yes
   DeviceAllow=/dev/rtc rw
   DevicePolicy=closed
-  ExecStart=/usr/bin/hwclock --hctosys
+  ExecStart=/usr/bin/hwclock -f /dev/rtc --hctosys
 
   [Install]
   WantedBy=time-sync.target
+
+**Update 2017-09-19:** ``-f /dev/rtc`` must be specified these days, as hwclock
+seem to use /dev/rtc0 by default, pretty sure it didn't used to.
 
 Note that Before= above should include whatever time-sync daemon is used on the
 machine, and there's no harm in listing non-existant or unused units there jic.
