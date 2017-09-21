@@ -108,8 +108,8 @@ write and manage these.
   at runtime (checking dmesg) before putting it into cmdline, as that might make
   system unbootable.
 
-  | Workaround is to downgrade kernel to 4.9.
-  | Could be that it's just some change needed in dt-patch above for newer kernels.
+  Workaround is to downgrade kernel to 4.9, e.g. one from `beagleboard/linux
+  tree`_, where it's currently the latest supported release.
 
 That should ensure that this second RTC appears as "/dev/rtc1" (rtc0 is the
 internal one) on system startup, but unfortunately it still won't be the first
@@ -212,6 +212,7 @@ so here it is. Cheers!
 .. _this one on minix-i2c blog: http://minix-i2c.blogspot.ru/2013/07/using-i2c-tools-with-angstrom-linux-on.html
 .. _patching and re-compiling platform dtb file: http://blog.fraggod.net/2015/01/30/enabling-i2c1-on-beaglebone-black-without-device-tree-overlays.html
 .. _bb.org-overlays repository: https://github.com/beagleboard/bb.org-overlays
-.. _systemd-timesyncd: http://www.freedesktop.org/software/systemd/man/systemd-timesyncd.html
+.. _beagleboard/linux tree: https://github.com/beagleboard/linux/
 .. _systemd-timedated: http://www.freedesktop.org/software/systemd/man/systemd-timedated.html
+.. _systemd-timesyncd: http://www.freedesktop.org/software/systemd/man/systemd-timesyncd.html
 .. _systemd.device(5): http://www.freedesktop.org/software/systemd/man/systemd.device.html
