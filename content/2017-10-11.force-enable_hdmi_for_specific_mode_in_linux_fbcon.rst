@@ -1,0 +1,63 @@
+Force-enable HDMI to specific mode in linux framebuffer console
+###############################################################
+
+:date: 2017-10-11 15:00
+:tags: arm, hardware, linux
+
+
+Bumped into this issue when running latest mainline kernel (4.13) on ODROID-C2 -
+default fb console for HDMI output have to be configured differently there
+(and also needs a `dtb patch`_ to hook it up).
+
+Old vendor kernels for that have/use `a bunch of cmdline options for HDMI`_ -
+hdmimode, hdmitx (cecconfig), vout (hdmi/dvi/auto), overscan\_\*, etc - all
+custom and non-mainline.
+
+With mainline DRM (as in Direct Rendering Manager) and framebuffer modules,
+video= option seem to be the way to set/force specific output and resolution
+instead.
+
+When display is connected on boot, it can work without that if stars align
+correctly, but that's not always the case as it turns out - only 1 out of 3
+worked that way.
+
+But even if display works on boot, plugging HDMI after boot never works anyway,
+and that's the most (only) useful thing for it (debug issues, see logs or kernel
+panic backtrace there, etc)!
+
+DRM module (meson_dw_hdmi in case of C2) has its HDMI output info in
+``/sys/class/drm/card0-HDMI-A-1/``, which is where one can check on connected
+display, dump its EDID blob (info, supported modes), etc.
+
+cmdline option to force this output to be used with specific (1080p60) mode::
+
+  video=HDMI-A-1:1920x1080@60e
+
+More info on this spec is in `Documentation/fb/modedb.txt`_, but the gist is
+"<ouput>:<WxH>@<rate><flags>" with "e" flag at the end is "force the display to
+be enabled", to avoid all that hotplug jank.
+
+Should set mode for console (see e.g. ``fbset --info``), but at least with
+meson_dw_hdmi this is insufficient, which it's happy to tell why when loading
+with extra ``drm.debug=0xf`` cmdline option - doesn't have any supported modes,
+returns MODE_BAD for all non-CEA-861 modes that are default in fb-modedb.
+
+Such modelines are usually supplied from EDID blobs by the display, but if there
+isn't one connected, blob should be loaded from somewhere else (and iirc there
+are ways to define these via cmdline).
+
+Luckily, kernel has built-in standard EDID blobs, so there's no need to put
+anything to /lib/firmware, initramfs or whatever::
+
+  drm_kms_helper.edid_firmware=edid/1920x1080.bin video=HDMI-A-1:1920x1080@60e
+
+And that finally works.
+
+Not very straightforward, and doesn't seem to be documented in one place
+anywhere with examples (`ArchWiki page on KMS`_ probably comes closest).
+
+
+.. _dtb patch: https://github.com/superna9999/meta-meson/blob/master/recipes-kernel/linux/linux-yocto-meson64-4.13/0001-Add-HDMI-support-for-Odroid-C2.patch
+.. _a bunch of cmdline options for HDMI: https://wiki.odroid.com/odroid-c2/troubleshooting/changing_hdmi_resolution#bootini
+.. _Documentation/fb/modedb.txt: https://www.kernel.org/doc/Documentation/fb/modedb.txt
+.. _ArchWiki page on KMS: https://wiki.archlinux.org/index.php/kernel_mode_setting#Forcing_modes_and_EDID
