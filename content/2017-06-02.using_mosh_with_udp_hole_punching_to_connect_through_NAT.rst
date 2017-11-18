@@ -21,8 +21,8 @@ mosh, which didn't get any traction so far, unfortunately:
 - https://github.com/mobile-shell/mosh/issues/48 - first one
 - https://github.com/mobile-shell/mosh/issues/623 - latest one aggregating others
 
-One obvious way to make it work, is to make some tunnel (like OpenVPN) from
-destination host (server) to a client, and use mosh over that.
+One obvious way to make it work, is to make some tunnel (like OpenVPN or
+wireguard_) from destination host (server) to a client, and use mosh over that.
 
 But that's some extra tools and configuration to keep around on both sides, and
 there is much easier way that works perfectly for most cases - knowing both
@@ -122,3 +122,4 @@ configuration of any kind.
 .. _pwnat: https://samy.pl/pwnat/
 .. _mosh-nat: https://github.com/mk-fg/fgtk/blob/master/mosh-nat
 .. _mosh-nat-bind.c: https://github.com/mk-fg/fgtk/blob/master/mosh-nat-bind.c
+.. _wireguard: https://www.wireguard.com/

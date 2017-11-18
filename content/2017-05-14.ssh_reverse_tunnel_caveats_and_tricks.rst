@@ -160,9 +160,9 @@ that it's actually more hassle than "just run ssh -R on boot" to have something
 robust here.
 
 So choice of ubiquitous / out-of-the-box "ssh -R" over installing some dedicated
-tunneling thing like OpenVPN is not as clear-cut in favor of the former as it
-would seem, taking all such quirks (handled well by dedicated tunneling apps)
-into consideration.
+tunneling thing like OpenVPN (or, wireguard_ - much better choice on linux) is
+not as clear-cut in favor of the former as it would seem, taking all such quirks
+(handled well by dedicated tunneling apps) into consideration.
 
 
 As I've bumped into all of these by now, addressed them by:
@@ -229,3 +229,4 @@ Given how much OpenSSH does already, having all this functionality there
 .. _ssh-reverse-mux-server: https://github.com/mk-fg/fgtk/blob/master/ssh-reverse-mux-server
 .. _ssh-reverse-mux-client: https://github.com/mk-fg/fgtk/blob/master/ssh-reverse-mux-client
 .. _mosh: https://mosh.org/
+.. _wireguard: https://www.wireguard.com/
