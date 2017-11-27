@@ -1,0 +1,363 @@
+Checking/waiting-on linux network parameters from the scripts
+#############################################################
+
+:date: 2017-11-27 8:36
+:tags: linux, sysadmin, tools
+
+
+It's one thing that's non-trivial to get right with simple scripts.
+
+I.e. how to check address on an interface? How to wait for it to be assigned?
+How to check gateway address? Etc.
+
+Few common places to look for these things:
+
+
+/sys/class/net/
+---------------
+
+Has easily-accessible list of interfaces and a MAC for each in
+e.g. /sys/class/net/enp1s0/address (useful as a machine id sometimes).
+
+| Pros: easy/reliable to access from any scripts.
+| Cons: very little useful info there.
+
+
+/usr/lib/systemd/systemd-networkd-wait-online
+---------------------------------------------
+
+As systemd-networkd is a common go-to network management tool these days, this
+one complements it very nicely.
+
+Allows to wait until some specific interface(s) (or all of them) get fully
+setup, has built-in timeout option too.
+
+E.g. just run ``systemd-networkd-wait-online -i enp1s0`` from any script or even
+ExecStartPre= of a unit file and you have it waiting for net to be available
+reliably, no need to check for specific IP or other details.
+
+| Pros: super-easy to use from anywhere, even ExecStartPre= of unit files.
+| Cons: for one very specific (but very common) all-or-nothing use-case.
+
+Doesn't always work for interfaces that need complicated setup by an extra
+daemon, e.g. wifi, batman-adv or some tunnels.
+
+
+Scraping iproute2 (e.g. "ip" and "ss" tools) output
+---------------------------------------------------
+
+Explicitly discouraged by iproute2 docs and a really hacky solution.
+
+Output there is quirky, doesn't line-up nicely, and is clearly not made for
+this purpose, plus can break at any point, as suggested by the docs repeatedly.
+
+But for terrible sh hacks, sometimes it works, and "ip monitor" even allows to
+react to netlink events as soon as they appear, e.g.::
+
+  [Unit]
+  After=network-pre.target
+  Before=network.target systemd-networkd.service
+
+  [Service]
+  ExecStart=/usr/bin/bash -c "\
+    dev=host0;\
+    exec 2>/dev/null; trap 'pkill -g 0' EXIT; trap exit TERM;\
+    awk '/^([0-9]+:\s+'$$dev')?\s+inet\s/ {chk=1; exit} END {exit !chk}'\
+    < <( ip addr show dev $$dev;\
+      stdbuf -oL ip monitor address dev $$dev &\
+      sleep 1 ; ip addr show dev $$dev ; wait )\
+    && ip link set $$dev mtu 1280"
+
+  [Install]
+  WantedBy=multi-user.target
+
+That's example of how ugly it can get with events though - two extra checks
+around ip-monitor are there for a reason (easy to miss event otherwise).
+
+(this specific hack is a workaround for systemd-networkd failing to set mtu in
+some cases where it has to be done only after other things)
+
+| Pros: allows to access any net parameters and monitor events.
+| Cons: gets ugly fast, hard to get right, brittle and explicitly discouraged.
+
+
+APIs of running network manager daemons
+---------------------------------------
+
+E.g. NetworkManager_ has nice-ish DBus API (see `two polkit rules/pkla snippets
+here`_ for how to enable it for regular users), same for wpa_supplicant/hostapd
+(see wifi-client-match_ or wpa-systemd-wrapper_ scripts), dhcpcd_ has hooks.
+
+systemd-networkd will probably get DBus API too at some point in the near
+future, beyond simple up/down one that systemd-networkd-wait-online already
+uses.
+
+| Pros: best place to get such info from, can allow some configuration.
+| Cons: not always there, can be somewhat limited or hard to access.
+
+
+Bunch of extra modules/tools
+----------------------------
+
+Especially for python and such, there's plenty of tools like pyroute2_ and
+netifaces_, with occasional things making it into stdlib - e.g. `socket.if_*
+calls`_ (py 3.3+) or ipaddress_ module (py 3.3+).
+
+Can make things easier in larger projects, where dragging along a bunch of few
+extra third-party modules isn't too much of a hassle.
+
+Not a great option for drop-in self-contained scripts though, regardless of how
+good python packaging gets.
+
+| Pros: there's a module/lib for everything.
+| Cons: extra dependencies, with all the api/packaging/breakage/security hassle.
+
+
+libc and getifaddrs() - low-level way
+-------------------------------------
+
+Same python has ctypes, so why bother with all the heavy/fragile deps and crap,
+when it can use libc API directly?
+
+Drop-in snippet to grab all the IPv4/IPv6/MAC addresses (py2/py3)::
+
+  import os, socket, ctypes as ct
+
+  class sockaddr_in(ct.Structure):
+    _fields_ = [('sin_family', ct.c_short), ('sin_port', ct.c_ushort), ('sin_addr', ct.c_byte*4)]
+
+  class sockaddr_in6(ct.Structure):
+    _fields_ = [ ('sin6_family', ct.c_short), ('sin6_port', ct.c_ushort),
+      ('sin6_flowinfo', ct.c_uint32), ('sin6_addr', ct.c_byte * 16) ]
+
+  class sockaddr_ll(ct.Structure):
+    _fields_ = [ ('sll_family', ct.c_ushort), ('sll_protocol', ct.c_ushort),
+      ('sll_ifindex', ct.c_int), ('sll_hatype', ct.c_ushort), ('sll_pkttype', ct.c_uint8),
+      ('sll_halen', ct.c_uint8), ('sll_addr', ct.c_uint8 * 8) ]
+
+  class sockaddr(ct.Structure):
+    _fields_ = [('sa_family', ct.c_ushort)]
+
+  class ifaddrs(ct.Structure): pass
+  ifaddrs._fields_ = [ # recursive
+    ('ifa_next', ct.POINTER(ifaddrs)), ('ifa_name', ct.c_char_p),
+    ('ifa_flags', ct.c_uint), ('ifa_addr', ct.POINTER(sockaddr)) ]
+
+  def get_iface_addrs(ipv4=False, ipv6=False, mac=False, ifindex=False):
+    if not (ipv4 or ipv6 or mac or ifindex): ipv4 = ipv6 = True
+    libc = ct.CDLL('libc.so.6', use_errno=True)
+    libc.getifaddrs.restype = ct.c_int
+    ifaddr_p = head = ct.pointer(ifaddrs())
+    ifaces, err = dict(), libc.getifaddrs(ct.pointer(ifaddr_p))
+    if err != 0:
+      err = ct.get_errno()
+      raise OSError(err, os.strerror(err), 'getifaddrs()')
+    while ifaddr_p:
+      addrs = ifaces.setdefault(ifaddr_p.contents.ifa_name.decode(), list())
+      addr = ifaddr_p.contents.ifa_addr
+      if addr:
+        af = addr.contents.sa_family
+        if ipv4 and af == socket.AF_INET:
+          ac = ct.cast(addr, ct.POINTER(sockaddr_in)).contents
+          addrs.append(socket.inet_ntop(af, ac.sin_addr))
+        elif ipv6 and af == socket.AF_INET6:
+          ac = ct.cast(addr, ct.POINTER(sockaddr_in6)).contents
+          addrs.append(socket.inet_ntop(af, ac.sin6_addr))
+        elif (mac or ifindex) and af == socket.AF_PACKET:
+          ac = ct.cast(addr, ct.POINTER(sockaddr_ll)).contents
+          if mac:
+            addrs.append('mac-' + ':'.join(
+              map('{:02x}'.format, ac.sll_addr[:ac.sll_halen]) ))
+          if ifindex: addrs.append(ac.sll_ifindex)
+      ifaddr_p = ifaddr_p.contents.ifa_next
+    libc.freeifaddrs(head)
+    return ifaces
+
+  print(get_iface_addrs())
+
+Result is a dict of iface-addrs (presented as yaml here)::
+
+  enp1s0:
+    - 192.168.65.19
+    - fc65::19
+    - fe80::c646:19ff:fe64:632f
+  enp2s7:
+    - 10.0.1.1
+    - fe80::1ebd:b9ff:fe86:f439
+  lo:
+    - 127.0.0.1
+    - ::1
+  ve: []
+  wg:
+    - 10.74.0.1
+
+Or to get IPv6+MAC+ifindex only - ``get_iface_addrs(ipv6=True, mac=True,
+ifindex=True)``::
+
+  enp1s0:
+    - mac-c4:46:19:64:63:2f
+    - 2
+    - fc65::19
+    - fe80::c646:19ff:fe64:632f
+  enp2s7:
+    - mac-1c:bd:b9:86:f4:39
+    - 3
+    - fe80::1ebd:b9ff:fe86:f439
+  lo:
+    - mac-00:00:00:00:00:00
+    - 1
+    - ::1
+  ve:
+    - mac-36:65:67:f7:99:dc
+    - 5
+  wg: []
+
+Tend to use this as a drop-in boilerplate/snippet in python scripts that need IP
+address info, instead of adding extra deps - libc API should be way more
+stable/reliable than these anyway.
+
+Same can be done in any other full-featured scripts, of course, not just python,
+but bash scripts are sorely out of luck.
+
+| Pros: first-hand address info, stable/reliable/efficient, no extra deps.
+| Cons: not for 10-liner sh scripts, not much info, bunch of boilerplate code.
+
+
+libmnl - same way as iproute2 does it
+-------------------------------------
+
+libc.getifaddrs() doesn't provide much info beyond very basic ip/mac addrs and
+iface indexes, and the rest should be fetched from kernel via netlink sockets.
+
+libmnl wraps those, and is used by iproute2, so comes out of the box on any
+modern linux, so its API can be used in the same way as libc above from
+full-featured scripts like python::
+
+  import os, socket, resource, struct, time, ctypes as ct
+
+  class nlmsghdr(ct.Structure):
+    _fields_ = [
+      ('len', ct.c_uint32),
+      ('type', ct.c_uint16), ('flags', ct.c_uint16),
+      ('seq', ct.c_uint32), ('pid', ct.c_uint32) ]
+
+  class nlattr(ct.Structure):
+    _fields_ = [('len', ct.c_uint16), ('type', ct.c_uint16)]
+
+  class rtmsg(ct.Structure):
+    _fields_ = ( list( (k, ct.c_uint8) for k in
+        'family dst_len src_len tos table protocol scope type'.split() )
+      + [('flags', ct.c_int)] )
+
+  class mnl_socket(ct.Structure):
+    _fields_ = [('fd', ct.c_int), ('sockaddr_nl', ct.c_int)]
+
+  def get_route_gw(addr='8.8.8.8'):
+    libmnl = ct.CDLL('libmnl.so.0.2.0', use_errno=True)
+    def _check(chk=lambda v: bool(v)):
+      def _check(res, func=None, args=None):
+        if not chk(res):
+          errno_ = ct.get_errno()
+          raise OSError(errno_, os.strerror(errno_))
+        return res
+      return _check
+    libmnl.mnl_nlmsg_put_header.restype = ct.POINTER(nlmsghdr)
+    libmnl.mnl_nlmsg_put_extra_header.restype = ct.POINTER(rtmsg)
+    libmnl.mnl_attr_put_u32.argtypes = [ct.POINTER(nlmsghdr), ct.c_uint16, ct.c_uint32]
+    libmnl.mnl_socket_open.restype = mnl_socket
+    libmnl.mnl_socket_open.errcheck = _check()
+    libmnl.mnl_socket_bind.argtypes = [mnl_socket, ct.c_uint, ct.c_int32]
+    libmnl.mnl_socket_bind.errcheck = _check(lambda v: v >= 0)
+    libmnl.mnl_socket_get_portid.restype = ct.c_uint
+    libmnl.mnl_socket_get_portid.argtypes = [mnl_socket]
+    libmnl.mnl_socket_sendto.restype = ct.c_ssize_t
+    libmnl.mnl_socket_sendto.argtypes = [mnl_socket, ct.POINTER(nlmsghdr), ct.c_size_t]
+    libmnl.mnl_socket_sendto.errcheck = _check(lambda v: v >= 0)
+    libmnl.mnl_socket_recvfrom.restype = ct.c_ssize_t
+    libmnl.mnl_nlmsg_get_payload.restype = ct.POINTER(rtmsg)
+    libmnl.mnl_attr_validate.errcheck = _check(lambda v: v >= 0)
+    libmnl.mnl_attr_get_payload.restype = ct.POINTER(ct.c_uint32)
+
+    if '/' in addr: addr, cidr = addr.rsplit('/', 1)
+    else: cidr = 32
+
+    buf = ct.create_string_buffer(min(resource.getpagesize(), 8192))
+    nlh = libmnl.mnl_nlmsg_put_header(buf)
+    nlh.contents.type = 26 # RTM_GETROUTE
+    nlh.contents.flags = 1 # NLM_F_REQUEST
+    # nlh.contents.flags = 1 | (0x100|0x200) # NLM_F_REQUEST | NLM_F_DUMP
+    nlh.contents.seq = seq = int(time.time())
+    rtm = libmnl.mnl_nlmsg_put_extra_header(nlh, ct.sizeof(rtmsg))
+    rtm.contents.family = socket.AF_INET
+
+    addr, = struct.unpack('=I', socket.inet_aton(addr))
+    libmnl.mnl_attr_put_u32(nlh, 1, addr) # 1=RTA_DST
+    rtm.contents.dst_len = int(cidr)
+
+    nl = libmnl.mnl_socket_open(0) # NETLINK_ROUTE
+    libmnl.mnl_socket_bind(nl, 0, 0) # nl, 0, 0=MNL_SOCKET_AUTOPID
+    port_id = libmnl.mnl_socket_get_portid(nl)
+    libmnl.mnl_socket_sendto(nl, nlh, nlh.contents.len)
+
+    addr_gw = None
+
+    @ct.CFUNCTYPE(ct.c_int, ct.POINTER(nlattr), ct.c_void_p)
+    def data_ipv4_attr_cb(attr, data):
+      nonlocal addr_gw
+      if attr.contents.type == 5: # RTA_GATEWAY
+        libmnl.mnl_attr_validate(attr, 3) # MNL_TYPE_U32
+        addr = libmnl.mnl_attr_get_payload(attr)
+        addr_gw = socket.inet_ntoa(struct.pack('=I', addr[0]))
+      return 1 # MNL_CB_OK
+
+    @ct.CFUNCTYPE(ct.c_int, ct.POINTER(nlmsghdr), ct.c_void_p)
+    def data_cb(nlh, data):
+      rtm = libmnl.mnl_nlmsg_get_payload(nlh).contents
+      if rtm.family == socket.AF_INET and rtm.type == 1: # RTN_UNICAST
+        libmnl.mnl_attr_parse(nlh, ct.sizeof(rtm), data_ipv4_attr_cb, None)
+      return 1 # MNL_CB_OK
+
+    while True:
+      ret = libmnl.mnl_socket_recvfrom(nl, buf, ct.sizeof(buf))
+      if ret <= 0: break
+      ret = libmnl.mnl_cb_run(buf, ret, seq, port_id, data_cb, None)
+      if ret <= 0: break # 0=MNL_CB_STOP
+      break # MNL_CB_OK for NLM_F_REQUEST, don't use with NLM_F_DUMP!!!
+    if ret == -1: raise OSError(ct.get_errno(), os.strerror(ct.get_errno()))
+    libmnl.mnl_socket_close(nl)
+
+    return addr_gw
+
+  print(get_route_gw())
+
+This specific boilerplate will fetch the gateway IP address to 8.8.8.8 (i.e. to
+the internet), used it in systemd-watchdog_ script recently.
+
+It might look a bit too complex for such apparently simple task at this point,
+but allows to do absolutely anything network-related - everything "ip"
+(iproute2) does, including configuration (addresses, routes),
+creating/setting-up new interfaces ("ip link add ..."), all the querying
+(ip-route, ip-neighbor, ss/netstat, etc), waiting and async monitoring
+(ip-monitor, conntrack), etc etc...
+
+| Pros: can do absolutely anything, directly, stable/reliable/efficient, no extra deps.
+| Cons: definitely not for 10-liner sh scripts, boilerplate code.
+
+
+Conclusion
+----------
+
+Wish iproute2 had some output mode (or even API) for sh and other trivial scripts! :)
+
+
+.. _NetworkManager: https://wiki.gnome.org/Projects/NetworkManager
+.. _two polkit rules/pkla snippets here: https://github.com/mk-fg/NetworkManager-WiFi-WebUI#installation
+.. _wifi-client-match: https://github.com/mk-fg/fgtk/#wifi-client-match
+.. _wpa-systemd-wrapper: https://github.com/mk-fg/fgtk/#wpa-systemd-wrapper
+.. _dhcpcd: https://roy.marples.name/projects/dhcpcd
+
+.. _pyroute2: https://github.com/svinota/pyroute2/
+.. _netifaces: https://pypi.python.org/pypi/netifaces
+.. _socket.if_* calls: https://docs.python.org/3/library/socket.html#socket.if_nameindex
+.. _ipaddress: https://docs.python.org/3/library/ipaddress.html
+.. _systemd-watchdog: https://github.com/mk-fg/fgtk/#systemd-watchdog
