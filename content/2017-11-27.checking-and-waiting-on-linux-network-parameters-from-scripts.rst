@@ -43,12 +43,27 @@ Doesn't always work for interfaces that need complicated setup by an extra
 daemon, e.g. wifi, batman-adv or some tunnels.
 
 
-Scraping iproute2 (e.g. "ip" and "ss" tools) output
----------------------------------------------------
+iproute2 json output
+--------------------
+
+| If iproute2 is recent enough (4.13.0-4.14.0 and above), then GOOD NEWS!
+| ip-address and ip-link there have -json output.
+| (as well as "tc", stat-commands, and probably many other things in later releases)
+
+Parsing ``ip -json addr`` or ``ip -json link`` output is trivial anywhere except
+for sh scripts, so it's a very good option if required parts of "ip" are
+jsonified already.
+
+| Pros: easy to parse, will be available everywhere in the near future.
+| Cons: still very recent, so quite patchy and not ubiquitous yet, not for sh scripts.
+
+
+Scraping iproute2 (e.g. "ip" and "ss" tools) non-json outputs
+-------------------------------------------------------------
 
 Explicitly discouraged by iproute2 docs and a really hacky solution.
 
-Output there is quirky, doesn't line-up nicely, and is clearly not made for
+Such outputs there are quirky, don't line-up nicely, and clearly not made for
 this purpose, plus can break at any point, as suggested by the docs repeatedly.
 
 But for terrible sh hacks, sometimes it works, and "ip monitor" even allows to
@@ -77,7 +92,11 @@ around ip-monitor are there for a reason (easy to miss event otherwise).
 (this specific hack is a workaround for systemd-networkd failing to set mtu in
 some cases where it has to be done only after other things)
 
-| Pros: allows to access any net parameters and monitor events.
+"ip -brief" output is somewhat of an exception, more suitable for sh scripts,
+but only works for ip-address and ip-link parts and still mixes-up columns
+occasionally (e.g. ``ip -br link`` for tun interfaces).
+
+| Pros: allows to access all net parameters and monitor events, easier for sh than json.
 | Cons: gets ugly fast, hard to get right, brittle and explicitly discouraged.
 
 
@@ -347,7 +366,13 @@ creating/setting-up new interfaces ("ip link add ..."), all the querying
 Conclusion
 ----------
 
-Wish iproute2 had some output mode (or even API) for sh and other trivial scripts! :)
+iproute2 with -json output flag should be good enough for most cases where
+systemd-networkd-wait-online is not sufficient, esp. if more commands there
+(like ip-route and ip-monitor) will support it in the future (thanks to Julien
+Fortin and all other people working on this!).
+
+For more advanced needs, it's usually best to query/control whatever network
+management daemon or go to libc/libmnl directly.
 
 
 .. _NetworkManager: https://wiki.gnome.org/Projects/NetworkManager
