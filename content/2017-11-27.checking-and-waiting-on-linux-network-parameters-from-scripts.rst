@@ -42,6 +42,11 @@ reliably, no need to check for specific IP or other details.
 Doesn't always work for interfaces that need complicated setup by an extra
 daemon, e.g. wifi, batman-adv or some tunnels.
 
+Also, undocumented caveat: use ``ExecStartPre=-/.../systemd-networkd-wait-online ...``
+("=-" is the important bit) for anything that should start regardless of network
+issues, as thing can exit with non-0 sometimes when there's no network for a
+while (which does look like a bug, and might be fixed in future versions).
+
 
 iproute2 json output
 --------------------
