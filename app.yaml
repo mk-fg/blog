@@ -29,6 +29,11 @@ handlers:
     upload: output/theme/css/(.*\.ttf)
     mime_type: application/x-font-ttf
 
+  - url: /misc/(.*\.(patch|go))
+    static_files: output/misc/\1
+    upload: output/misc/(.*\.(patch|go))
+    mime_type: text/plain
+
   - url: /
     static_dir: output
 
