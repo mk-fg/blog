@@ -5,6 +5,28 @@ Replacing built-in RTC with i2c battery-backed one on BeagleBone Black from boot
 :tags: hardware, linux, arm
 
 
+**Update 2018-02-16:**
+
+  There is a better and simplier solution for switching default rtc than one
+  described here - to swap rtc0/rtc1 via aliases in dt overlay.
+
+  I.e. using something like this in the dts::
+
+    fragment@0 {
+      target-path="/";
+      __overlay__ {
+
+        aliases {
+          rtc0 = "/ocp/i2c@4802a000/ds3231@68";
+          rtc1 = "/ocp/rtc@44e3e000";
+        };
+      };
+    };
+
+  | Which is also how it's done in bb.org-overlays repo these days:
+  | https://github.com/RobertCNelson/bb.org-overlays/blob/635c7e5/src/arm/BB-RTC-01-00A0.dts
+
+
 `BeagleBone Black`_ (BBB) boards have - and use - RTC (`Real-Time Clock`_ -
 device that tracks wall-clock time, including calendar date and time of day) in
 the SoC, which isn't battery-backed, so looses track of time each time device
