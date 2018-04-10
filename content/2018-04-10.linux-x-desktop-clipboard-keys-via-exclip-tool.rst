@@ -1,0 +1,68 @@
+Linux X desktop "clipboard" keys via exclip tool
+################################################
+
+:date: 2018-04-10 23:06
+:tags: linux, desktop, tools, C
+
+
+It's been a mystery to me for a while how X terminal emulators (from xterm to
+Terminology) manage to copy long bits of strings spanning multiple lines without
+actually splitting them with \\n chars, given that there's always something like
+"screen" or "tmux" or even "mosh" running in there.
+
+All these use ncurses which shouldn't output "long lines of text" but rather
+knows width/height of a terminal and flips specific characters there when last
+output differs from its internal "how it should be" state/buffer.
+
+Regardless of how this works, terminals definitely get confused sometimes,
+making copy-paste of long paths and commands from them into a minefield,
+where you never know if it'll insert full path/command or just run random parts
+of it instead by emitting newlines here and there.
+
+| Easy fix: bind a key combo in a WM to always "copy stuff as a single line".
+| Bonus points - also strip spaces from start/end, demanding no select-precision.
+| Even better - have it expose result as both primary and clipboard, to paste anywhere.
+
+For a while used a trivial bash script for that, which did "xclip -in" from
+primary selection, some string-mangling in bash and two "xclip -out" to put
+result back into primary and clipboard.
+
+It's a surprisingly difficult and suboptimal task for bash though, as - to my
+knowledge - you can't even replace \\n chars in it without running something
+like "tr" or "sed".
+
+And running xclip itself a few times is bad enough, but with a few extra
+binaries and under CPU load, such "clipboard keys" become unreliable due to lag
+from that script.
+
+Hence finally got fed up by it and rewritten whole thing in C as a small
+and fast 300-liner exclip_ tool, largely based on xclip_ code.
+
+| Source here: https://github.com/mk-fg/fgtk/blob/master/desktop/exclip.c
+| Build like this: ``gcc -O2 -lX11 -lXmu exclip.c -o exclip && strip exclip``
+
+Found something like it bound to a key (e.g. Win+V for verbatim copy, and
+variants like Win+Shift+V for stripping spaces/newlines) to be super-useful
+when using terminals and text-based apps, apps that mix primary/clipboard
+selections, etc - all without needing to touch the mouse.
+
+Tool is still non-trivial due to how selections and interaction with X work -
+code has to be event-based, negotiate content type that it wants to get,
+can have large buffers sent in incremental events, and then have to hold these
+(in a forked subprocess) and negotiate sending to other apps - i.e. not just
+stuff N bytes from buffer somewhere server-side and exit
+("cut buffers" can work like that in X, but limited and never used).
+
+Looking at all these was a really fun dive into how such deceptively-simple
+(but ancient and not in fact simple at all) things like "clipboard" work.
+
+E.g. consider how one'd hold/send/expose stuff from huge GIMP image selection
+and paste it into an entirely different app (``xclip -out -t TARGETS`` can give
+a hint), especially with X11 and its network transparency.
+
+Though then again, maybe humble string manipulation in C is just as fascinating,
+given all the pointer juggling and tricks one'd usually have to do for that.
+
+
+.. _exclip: https://github.com/mk-fg/fgtk/#exclip
+.. _xclip: https://github.com/astrand/xclip
