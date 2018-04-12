@@ -1,0 +1,114 @@
+mpv audio visualization
+#######################
+
+:date: 2018-04-12 12:43
+:tags: desktop, lua, vis
+
+
+Didn't know mpv_ could do that until dropping into raw mpv for music playback
+yesterday, while adding its json api support into emms_ (emacs music player).
+
+One option in mpv that I found essential over time - especially as playback from
+network sources via youtube-dl (youtube, twitch and such) became more common -
+is --force-window=immediate (via config), so that you can just run "mpv URL" in
+whatever console and don't have to wait until video buffers enough for mpv window to pop-up.
+
+This saves a few-to-dozen seconds of annoyance as otherwise you can't do
+anything during ytdl init and buffering phase is done,
+as that's when window will pop-up randomly and interrupt whatever you're doing,
+plus maybe get affected by stuff being typed at the moment
+(and close, skip, seek or get all messed-up otherwise).
+
+It's easy to disable this unnecessary window for audio-only files via lua,
+but other option that came to mind when looking at that black square is to
+send it to aux display with some nice visualization running.
+
+Which is not really an mpv feature, but one of the `many things that ffmpeg can
+render`_ with its filters, enabled via --lavfi-complex audio/video filtering option.
+
+E.g. ``mpv --lavfi-complex="[aid1]asplit[ao][a]; [a]showcqt[vo]" file.mp3`` will
+process a copy of --aid=1 audio stream (one copy goes straight to "ao" - audio output)
+via `ffmpeg showcqt filter`_ and send resulting visualization to "vo" (video output).
+
+As ffmpeg is designed to allow many complex multi-layered processing pipelines,
+extending on that simple example can produce really fancy stuff, like any blend
+of images, text and procedurally-generated video streams.
+
+Some nice examples of those can be found at `ffmpeg wiki FancyFilteringExamples page`_.
+
+It's much easier to build, control and tweak that stuff from lua though,
+e.g. to only enable such vis if there is a blank forced window without a video stream,
+and to split those long pipelines into more sensible chunks of parameters, for example:
+
+.. code-block:: lua
+
+  local filter_bg = lavfi_filter_string{
+    'firequalizer', {
+      gain = "'20/log(10)*log(1.4884e8"
+        .."* f/(f*f + 424.36)"
+        .."* f/(f*f + 1.4884e8)"
+        .."* f/sqrt(f*f + 25122.25) )'",
+      accuracy = 1000,
+      zero_phase = 'on' },
+    'showcqt', {
+      fps = 30,
+      size = '960x768',
+      count = 2,
+      bar_g = 2,
+      sono_g = 4,
+      bar_v = 9,
+      sono_v = 17,
+      font = "'Luxi Sans,Liberation Sans,Sans|bold'",
+      fontcolor = "'st(0, (midi(f)-53.5)/12);"
+        .."st(1, 0.5 - 0.5 * cos(PI*ld(0))); r(1-ld(1)) + b(ld(1))'",
+      tc = '0.33',
+      tlength = "'st(0,0.17);"
+        .."384*tc/(384/ld(0)+tc*f/(1-ld(0)))"
+        .." + 384*tc/(tc*f/ld(0)+384/(1-ld(0)))'" } }
+  local filter_fg = lavfi_filter_string{ 'avectorscope',
+    { mode='lissajous_xy', size='960x200',
+      rate=30, scale='cbrt', draw='dot', zoom=1.5 } }
+
+  local overlay = lavfi_filter_string{'overlay', {format='yuv420'}}
+  local lavfi =
+    '[aid1] asplit=3 [ao][a1][a2];'
+    ..'[a1]'..filter_bg..'[v1];'
+    ..'[a2]'..filter_fg..'[v2];'
+    ..'[v1][v2]'..overlay..'[vo]'
+
+  mp.set_property('options/lavfi-complex', lavfi)
+
+Much easier than writing something like this down into one line.
+
+("lavfi_filter_string" there concatenates all passed options with comma/colon
+separators, as per ffmpeg syntax)
+
+Complete lua script that I ended-up writing for this: `fg.lavfi-audio-vis.lua`_
+
+With some grand space-ambient electronic score, showcqt waterfall can move in
+super-trippy ways, very much representative of the glacial underlying audio rythms:
+
+.. html::
+
+  <a href="|filename|images/mpv-ffmpeg-vis-snapshot.jpg">
+  <img
+    style="width: 520px;"
+    src="|filename|images/mpv-ffmpeg-vis-snapshot.jpg"
+    title="mpv ffmpeg visualization snapshot"
+    alt="mpv ffmpeg visualization snapshot">
+  </a>
+
+(track in question is "Primordial Star Clouds" [45] from `EVE Online soundtrack`_)
+
+Script won't kick-in with --vo=null, --force-window not enabled, or if "vo-configured"
+won't be set by mpv for whatever other reason (e.g. some video output error),
+otherwise will be there with more pretty colors to brighten your day :)
+
+
+.. _mpv: http://mpv.io/
+.. _emms: https://www.gnu.org/software/emms/
+.. _many things that ffmpeg can render: https://ffmpeg.org/ffmpeg-filters.html
+.. _ffmpeg showcqt filter: https://ffmpeg.org/ffmpeg-filters.html#showcqt
+.. _ffmpeg wiki FancyFilteringExamples page: https://trac.ffmpeg.org/wiki/FancyFilteringExamples
+.. _fg.lavfi-audio-vis.lua: https://github.com/mk-fg/de-setup/blob/master/mpv/fg.lavfi-audio-vis.lua
+.. _EVE Online soundtrack: https://soundcloud.com/ccpgames/sets/eve-online-in-game-tracks
