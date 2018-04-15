@@ -1,0 +1,53 @@
+Emacs EMMS backend for long-running mpv processes
+#################################################
+
+:date: 2018-04-16 01:55
+:tags: desktop, emacs, lisp, linux
+
+
+EMMS_ is the best music player out there (at least if you use emacs),
+as it allows full power and convenience of proper $EDITOR for music playlists and such.
+
+All mpv_ backends for it that I'm aware of were restarting player binary for
+every track though, which is simple, good compatibility-wise,
+but also suboptimal in many ways.
+
+For one thing, stuff like `audio visualization`_ is pita if it's in a constantly
+created/destroyed transient window, it adds significant gaps between played tracks
+(gapless+crossfade? forget it!), and - more due to why player starts/exit
+(know when playback ends) - feedback/control over it are very limited,
+since clearly no good APIs are used there, if wrapper relies on process exit
+as "playback ended" event.
+
+Rewritten `emms-player-mpv.el`_ (also in "mpv-json-ipc" branch of `emms git`_
+atm) fixes all that.
+
+What's curious is that I didn't see almost all of these interesting use-cases,
+which using the tool in the sane way allows for, and only wrote new wrapper to
+get nice "playback position" feedback and out of petty pedantry over how lazy
+simple implementation seem to be.
+
+Having separate persistent player window allows OSD config or lua to display any
+kind of metadata or infographics (with full power of lua + mpv + ffmpeg)
+about current tracks or playlist stuff there (esp. for online streams),
+enables subs/lyrics display, and getting stream of metadata update events from
+mpv allows to update any "now playing" meta stuff in emacs/emms too.
+
+What seemed like a petty and almost pointless project to have fun with lisp,
+turned out to be actually useful, which seem to often be the case once you take
+a deep-dive into things, and not just blindly assume stuff about them
+(fire hot, water wet, etc).
+
+Hopefully might get merged upstream after EMMS 5.0 and get a few more features
+and interesting uses like that along the way.
+
+(though I'd suggest not waiting and just adding anything that comes to mind in
+~/.emacs via emms-mpv-event-connect-hook, emms-mpv-event-functions and
+emms-mpv-ipc-req-send - should be really easy now)
+
+
+.. _EMMS: https://www.gnu.org/software/emms/
+.. _mpv: http://mpv.io/
+.. _audio visualization: http://blog.fraggod.net/2018/04/12/mpv-audio-visualization.html
+.. _emms-player-mpv.el: https://github.com/mk-fg/emacs-setup/blob/master/extz/emms-player-mpv.el
+.. _emms git: https://git.savannah.gnu.org/cgit/emms.git
