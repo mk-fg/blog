@@ -26,7 +26,7 @@ automate on startup via loop in a shell script, crontab or a systemd unit, e.g.:
   ExecStart=/usr/bin/ssh -oControlPath=none -oControlMaster=no \
     -oServerAliveInterval=6 -oServerAliveCountMax=10 -oConnectTimeout=180 \
     -oPasswordAuthentication=no -oNumberOfPasswordPrompts=0 \
-    -NnT -R "1234:localhost:22" tun-user@tun-host
+    -oExitOnForwardFailure=yes -NnT -R "1234:localhost:22" tun-user@tun-host
 
   [Install]
   WantedBy=multi-user.target
@@ -42,9 +42,13 @@ authorized_keys, e.g.::
 
   Match User tun-*
    # GatewayPorts yes
+   PasswordAuthentication no
    X11Forwarding no
    AllowAgentForwarding no
    PermitTTY no
+   PermitTunnel no
+   AllowStreamLocalForwarding no
+   AllowTcpForwarding remote
    ForceCommand echo 'no shell access!'; exit 1
 
 And that's it, right?
