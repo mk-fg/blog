@@ -1,0 +1,138 @@
+rsync backups over reverse ssh tunnels
+######################################
+
+:date: 2018-08-05 19:32
+:tags: ssh, rsync, sysadmin
+
+
+Have been reviewing backups last `about 10 years ago`_ (p2_, p3_),
+and surprisingly not much changed since then - still same ssh and rsync
+for secure sync over network remote.
+
+Stable-enough btrfs makes --link-dest somewhat anachronistic, and rsync filters
+came a long way since then, but everything else is the same, so why not use this
+opportunity to make things simplier and smoother...
+
+In particular, it was always annoying to me that backups either had to be pulled
+from some *open and accessible* port or pushed to same thing on the backup server,
+which isn't hard to fix with "ssh -R" tunnels - that allows backup server to
+have locked-down and reasonably secure ssh port open at most, yet provides no
+remote push access (i.e. no overwriting whatever remote wants to, like simple
+rsyncd setup would do), and does everything through just a single outgoing ssh
+connection.
+
+That is, run "rsync --daemon" or localhost, make reverse-tunnel to it when
+connecting to backup host and let it pull from that.
+
+On top of being no-brainer to implement and use - as simple as ssh from behind
+however many NATs - it avoids following (partly mentioned) problematic things:
+
+- Pushing stuff to backup-host, which can be exploited to delete stuff.
+
+- Using insecure network channels and/or rsync auth - ssh only.
+
+- Having any kind of insecure auth or port open on backup-host (e.g. rsyncd) - ssh only.
+
+- Requiring backed-up machine to be accessible on the net for backup-pulls - can
+  be behind any amount of NAT layers, and only needs one outgoing ssh connection.
+
+- Specifying/handling backup parameters (beyond --filter lists), rotation and
+  cleanup on the backed-up machine - backup-host will handle all that in a
+  known-good and uniform manner.
+
+- Running rsyncd or such with unrestricted fs access "for backups" - only
+  runs it on localhost port with one-time auth for ssh connection lifetime,
+  restricted to specified read-only path, with local filter rules on top.
+
+- Needing anything beyond basic ssh/rsync/python on either side.
+
+Actual implementation I've ended up with is `ssh-r-sync + ssh-r-sync-recv scripts`_
+in `fgtk repo`_, both being rather simple py3 wrappers for ssh/rsync stuff.
+
+Both can be used by regular uid's, and can use rsync binary with capabilities or
+sudo wrapper to get 1-to-1 backup with all permissions instead of --fake-super
+(though note that giving root-rsync access to uid is pretty much same as "NOPASSWD: ALL" sudo).
+
+One relatively recent realization (coming from acme-cert-tool_) compared to
+scripts I wrote earlier, is that using bunch of script hooks all over the place
+is a way easier than hardcoding a dozen of ad-hoc options.
+
+I.e. have option group like this (-h/--help output from argparse)::
+
+  Hook options:
+    -x hook:path, --hook hook:path
+      Hook-script to run at the specified point.
+      Specified path must be executable (chmod +x ...),
+        will be run synchronously, and must exit with 0
+        for tool to continue operation, non-0 to abort.
+      Hooks are run with same uid/gid
+        and env as the main script, can use PATH-lookup.
+      See --hook-list output to get full list of
+        all supported hook-points and arguments passed to them.
+      Example spec: -x rsync.pre:~/hook.pre-sync.sh
+    --hook-timeout seconds
+      Timeout for waiting for hook-script to finish running,
+        before aborting the operation (treated as hook error).
+      Zero or negative value will disable timeout. Default: no-limit
+    --hook-list
+      Print the list of all supported
+        hooks with descriptions/parameters and exit.
+
+And --hook-list providing full attached info like::
+
+  Available hook points:
+
+    script.start:
+      Before starting handshake with authenticated remote.
+      args: backup root dir.
+
+    ...
+
+    rsync.pre:
+      Right before backup-rsync is started, if it will be run.
+      args: backup root dir, backup dir, remote name, privileged sync (0 or 1).
+      stdout: any additional \0-separated args to pass to rsync.
+        These must be terminated by \0, if passed,
+          and can start with \0 to avoid passing any default options.
+
+    rsync.done:
+      Right after backup-rsync is finished, e.g. to check/process its output.
+      args: backup root dir, backup dir, remote name, rsync exit code.
+      stdin: interleaved stdout/stderr from rsync.
+      stdout: optional replacement for rsync return code, int if non-empty.
+
+  Hooks are run synchronously,
+    waiting for subprocess to exit before continuing.
+  All hooks must exit with status 0 to continue operation.
+  Some hooks get passed arguments, as mentioned in hook descriptions.
+  Setting --hook-timeout (defaults to no limit)
+    can be used to abort when hook-scripts hang.
+
+`Very trivial to implement`_ and then allows to hook much simplier single-purpose
+bash scripts handling specific stuff like passing extra options on per-host basis,
+handling backup rotation/cleanup and --link-dest,
+creating "backup-done-successfully" mark and manifest files, or whatever else,
+without needing to add all these corner-cases into the main script.
+
+One boilerplate thing that looks useful to hardcode though is a "nice ionice ..."
+wrapper, which is pretty much inevitable for background backup scripts
+(though cgroup limits can also be a good idea), and `fairly easy to do in python`_,
+with minor a caveat of a hardcoded ioprio_set syscall number,
+but these pretty much never change on linux.
+
+As a side-note, can recommend btrbk_ as a very nice tool for managing backups
+stored on btrfs, even if for just rotating/removing snapshots in an easy and
+sane "keep A daily ones, B weekly, C monthly, ..." manner.
+
+[code link: `ssh-r-sync + ssh-r-sync-recv scripts`_]
+
+
+.. _about 10 years ago: http://blog.fraggod.net/2010/02/11/my-simple-ok-not-quite-backup-system.html
+.. _p2: http://blog.fraggod.net/2010/02/13/my-simple-ok-not-quite-backup-system-implementation-backed-up-side.html
+.. _p3: http://blog.fraggod.net/2010/02/14/my-simple-ok-not-quite-backup-system-implementation-backup-host.html
+.. _ssh-r-sync + ssh-r-sync-recv scripts: https://github.com/mk-fg/fgtk/tree/master/backup
+.. _fgtk repo: https://github.com/mk-fg/fgtk/
+.. _acme-cert-tool: https://github.com/mk-fg/acme-cert-tool
+.. _Very trivial to implement: https://github.com/mk-fg/fgtk/blob/a5bfe3b/backup/ssh-r-sync-recv#L72-L107
+.. _fairly easy to do in python: https://github.com/mk-fg/fgtk/blob/a5bfe3b/backup/ssh-r-sync-recv#L241-L260
+.. _btrbk: https://digint.ch/btrbk/
