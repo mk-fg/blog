@@ -26,7 +26,7 @@ C or Go, just any most basic 2D API and python should work fine for it.
 
 Plenty of such libs/toolkits on top of X/Wayland and similar stuff, but that's a
 ton of extra layers of junk and jank instead of few trivial OpenVG_ calls,
-with only quirk of beaing able to render scaled text labels.
+with only quirk of being able to render scaled text labels.
 
 There didn't seem to be anything python that looks suitable for the task, notably:
 
@@ -136,6 +136,11 @@ Few additional notes on such over-the-console UIs:
 Kinda expected that RPi would have some python "bare UI" toolkit by now, but oh
 well, it's not that difficult to make one by putting stuff linked above together.
 
+In future, `mgthomas99/easy-vg`_ seem to be moving away from simple API it
+currently has, based more around paths like raw OpenVG or e.g. cairo in
+"develop" branch already, but there should be my `mk-fg/easy-vg`_ fork retaining
+old API as it is demonstrated here.
+
 
 .. _OpenVG: https://www.khronos.org/files/openvg-quick-reference-card.pdf
 .. _ajstarks/openvg: https://github.com/ajstarks/openvg
@@ -153,3 +158,4 @@ well, it's not that difficult to make one by putting stuff linked above together
 .. _python-evdev: http://python-evdev.readthedocs.org/
 .. _pyudev: https://pyudev.readthedocs.org/
 .. _in an earlier post: http://blog.fraggod.net/2017/02/13/xorg-input-driver-the-easy-way-via-evdev-and-uinput.html
+.. _mk-fg/easy-vg: https://github.com/mk-fg/easy-vg
