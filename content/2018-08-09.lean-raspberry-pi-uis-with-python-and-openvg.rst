@@ -1,0 +1,155 @@
+Lean Raspberry Pi UIs with Python and OpenVG
+############################################
+
+:date: 2018-08-09 12:38
+:tags: python, arm
+
+
+Implementing rather trivial text + chart UI with RPi recently,
+was surprised that it's somehow still not very straightforward in 2018.
+
+Basic idea is to implement something like this:
+
+.. html::
+
+  <a href="|filename|images/rpi-adc-ui-mockup.png">
+  <img
+    style="width: 520px;"
+    src="|filename|images/rpi-adc-ui-mockup.png"
+    title="RPi ADC UI mockup"
+    alt="RPi ADC UI mockup">
+  </a>
+
+Which is basically three text labels and three rectangles, with something like
+1/s updates, so nothing that'd require 30fps 3D rendering loop or performance of
+C or Go, just any most basic 2D API and python should work fine for it.
+
+Plenty of such libs/toolkits on top of X/Wayland and similar stuff, but that's a
+ton of extra layers of junk and jank instead of few trivial OpenVG_ calls,
+with only quirk of beaing able to render scaled text labels.
+
+There didn't seem to be anything python that looks suitable for the task, notably:
+
+- `ajstarks/openvg`_ - great simple OpenVG wrapper lib, but C/Go only, has
+  somewhat unorthodox unprefixed API, and seem to be abandoned these days.
+
+- povg_ - rather raw OpenVG ctypes wrapper, looks ok, but rendering fonts there
+  would be a hassle.
+
+- libovg_ - includes py wrapper, but seem to be long-abandoned and have broken
+  text rendering.
+
+- pi3d_ - for 3D graphics, so quite a different beast, rather excessive and
+  really hard-to-use for static 2D UIs.
+
+- Qt5 and cairo/pango - both support OpenVG, but have excessive dependencies,
+  with cathedral-like ecosystems built around them (qt/gtk respectively).
+
+- `mgthomas99/easy-vg`_ - updated fork of ajstarks/openvg, with proper C-style
+  namespacing, some fixes and repackaged as a shared lib.
+
+So with no good python alternative, last option of just wrapping dozen .so
+easy-vg calls via ctypes seemed to be a good-enough solution,
+with ~100-line wrapper for all calls there (`evg.py in mk-fg/easy-vg`_).
+
+With that, rendering code for all above UI ends up being as trivial as:
+
+.. code-block:: python
+
+  evg.begin()
+  evg.background(*c.bg.rgb)
+  evg.scale(x(1), y(1))
+
+  # Bars
+  evg.fill(*c.baseline.rgba)
+  evg.rect(*pos.baseline, *sz.baseline)
+  evg.fill(*c[meter_state].rgba)
+  evg.rect(*pos.meter, sz.meter.x, meter_height)
+
+  ## Chart
+  evg.fill(*c.chart_bg.rgba)
+  evg.rect(*pos.chart, *sz.chart)
+  if len(chart_points) > 1:
+    ...
+    arr_sig = evg.vg_float * len(cp)
+    evg.polyline(*(arr_sig(*map(
+      op.attrgetter(k), chart_points )) for k in 'xy'), len(cp))
+
+  ## Text
+  evg.scale(1/x(1), 1/y(1))
+  text_size = dxy_scaled(sz.bar_text)
+
+  evg.fill(*(c.sku.rgba if not text.sku_found else c.sku_found.rgba))
+  evg.text( x(pos.sku.x), y(pos.sku.y),
+    text.sku.encode(), None, dxy_scaled(sz.sku) )
+  ...
+
+| (note: "\*stuff" are not C pointers, but python's syntax for "explode value list")
+| See also: `hello.py`_ example for `evg.py API`_, similar to easy-vg's hello.c.
+
+That code can start straight-up after local-fs.target with only dependency being
+easy-vg's libshapes.so to wrap OpenVG calls to RPi's /dev/vc\*, and being python,
+use all the nice stuff like gpiozero_, succinct and no-brainer to work with.
+
+Few additional notes on such over-the-console UIs:
+
+- RPi's VC4/DispmanX has great "layers" feature, where multiple apps can display
+  different stuff at the same time.
+
+  This allows to easily implement e.g. splash screen (via `some simple/quick
+  10-liner binary`_) always running underneath UI, hiding any noise and
+  providing more graceful start/stop/crash transitions.
+
+  Can even be used to play some dynamic video splash or logos/animations
+  (via OpenMAX API and omxplayer_) while main app/UI initializing/running
+  underneath it.
+
+  (wrote a bit more about this in an earlier `Raspberry Pi early boot splash /
+  logo screen`_ post here)
+
+- If keyboard/mouse/whatever input have to be handled, python-evdev_ + pyudev_
+  are great and simple way to do it (also mentioned `in an earlier post`_),
+  and generally easier to use than a11y layers that some GUI toolkits provide.
+
+- ``systemctl disable getty@tty1`` to not have it spammed with whatever input is
+  intended for the UI, as otherwise it'll still be running under the graphics.
+
+  Should UI app ever need to drop user back to console (e.g. via something like
+  ``ExecStart=/sbin/agetty --autologin root tty1``), it might be necessary to
+  scrub all the input from there first, which can be done by using
+  ``StandardInput=tty`` in the app and something like the following snippet:
+
+  .. code-block:: python
+
+    if sys.stdin.isatty()
+      import termios, atexit
+      signal.signal(signal.SIGHUP, signal.SIG_IGN)
+      atexit.register(termios.tcflush, sys.stdin.fileno(), termios.TCIOFLUSH)
+
+  It'd be outright dangerous to run shell with some random input otherwise.
+
+- While it's neat single quick-to-start pid on top of bare init, it's probably
+  not suitable for more complex text/data layouts, as positioning and drawing
+  all the "nice" UI boxes for that can be a lot of work and what widget toolkits
+  are there for.
+
+Kinda expected that RPi would have some python "bare UI" toolkit by now, but oh
+well, it's not that difficult to make one by putting stuff linked above together.
+
+
+.. _OpenVG: https://www.khronos.org/files/openvg-quick-reference-card.pdf
+.. _ajstarks/openvg: https://github.com/ajstarks/openvg
+.. _povg: https://github.com/perey/povg
+.. _libovg: https://github.com/pzl/libovg
+.. _pi3d: https://pi3d.github.io/
+.. _mgthomas99/easy-vg: https://github.com/mgthomas99/easy-vg
+.. _evg.py in mk-fg/easy-vg: https://github.com/mk-fg/easy-vg/blob/master/python/evg.py
+.. _evg.py API: https://github.com/mk-fg/easy-vg/blob/master/python/evg.py
+.. _hello.py: https://github.com/mk-fg/easy-vg/blob/master/python/hello.py
+.. _gpiozero: http://gpiozero.readthedocs.io/
+.. _some simple/quick 10-liner binary: https://gist.github.com/mk-fg/20946125a35c200995445772fb267b80
+.. _Raspberry Pi early boot splash / logo screen: http://blog.fraggod.net/2015/11/28/raspberry-pi-early-boot-splash-logo-screen.html
+.. _omxplayer: https://github.com/popcornmix/omxplayer
+.. _python-evdev: http://python-evdev.readthedocs.org/
+.. _pyudev: https://pyudev.readthedocs.org/
+.. _in an earlier post: http://blog.fraggod.net/2017/02/13/xorg-input-driver-the-easy-way-via-evdev-and-uinput.html
