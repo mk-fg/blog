@@ -1,0 +1,94 @@
+rst-based org-mode-like calendar generator for conky
+####################################################
+
+:date: 2018-08-14 00:09
+:tags: desktop, python
+
+
+Basically converting some free-form .rst (as in ReST or reStructuredText_) like this:
+
+.. code-block:: rest
+
+  Minor chores
+  ------------
+
+  Stuff no one ever remembers doing.
+
+  - Pick up groceries
+
+    :ts: 2018-08-27 12:00
+
+    Running low on salt, don't forget to grab some.
+
+  - Do the laundry
+
+    :ts: every 2w interval
+
+    That pile in the corner across the room.
+
+
+  Total Annihilation
+  ------------------
+
+  :ts-start: 2018-09-04 21:00
+  :ts-end: 2018-09-20 21:00
+
+  For behold, the LORD will come in fire And His chariots like the whirlwind,
+  To render His anger with fury, And His rebuke with flames of fire. ... blah blah
+
+Into this:
+
+.. figure:: |filename|images/conky-rst-calendar.jpg
+   :alt: conky calendar from rst
+
+Though usually with a bit less theatrical evil and more useful events you don't
+want to use precious head-space to always keep track of.
+
+Emacs org-mode_ is the most praised and common solution for this (well, in
+non-web/gui/mobile world, that is), but never bothered to learn its special syntax,
+and don't really want such basic thing to be emacs/elisp-specific
+(like, run emacs to parse/generate stuff!).
+
+rst_, on the other hand, is an old friend (ever since I found markdown to be too
+limiting and not blocky enough), supports embedding structured data in there
+(really like how github highlights it btw - check out `cal.rst example here`_),
+and super-easy to work with in anything, not just emacs, and can be parsed by
+a whole bunch of stuff.
+
+Project on github: `mk-fg/rst-icalendar-event-tracker`_
+
+Should be zero-setup, light on dependencies and very easy to use.
+
+Has simple iCalendar export for anything else, but with conky in particular,
+its generated snippet can be included via ``$(catp /path/to/output}`` directive,
+and be configured wrt columns/offsets/colors/etc both on script-level
+via -o/--conky-params option and per-event via ``:conky: <opts>`` rst tags.
+
+Calendar like that is not only useful if you wear suits, but also to check on all
+these cool once-per-X podcasts, mark future releases of some interesting games
+or movies, track all the monthly bills and chores that are easy to forget about.
+
+| And it feels great to not be afraid to forget or miss all this stuff anymore.
+| In fact, having an excuse to structure and write it down helps a ton already.
+
+But beyond that, feel like using transient and passing reminders can be just as
+good for tracking updates on some RSS feeds or URLs, so that you can notice
+update and check it out if you want to, maybe even mark as a todo-entry somewhere,
+but it won't hang over the head by default (and forever) in an inbox,
+feed reader or a large un-\*something\* number in bold someplace else.
+
+So plan to add url-grepping and rss-checking as well, and have updates on
+arbitrary pages or feeds create calendar events there, which should at least be
+useful for aforementioned media periodics.
+
+In fact, rst-configurable feed-checker (not "reader"!) might be a much better
+idea even for text-based content than some crappy web-based django mostrosity
+`like the one I used before`_.
+
+
+.. _reStructuredText: http://docutils.sourceforge.net/docs/user/rst/quickref.html
+.. _rst: http://docutils.sourceforge.net/docs/user/rst/quickref.html
+.. _org-mode: http://orgmode.org/
+.. _cal.rst example here: https://github.com/mk-fg/rst-icalendar-event-tracker/blob/master/cal.rst
+.. _mk-fg/rst-icalendar-event-tracker: https://github.com/mk-fg/rst-icalendar-event-tracker/
+.. _like the one I used before: https://github.com/mk-fg/feedjack/
