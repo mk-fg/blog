@@ -1,0 +1,592 @@
+diff --git a/PKGBUILD b/PKGBUILD
+index c2c51bc..4cb4ac3 100644
+--- a/PKGBUILD
++++ b/PKGBUILD
+@@ -16,6 +16,15 @@ source=("git+https://git.savannah.gnu.org/git/findutils.git")
+ sha256sums=('SKIP')
+ 
+ 
++source+=(xattrs.patch)
++sha256sums+=(SKIP)
++prepare() {
++  cd findutils
++  patch -p1 < ../xattrs.patch
++  touch locate/dblocation.texi
++}
++
++
+ pkgver() {
+   cd "findutils"
+ 
+diff --git a/xattrs.patch b/xattrs.patch
+new file mode 100644
+index 0000000..204744d
+--- /dev/null
++++ b/xattrs.patch
+@@ -0,0 +1,566 @@
++diff --git a/configure.ac b/configure.ac
++index 2acf54c7..ab286b6c 100644
++--- a/configure.ac
+++++ b/configure.ac
++@@ -55,6 +55,26 @@ AC_SUBST(AUXDIR,$ac_aux_dir)
++ dnl check for --with-fts
++ FIND_WITH_FTS
++ 
+++dnl Disable extended attribute support
+++AC_ARG_WITH([extended-attributes],
+++    AS_HELP_STRING([--without-extended-attributes], [Disable extended attributes support]))
+++
+++AS_IF([test "x$with_extended_attributes" != "xno"], [
+++  dnl Search for libattr
+++  AC_SEARCH_LIBS([listxattr], [attr], [AC_DEFINE([HAVE_XATTR], [],
+++    [libattr is present])], [])
+++])
+++
+++dnl Disable capabilities
+++AC_ARG_WITH([capabilities],
+++    AS_HELP_STRING([--without-capabilities], [Disable capabilities support]))
+++
+++AS_IF([test "x$with_capabilities" != "xno"], [
+++  dnl Search for libcap
+++  AC_SEARCH_LIBS([cap_get_file], [cap], [AC_DEFINE([HAVE_CAPABILITIES], [],
+++    [libcap is present])], [])
+++])
+++
++ AC_ARG_ENABLE(leaf-optimisation,
++ 	AS_HELP_STRING(--enable-leaf-optimisation,Enable an optimisation which saves lstat calls to identify subdirectories on filesystems having traditional Unix semantics),
++ 	[ac_cv_leaf_optimisation=$enableval],[ac_cv_leaf_optimisation=yes])
++diff --git a/find/defs.h b/find/defs.h
++index 63f3b2a3..bde58c5d 100644
++--- a/find/defs.h
+++++ b/find/defs.h
++@@ -417,6 +417,7 @@ PREDICATEFUNCTION pred_amin;
++ PREDICATEFUNCTION pred_and;
++ PREDICATEFUNCTION pred_anewer;
++ PREDICATEFUNCTION pred_atime;
+++PREDICATEFUNCTION pred_cap;
++ PREDICATEFUNCTION pred_closeparen;
++ PREDICATEFUNCTION pred_cmin;
++ PREDICATEFUNCTION pred_cnewer;
++@@ -435,10 +436,12 @@ PREDICATEFUNCTION pred_fprintf;
++ PREDICATEFUNCTION pred_fstype;
++ PREDICATEFUNCTION pred_gid;
++ PREDICATEFUNCTION pred_group;
+++PREDICATEFUNCTION pred_icap;
++ PREDICATEFUNCTION pred_ilname;
++ PREDICATEFUNCTION pred_iname;
++ PREDICATEFUNCTION pred_inum;
++ PREDICATEFUNCTION pred_ipath;
+++PREDICATEFUNCTION pred_ixattr;
++ PREDICATEFUNCTION pred_links;
++ PREDICATEFUNCTION pred_lname;
++ PREDICATEFUNCTION pred_ls;
++@@ -469,6 +472,7 @@ PREDICATEFUNCTION pred_uid;
++ PREDICATEFUNCTION pred_used;
++ PREDICATEFUNCTION pred_user;
++ PREDICATEFUNCTION pred_writable;
+++PREDICATEFUNCTION pred_xattr;
++ PREDICATEFUNCTION pred_xtype;
++ PREDICATEFUNCTION pred_context;
++ 
++diff --git a/find/find.1 b/find/find.1
++index a9e12a3f..8081a786 100644
++--- a/find/find.1
+++++ b/find/find.1
++@@ -609,6 +609,13 @@ a file has to have been accessed at least
++ .I two
++ days ago.
++ 
+++.IP "\-cap \fIpattern\fR"
+++Match file capabilities against the regular expression
+++\fIpattern\fR. For example to search for files that have
+++CAP_SETUID you could use '.*setuid.*'. This option
+++also takes advantage of
+++.B \-regextype
+++
++ .IP "\-cmin \fIn\fR"
++ File's status was last changed \fIn\fR minutes ago.
++ 
++@@ -671,6 +678,11 @@ File's numeric group ID is
++ .IP "\-group \fIgname\fR"
++ File belongs to group \fIgname\fR (numeric group ID allowed).
++ 
+++.IP "\-icap \fIpattern\fR"
+++Like
+++.BR \-cap ,
+++but the match is case insensitive.
+++
++ .IP "\-ilname \fIpattern\fR"
++ Like
++ .BR \-lname ,
++@@ -712,6 +724,11 @@ but the match is case insensitive.
++ See \-ipath.  This alternative is less portable than
++ .BR \-ipath .
++ 
+++.IP "\-ixattr \fIpattern\fR"
+++Like
+++.BR \-xattr ,
+++but the match is case insensitive.
+++
++ .IP "\-links \fIn\fR"
++ File has \fIn\fR hard links.
++ 
++@@ -1036,6 +1053,13 @@ mapping (or root-squashing), since many systems implement
++ in the client's kernel and so cannot make use of the UID mapping
++ information held on the server.
++ 
+++.IP "\-xattr \fIpattern\fR"
+++Match extended attributes against the regular expression
+++\fIpattern\fR. For example to search for files that have
+++capabilities set you could use '.*capa.*'. This option
+++also takes advantage of
+++.B \-regextype
+++
++ .IP "\-xtype \fIc\fR"
++ The same as
++ .B \-type
++diff --git a/find/parser.c b/find/parser.c
++index d6621506..b4d6e594 100644
++--- a/find/parser.c
+++++ b/find/parser.c
++@@ -79,6 +79,9 @@ static bool parse_accesscheck   (const struct parser_table*, char *argv[], int *
++ static bool parse_amin          (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_and           (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_anewer        (const struct parser_table*, char *argv[], int *arg_ptr);
+++#ifdef HAVE_CAPABILITIES
+++static bool parse_cap           (const struct parser_table*, char *argv[], int *arg_ptr);
+++#endif
++ static bool parse_cmin          (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_cnewer        (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_comma         (const struct parser_table*, char *argv[], int *arg_ptr);
++@@ -98,12 +101,18 @@ static bool parse_fprint0       (const struct parser_table*, char *argv[], int *
++ static bool parse_fstype        (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_gid           (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_group         (const struct parser_table*, char *argv[], int *arg_ptr);
+++#ifdef HAVE_CAPABILITIES
+++static bool parse_icap          (const struct parser_table*, char *argv[], int *arg_ptr);
+++#endif
++ static bool parse_ilname        (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_iname         (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_inum          (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_ipath         (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_iregex        (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_iwholename    (const struct parser_table*, char *argv[], int *arg_ptr);
+++#ifdef HAVE_XATTR
+++static bool parse_ixattr        (const struct parser_table*, char *argv[], int *arg_ptr);
+++#endif
++ static bool parse_links         (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_lname         (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_ls            (const struct parser_table*, char *argv[], int *arg_ptr);
++@@ -141,6 +150,9 @@ static bool parse_xdev          (const struct parser_table*, char *argv[], int *
++ static bool parse_ignore_race   (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_noignore_race (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_warn          (const struct parser_table*, char *argv[], int *arg_ptr);
+++#ifdef HAVE_XATTR
+++static bool parse_xattr         (const struct parser_table*, char *argv[], int *arg_ptr);
+++#endif
++ static bool parse_xtype         (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_quit          (const struct parser_table*, char *argv[], int *arg_ptr);
++ static bool parse_context       (const struct parser_table*, char *argv[], int *arg_ptr);
++@@ -154,6 +166,11 @@ static bool parse_version       (const struct parser_table*, char *argv[], int *
++   _GL_ATTRIBUTE_NORETURN;
++ 
++ 
+++#ifdef HAVE_CAPABILITIES
+++static bool insert_cap (char *argv[], int *arg_ptr,
+++        const struct parser_table *entry,
+++        int regex_options);
+++#endif
++ static bool insert_type (char **argv, int *arg_ptr,
++ 			 const struct parser_table *entry,
++ 			 PRED_FUNC which_pred);
++@@ -164,6 +181,11 @@ static bool insert_exec_ok (const char *action,
++ 			    const struct parser_table *entry,
++ 			    char *argv[],
++ 			    int *arg_ptr);
+++#ifdef HAVE_XATTR
+++static bool insert_xattr (char *argv[], int *arg_ptr,
+++        const struct parser_table *entry,
+++        int regex_options);
+++#endif
++ static bool get_comp_type (const char **str,
++ 			   enum comparison_type *comp_type);
++ static bool get_relative_timestamp (const char *str,
++@@ -229,6 +251,9 @@ static struct parser_table const parse_table[] =
++   PARSE_PUNCTUATION("and",                   and),		/* GNU */
++   PARSE_TEST       ("anewer",                anewer),	     /* GNU */
++   {ARG_TEST,       "atime",                  parse_time, pred_atime}, /* POSIX */
+++  #ifdef HAVE_CAPABILITIES
+++  PARSE_TEST       ("cap",                   cap),          /* GNU */
+++#endif
++   PARSE_TEST       ("cmin",                  cmin),	     /* GNU */
++   PARSE_TEST       ("cnewer",                cnewer),	     /* GNU */
++   {ARG_TEST,       "ctime",                  parse_time, pred_ctime}, /* POSIX */
++@@ -249,6 +274,9 @@ static struct parser_table const parse_table[] =
++   PARSE_TEST       ("fstype",                fstype),  /* GNU, Unix */
++   PARSE_TEST       ("gid",                   gid),	     /* GNU */
++   PARSE_TEST       ("group",                 group), /* POSIX */
+++#ifdef HAVE_CAPABILITIES
+++  PARSE_TEST_NP    ("icap",                  icap),         /* GNU */
+++#endif
++   PARSE_OPTION     ("ignore_readdir_race",   ignore_race),   /* GNU */
++   PARSE_TEST       ("ilname",                ilname),	     /* GNU */
++   PARSE_TEST       ("iname",                 iname),	     /* GNU */
++@@ -256,6 +284,9 @@ static struct parser_table const parse_table[] =
++   PARSE_TEST       ("ipath",                 ipath), /* GNU, deprecated in favour of iwholename */
++   PARSE_TEST_NP    ("iregex",                iregex),	     /* GNU */
++   PARSE_TEST_NP    ("iwholename",            iwholename),    /* GNU */
+++#ifdef HAVE_XATTR
+++  PARSE_TEST_NP    ("ixattr",                ixattr),       /* GNU */
+++#endif
++   PARSE_TEST       ("links",                 links), /* POSIX */
++   PARSE_TEST       ("lname",                 lname),	     /* GNU */
++   PARSE_ACTION     ("ls",                    ls),      /* GNU, Unix */
++@@ -301,6 +332,9 @@ static struct parser_table const parse_table[] =
++   PARSE_TEST       ("user",                  user), /* POSIX */
++   PARSE_TEST_NP    ("wholename",             wholename), /* GNU, replaced -path, but now -path is standardized since POSIX 2008 */
++   {ARG_TEST,       "writable",               parse_accesscheck, pred_writable}, /* GNU, 4.3.0+ */
+++#ifdef HAVE_XATTR
+++  PARSE_TEST       ("xattr",                 xattr),        /* GNU */
+++#endif
++   PARSE_OPTION     ("xdev",                  xdev), /* POSIX */
++   PARSE_TEST       ("xtype",                 xtype),	     /* GNU */
++ #ifdef UNIMPLEMENTED_UNIX
++@@ -797,6 +831,14 @@ parse_anewer (const struct parser_table* entry, char **argv, int *arg_ptr)
++   return false;
++ }
++ 
+++#ifdef HAVE_CAPABILITIES
+++static bool
+++parse_cap (const struct parser_table* entry, char **argv, int *arg_ptr)
+++{
+++  return insert_cap (argv, arg_ptr, entry, options.regex_options);
+++}
+++#endif
+++
++ bool
++ parse_closeparen (const struct parser_table* entry, char **argv, int *arg_ptr)
++ {
++@@ -1212,6 +1254,14 @@ estimate_pattern_match_rate (const char *pattern, int is_regex)
++     }
++ }
++ 
+++#ifdef HAVE_CAPABILITIES
+++static bool
+++parse_icap (const struct parser_table* entry, char **argv, int *arg_ptr)
+++{
+++  return insert_cap (argv, arg_ptr, entry, RE_ICASE|options.regex_options);
+++}
+++#endif
+++
++ static bool
++ parse_ilname (const struct parser_table* entry, char **argv, int *arg_ptr)
++ {
++@@ -1324,6 +1374,14 @@ parse_iregex (const struct parser_table* entry, char **argv, int *arg_ptr)
++   return insert_regex (argv, arg_ptr, entry, RE_ICASE|options.regex_options);
++ }
++ 
+++#ifdef HAVE_XATTR
+++static bool
+++parse_ixattr (const struct parser_table* entry, char **argv, int *arg_ptr)
+++{
+++  return insert_xattr (argv, arg_ptr, entry, RE_ICASE|options.regex_options);
+++}
+++#endif
+++
++ static bool
++ parse_links (const struct parser_table* entry, char **argv, int *arg_ptr)
++ {
++@@ -2627,6 +2685,46 @@ parse_warn (const struct parser_table* entry, char **argv, int *arg_ptr)
++   return parse_noop (entry, argv, arg_ptr);
++ }
++ 
+++#ifdef HAVE_XATTR
+++static bool
+++parse_xattr (const struct parser_table* entry, char **argv, int *arg_ptr)
+++{
+++  return insert_xattr (argv, arg_ptr, entry, options.regex_options);
+++}
+++
+++static bool
+++insert_xattr (char **argv,
+++              int *arg_ptr,
+++              const struct parser_table *entry,
+++              int regex_options)
+++{
+++  const char *rx;
+++  if (collect_arg (argv, arg_ptr, &rx))
+++    {
+++      struct re_pattern_buffer *re;
+++      const char *error_message;
+++      struct predicate *our_pred = insert_primary_withpred (entry, pred_xattr, rx);
+++      our_pred->need_stat = our_pred->need_type = false;
+++      re = xmalloc (sizeof (struct re_pattern_buffer));
+++      our_pred->args.regex = re;
+++      re->allocated = 100;
+++      re->buffer = xmalloc (re->allocated);
+++      re->fastmap = NULL;
+++
+++      re_set_syntax (regex_options);
+++      re->syntax = regex_options;
+++      re->translate = NULL;
+++
+++      error_message = re_compile_pattern (rx, strlen (rx), re);
+++      if (error_message)
+++        error (EXIT_FAILURE, 0, "%s", error_message);
+++      our_pred->est_success_rate = estimate_pattern_match_rate (rx, 1);
+++      return true;
+++    }
+++  return false;
+++}
+++#endif
+++
++ static bool
++ parse_xtype (const struct parser_table* entry, char **argv, int *arg_ptr)
++ {
++@@ -2877,6 +2975,40 @@ check_path_safety (const char *action)
++     } while (splitstring (path, path_separators, false, &pos, &len));
++ }
++ 
+++#ifdef HAVE_CAPABILITIES
+++static bool
+++insert_cap (char **argv,
+++              int *arg_ptr,
+++              const struct parser_table *entry,
+++              int regex_options)
+++{
+++  const char *rx;
+++  if (collect_arg (argv, arg_ptr, &rx))
+++    {
+++      struct re_pattern_buffer *re;
+++      const char *error_message;
+++      struct predicate *our_pred = insert_primary_withpred (entry, pred_cap, rx);
+++      our_pred->need_stat = true;
+++      our_pred->need_type = false;
+++      re = xmalloc (sizeof (struct re_pattern_buffer));
+++      our_pred->args.regex = re;
+++      re->allocated = 100;
+++      re->buffer = xmalloc (re->allocated);
+++      re->fastmap = NULL;
+++
+++      re_set_syntax (regex_options);
+++      re->syntax = regex_options;
+++      re->translate = NULL;
+++
+++      error_message = re_compile_pattern (rx, strlen (rx), re);
+++      if (error_message)
+++        error (EXIT_FAILURE, 0, "%s", error_message);
+++      our_pred->est_success_rate = estimate_pattern_match_rate (rx, 1);
+++      return true;
+++    }
+++  return false;
+++}
+++#endif
++ 
++ /* handles both exec and ok predicate */
++ static bool
++diff --git a/find/pred.c b/find/pred.c
++index 2014b5ab..dee82d3c 100644
++--- a/find/pred.c
+++++ b/find/pred.c
++@@ -34,6 +34,14 @@
++ #include <sys/wait.h>
++ #include <unistd.h> /* for unlinkat() */
++ 
+++#ifdef HAVE_XATTR
+++#include <attr/libattr.h>
+++#endif
+++
+++#ifdef HAVE_CAPABILITIES
+++#include <sys/capability.h> /* for pred_cap() */
+++#endif
+++
++ /* gnulib headers. */
++ #include "areadlink.h"
++ #include "dirname.h"
++@@ -74,6 +82,9 @@ struct pred_assoc pred_table[] =
++   {pred_and, "and     "},
++   {pred_anewer, "anewer  "},
++   {pred_atime, "atime   "},
+++#ifdef HAVE_CAPABILITIES
+++  {pred_cap, "cap    "},
+++#endif
++   {pred_closeparen, ")       "},
++   {pred_cmin, "cmin    "},
++   {pred_cnewer, "cnewer  "},
++@@ -126,6 +137,9 @@ struct pred_assoc pred_table[] =
++   {pred_used, "used    "},
++   {pred_user, "user    "},
++   {pred_writable, "writable "},
+++#ifdef HAVE_XATTR
+++  {pred_xattr, "xattr   "},
+++#endif
++   {pred_xtype, "xtype   "},
++   {pred_context, "context"},
++   {0, "none    "}
++@@ -242,6 +256,34 @@ pred_atime (const char *pathname, struct stat *stat_buf, struct predicate *pred_
++   return pred_timewindow (get_stat_atime(stat_buf), pred_ptr, DAYSECS);
++ }
++ 
+++#ifdef HAVE_CAPABILITIES
+++bool
+++pred_cap (const char *pathname, struct stat *stat_buf, struct predicate *pred_ptr)
+++{
+++  (void) pathname;
+++  char *cap_str;
+++  cap_t caps;
+++  bool ret = false;
+++
+++  // get capabilities
+++  caps = cap_get_file(pathname);
+++  cap_str = cap_to_text(caps, NULL);
+++  if ( cap_str == NULL ) {
+++    cap_free(caps);
+++    return(ret);
+++  }
+++
+++  // perform regex match
+++  if (regexec(pred_ptr->args.regex, cap_str, (size_t) 0, NULL, 0) == 0)
+++    ret = true;
+++
+++  // clean up
+++  cap_free(caps);
+++  cap_free(cap_str);
+++  return(ret);
+++}
+++#endif
+++
++ bool
++ pred_closeparen (const char *pathname, struct stat *stat_buf, struct predicate *pred_ptr)
++ {
++@@ -1184,6 +1226,61 @@ pred_user (const char *pathname, struct stat *stat_buf, struct predicate *pred_p
++     return (false);
++ }
++ 
+++#ifdef HAVE_XATTR
+++bool
+++pred_xattr (const char *pathname, struct stat *stat_buf, struct predicate *pred_ptr)
+++{
+++  (void) pathname;
+++  char empty[0];
+++  char *list;
+++  char *substrings;
+++  ssize_t list_size;
+++  int i, j;
+++  bool ret = false;
+++
+++  // get size of xattr list for the given path by passing an empty list
+++  if (options.symlink_handling == SYMLINK_NEVER_DEREF) {
+++    list_size = llistxattr(pathname, empty, 0);
+++  } else {
+++    list_size = listxattr(pathname, empty, 0);
+++  }
+++
+++  // allocate just enough memory to hold all xattrs
+++  list = malloc(list_size);
+++
+++  // used to hold individual attributes (substrings)
+++  // allocate same size as list just in case there's only one xattr
+++  substrings = malloc(list_size);
+++
+++  // retrieve the list of xattrs
+++  if (options.symlink_handling == SYMLINK_NEVER_DEREF) {
+++    llistxattr(pathname, list, list_size);
+++  } else {
+++    listxattr(pathname, list, list_size);
+++  }
+++
+++  // break list into asciiz strings
+++  for (i = 0, j = 0; i < list_size; i++) {
+++    substrings[j] = list[i];
+++    if (list[i] == 0) {
+++      // perform regex match against substring
+++      j = 0;
+++      if (regexec(pred_ptr->args.regex, substrings, (size_t) 0, NULL, 0) == 0) {
+++        ret = true;
+++      }
+++      continue;
+++    }
+++    j++;
+++  }
+++
+++  // clean up
+++  free(list);
+++  free(substrings);
+++  return(ret);
+++
+++}
+++#endif
+++
++ bool
++ pred_xtype (const char *pathname, struct stat *stat_buf, struct predicate *pred_ptr)
++ {
++diff --git a/find/testsuite/excuses.txt b/find/testsuite/excuses.txt
++index ac4515a1..d4aee6d4 100644
++--- a/find/testsuite/excuses.txt
+++++ b/find/testsuite/excuses.txt
++@@ -22,6 +22,7 @@
++ 
++ ## Things that are hard to test because they rely on features of
++ ## the environment
+++"cap",                   cap),      /* GNU */
++ "gid",                   gid),	     /* GNU */
++ "uid",                   uid),	     /* GNU */
++ "user",                  user),
++@@ -34,6 +35,7 @@
++ "ignore_readdir_race",   ignore_race),   /* GNU */
++ "noignore_readdir_race", noignore_race), /* GNU */
++ "noleaf",                noleaf),	     /* GNU */
+++"xattr",                 xattr),            /* GNU */
++ 
++ ## Things that might be testable but which I have not yet thought
++ ## about enough.
++diff --git a/find/tree.c b/find/tree.c
++index 5be88f2e..d5938a0c 100644
++--- a/find/tree.c
+++++ b/find/tree.c
++@@ -926,6 +926,9 @@ static struct pred_cost_lookup costlookup[] =
++     { pred_and       ,  NeedsNothing,        },
++     { pred_anewer    ,  NeedsStatInfo,       },
++     { pred_atime     ,  NeedsStatInfo,       },
+++#ifdef HAVE_CAPABILITIES
+++    { pred_cap       ,  NeedsNothing,        },
+++#endif
++     { pred_closeparen,  NeedsNothing         },
++     { pred_cmin      ,  NeedsStatInfo,       },
++     { pred_cnewer    ,  NeedsStatInfo,       },
++@@ -980,6 +983,9 @@ static struct pred_cost_lookup costlookup[] =
++     { pred_used      ,  NeedsStatInfo        },
++     { pred_user      ,  NeedsStatInfo        },
++     { pred_writable  ,  NeedsAccessInfo      },
+++#ifdef HAVE_XATTR
+++    { pred_xattr     ,  NeedsNothing         },
+++#endif
++     { pred_xtype     ,  NeedsType            } /* roughly correct unless most files are symlinks */
++   };
++ static int pred_table_sorted = 0;
++diff --git a/find/util.c b/find/util.c
++index fa338074..0b2e8646 100644
++--- a/find/util.c
+++++ b/find/util.c
++@@ -181,15 +181,16 @@ normal options (always true, specified before other expressions):\n\
++       -depth --help -maxdepth LEVELS -mindepth LEVELS -mount -noleaf\n\
++       --version -xdev -ignore_readdir_race -noignore_readdir_race\n"));
++   HTL (_("\
++-tests (N can be +N or -N or N): -amin N -anewer FILE -atime N -cmin N\n\
++-      -cnewer FILE -ctime N -empty -false -fstype TYPE -gid N -group NAME\n\
++-      -ilname PATTERN -iname PATTERN -inum N -iwholename PATTERN -iregex PATTERN\n\
++-      -links N -lname PATTERN -mmin N -mtime N -name PATTERN -newer FILE"));
+++tests (N can be +N or -N or N): -amin N -anewer FILE -atime N -cap PATTERN\n\
+++      -cmin N -cnewer FILE -ctime N -empty -false -fstype TYPE -gid N -group NAME\n\
+++      -icap PATTERN -ilname PATTERN -iname PATTERN -inum N -iwholename PATTERN\n\
+++      -iregex PATTERN -ixattr PATTERN -links N -lname PATTERN -mmin N -mtime N\n\
+++      -name PATTERN -newer FILE"));
++   HTL (_("\n\
++       -nouser -nogroup -path PATTERN -perm [-/]MODE -regex PATTERN\n\
++       -readable -writable -executable\n\
++       -wholename PATTERN -size N[bcwkMG] -true -type [bcdpflsD] -uid N\n\
++-      -used N -user NAME -xtype [bcdpfls]"));
+++      -used N -user NAME -xattr PATTERN -xtype [bcdpfls]"));
++   HTL (_("\
++       -context CONTEXT\n"));
++   HTL (_("\n\

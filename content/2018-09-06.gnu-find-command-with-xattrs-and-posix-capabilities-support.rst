@@ -1,0 +1,56 @@
+GNU find command (findutils) with xattrs and posix capabilities support
+#######################################################################
+
+:date: 2018-09-06 11:47
+:tags: unix, tools, sysadmin
+
+
+It's been bugging me for a while that "find" does not have matches for extended
+attributes and posix capabilities on filesystems.
+
+Finally got around to looking for a solution, and there apparently is a recent
+patch (Jul 2018), which addresses the issue nicely:
+
+  https://www.mail-archive.com/bug-findutils@gnu.org/msg05483.html
+
+It finally allows to easily track modern-suid binaries with capabilities that
+allow root access (`almost all of them do in one way or another`_), as well as
+occasional ACLs and such, e.g.::
+
+  % find /usr/ -type f -xattr .
+  /usr/bin/rcp
+  /usr/bin/rsh
+  /usr/bin/ping
+  /usr/bin/mtr-packet
+  /usr/bin/dumpcap
+  /usr/bin/gnome-keyring-daemon
+  /usr/bin/rlogin
+  /usr/lib/gstreamer-1.0/gst-ptp-helper
+
+  % getcap /usr/bin/ping
+  /usr/bin/ping = cap_net_raw+ep
+
+(``find -type f -cap . -o -xattr . -o -perm /u=s,g=s`` to match either of
+caps/xattrs/suid-bits, though ``-xattr .`` includes all -cap matches already)
+
+These -cap/-xattr flags allow matching stuff by regexps too, so they work for
+pretty much any kind of matching.
+
+Same as with --json in iproute2 and other tools, a very welcome update, which
+hopefully will make it into one of the upstream versions eventually.
+
+(but probably not very soon, since last findutils-4.6.0 release is from 2015
+about 3 years ago, and this patch isn't even merged to current git yet)
+
+Easy to use now on Arch though, as there's `findutils-git in AUR`_, which only
+needs a small patch (as of 2101eda) to add all this great stuff -
+e.g. `findutils-git-2101eda-xattrs.patch`_ (includes xattrs.patch itself too).
+
+It also applies with minor changes to non-git findutils version, but as these
+are from back 2015 atm, it's a bit PITA to build them already due to various
+auto-hell and gnulib changes.
+
+
+.. _almost all of them do in one way or another: https://forums.grsecurity.net/viewtopic.php?f=7&t=2522
+.. _findutils-git in AUR: https://aur.archlinux.org/packages/findutils-git/
+.. _findutils-git-2101eda-xattrs.patch: |filename|misc/findutils-git-2101eda-xattrs.patch
