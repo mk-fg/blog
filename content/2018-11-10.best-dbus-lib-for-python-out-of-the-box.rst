@@ -1,0 +1,102 @@
+Best D-Bus lib for python out of the box
+########################################
+
+:date: 2018-11-10 00:39
+:tags: python, linux, tools
+
+
+These days D-Bus is used in lot of places, on both desktop machines where it
+started, and servers too, with e.g. systemd APIs all over the place.
+
+Never liked bindings offered for it in python though, as it's an extra half-C
+lib to worry about, and one that doesn't work too well either (had a lot of
+problems with it in earlier `pulseaudio-mixer-cli script`_ iterations).
+
+But with systemd and its sd-bus everywhere, there's no longer a need for such
+extra lib, as its API is very easy to use via ctypes, e.g.:
+
+.. code-block:: python
+
+  import os, ctypes as ct
+
+  class sd_bus(ct.Structure): pass
+  class sd_bus_error(ct.Structure):
+    _fields_ = [ ('name', ct.c_char_p),
+      ('message', ct.c_char_p), ('need_free', ct.c_int) ]
+  class sd_bus_msg(ct.Structure): pass
+  lib = ct.CDLL('libsystemd.so')
+
+  def run(call, *args, sig=None, check=True):
+    func = getattr(lib, call)
+    if sig: func.argtypes = sig
+    res = func(*args)
+    if check and res < 0: raise OSError(-res, os.strerror(-res))
+    return res
+
+  bus = ct.POINTER(sd_bus)()
+  run( 'sd_bus_open_system', ct.byref(bus),
+    sig=[ct.POINTER(ct.POINTER(sd_bus))] )
+
+  error = sd_bus_error()
+  reply = ct.POINTER(sd_bus_msg)()
+  try:
+    run( 'sd_bus_call_method',
+      bus,
+      b'org.freedesktop.systemd1',
+      b'/org/freedesktop/systemd1',
+      b'org.freedesktop.systemd1.Manager',
+      b'Dump',
+      ct.byref(error),
+      ct.byref(reply),
+      b'',
+      sig=[
+        ct.POINTER(sd_bus),
+        ct.c_char_p, ct.c_char_p, ct.c_char_p, ct.c_char_p,
+        ct.POINTER(sd_bus_error),
+        ct.POINTER(ct.POINTER(sd_bus_msg)),
+        ct.c_char_p ] )
+    dump = ct.c_char_p()
+    run( 'sd_bus_message_read', reply, b's', ct.byref(dump),
+      sig=[ct.POINTER(sd_bus_msg), ct.c_char_p, ct.POINTER(ct.c_char_p)] )
+    return dump.value.decode()
+  finally: run('sd_bus_flush_close_unref', bus, check=False)
+
+Which can be a bit more verbose than dbus-python API, but only needs libsystemd,
+which is already there on any modern systemd-enabled machine.
+
+It's surprisingly easy to put/parse any amount of arrays, maps or any kind of
+variant data there, as sd-bus has convention of how each one is serialized to a
+flat list of values.
+
+For instance, "as" (array of strings) would expect an int count with
+corresponding number of strings following it, or just NULL for empty array, with
+no complicated structs or interfaces.
+
+Same thing for maps and variants, where former just have keys/values in a row
+after element count, and latter is a type string (e.g. "s") followed by value.
+
+Example of using a more complicated desktop notification interface, which has
+all of the above stuff can be found here:
+
+https://github.com/mk-fg/fgtk/blob/4eaa44a/desktop/notifications/power#L22-L104
+
+Whole function is a libsystemd-only drop-in replacement for a bunch of crappy
+modules which provide that on top of dbus.
+
+sd-bus api is relatively new, but really happy that it exists in systemd now,
+given how systemd itself uses dbus all over the place.
+
+Few script examples using it:
+
+- systemd-dashboard_ - systemd unit/machine APIs.
+- `desktop/notifications/power`_ - udev event desktop notification script.
+- riet_ - gets local timezone name via org.freedesktop.timedate1.
+
+For small system scripts in particular, not needing to install any deps except
+python/systemd (which are always there), is definitely quite a good thing.
+
+
+.. _pulseaudio-mixer-cli script: https://github.com/mk-fg/pulseaudio-mixer-cli
+.. _systemd-dashboard: https://github.com/mk-fg/fgtk/blob/master/systemd-dashboard
+.. _desktop/notifications/power: https://github.com/mk-fg/fgtk/blob/master/desktop/notifications/power
+.. _riet: https://github.com/mk-fg/rst-icalendar-event-tracker/blob/35624b5/riet#L184-L237
