@@ -70,6 +70,6 @@ publish_build:
 publish: | publish_build update_legacy_links
 
 appengine: publish
-	cd ~/hatch/gapp && ./appcfg.py update pelican-blog
+	cd ~/hatch/gapp && ./appcfg.py --skip_sdk_update_check update pelican-blog
 
 .PHONY: html update_legacy_links help clean regenerate serve devserver stopserver publish publish_build appengine
