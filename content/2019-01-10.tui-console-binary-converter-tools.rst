@@ -1,0 +1,33 @@
+TUI console dec/hex/binary converter tool
+#########################################
+
+:date: 2019-01-10 00:52
+:tags: python, linux, tools
+
+
+Really simple curses-based tool which I've been kinda-missing for years:
+
+.. html::
+
+  <a href="|filename|images/tui-binary-conv.jpg">
+  <img
+    style="width: 529px;"
+    src="|filename|images/tui-binary-conv.jpg"
+    title="TUI dec/hex/binary converter tool"
+    alt="TUI dec/hex/binary converter tool">
+  </a>
+
+There's probably something similar built into any decent reverse-engineering
+suite or hex editor (though ghex doesn't have one!), but don't use either much,
+don't want to start either to quickly check mental math, and bet GUI conventions
+will work against how this should work ideally.
+
+Converts between dec/hex/binary and helps to visualize all three at the same
+time, as well as how flipping bits or digits affects them all.
+
+| Can be found in the usual `mk-fg/fgtk dump`_ on github:
+| https://github.com/mk-fg/fgtk/blob/master/tui-binary-conv
+| (README blurb - https://github.com/mk-fg/fgtk/#tui-binary-conv )
+
+
+.. _mk-fg/fgtk dump: https://github.com/mk-fg/fgtk/
