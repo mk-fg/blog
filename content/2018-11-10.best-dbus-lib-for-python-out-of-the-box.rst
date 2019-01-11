@@ -81,7 +81,7 @@ all of the above stuff can be found here:
 https://github.com/mk-fg/fgtk/blob/4eaa44a/desktop/notifications/power#L22-L104
 
 Whole function is a libsystemd-only drop-in replacement for a bunch of crappy
-modules which provide that on top of dbus.
+modules which provide that on top of libdbus.
 
 sd-bus api is relatively new, but really happy that it exists in systemd now,
 given how systemd itself uses dbus all over the place.
