@@ -26,8 +26,8 @@ e.g. /sys/class/net/enp1s0/address (useful as a machine id sometimes).
 /usr/lib/systemd/systemd-networkd-wait-online
 ---------------------------------------------
 
-As systemd-networkd is a common go-to network management tool these days, this
-one complements it very nicely.
+As systemd-networkd is a common go-to network management tool these days,
+this one complements it very nicely.
 
 Allows to wait until some specific interface(s) (or all of them) get fully
 setup, has built-in timeout option too.
@@ -46,6 +46,10 @@ Also, undocumented caveat: use ``ExecStartPre=-/.../systemd-networkd-wait-online
 ("=-" is the important bit) for anything that should start regardless of network
 issues, as thing can exit with non-0 sometimes when there's no network for a
 while (which does look like a bug, and might be fixed in future versions).
+
+**Update 2019-01-12:** systemd-networkd 236+ also has RequiredForOnline=,
+which allows to configure which ifaces global network.target should wait for
+right in the .network files, if tracking only one state is enough.
 
 
 iproute2 json output
