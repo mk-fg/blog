@@ -1,0 +1,47 @@
+Old IRC interface for new IRC - Discord
+#######################################
+
+:date: 2019-01-26 06:50
+:tags: python, linux, im, games, social
+
+
+While Matrix_ still gaining traction and is somewhat in flux,
+Slack_ slowly dies in a fire (hopefully!),
+Discord_ seem to be the most popular IRC of the day,
+especially in any kind of gaming and non-technical communities.
+
+So it's only fitting to use same familiar IRC clients for the new thing,
+even though it doesn't officially support it.
+
+Started using it initially via bitlbee_ and bitlbee-discord_,
+but these don't seem to work well for that - you can't just /list or /join
+channels, multiple discord guilds aren't handled too well,
+some useful features like chat history aren't easily available,
+(surprisingly common) channel renames are constant pain,
+hard to debug, etc - and worst of all, it just kept loosing my messages,
+making some conversations very confusing.
+
+So given relatively clear protocols for both, wrote my own proxy-ircd bridge
+eventually - https://github.com/mk-fg/reliable-discord-client-irc-daemon
+
+Which seem to address all things that annoyed me in bitlbee-discord nicely,
+as obviously that was the point of implementing whole thing too.
+
+Being a single dependency-light (only aiohttp for discord websockets) python3
+script, should be much easier to tweak and test to one's liking.
+
+Quite proud of all debug and logging stuff there in particular,
+where you can easily get full debug logs from code and full protocol logs
+of irc, websocket and http traffic at the moment of any issue
+and understand, find and fix is easily.
+
+Hopefully Matrix will eventually get to be more common,
+as it - being more open and dev-friendly - seem to have plenty of nice GUI clients,
+which are probably better fit for all the new features that it has over good old IRC.
+
+
+.. _Matrix: http://matrix.org/
+.. _Slack: http://slack.com/
+.. _Discord: http://discord.gg/
+.. _bitlbee: http://bitlbee.org/
+.. _bitlbee-discord: https://github.com/sm00th/bitlbee-discord
