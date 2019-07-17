@@ -1,0 +1,61 @@
+Extending Zsh Line Editor (ZLE) with python widgets
+###################################################
+
+:date: 2019-07-17 21:54
+:tags: python, tools, bash
+
+
+Was finally annoyed enough by lack of one-hotkey way to swap arguments in stuff
+like ``cat /some/log/path/to/file1 > /even/longer/path/to/file2``, which is
+commonly needed for "edit and copy back" or various rsync tasks.
+
+Zsh_ has transpose-words widget (in zle_ terminology) bound to ESC-t, and its
+transpose-words-match extension, but they all fail miserably for stuff above -
+either transpose parts (e.g. path components, as they are "words"), wrong args
+entirely or don't take stuff like ">" into account (should be ignored).
+
+These widgets are just small zsh funcs to edit/set BUFFER and CURSOR though,
+and binding/replacing/extending them is easy, except that doing any non-trivial
+string manipulation in shell is sort of a nightmare.
+
+Hence sh-embedded python code for that last part::
+
+  _zle-transpose-args() {
+    res=$(python3 - 3<<<"$CURSOR.$BUFFER" <<'EOF'
+  import re
+
+  pos, line = open(3).read().rstrip('\r\n').split('.', 1)
+  pos, suffix = int(pos) if pos else -1, ''
+
+  # Ignore words after cursor, incl. if it's on first letter
+  n = max(0, pos-1)
+  if pos > 0 and line[n:n+1]:
+    if line[n:n+1].strip(): n += len(line[n:].split(None, 1)[0])
+    line, suffix = line[:n], line[n:]
+
+  line = re.split(r'(\s+)', line.rstrip('\r\n'))
+  arg_ns = list( n for n, arg in enumerate(line)
+    if arg.strip() and not re.search(r'^[-<>|&]{1,4}$', arg) )
+  line[arg_ns[-2]], line[arg_ns[-1]] = line[arg_ns[-1]], line[arg_ns[-2]]
+  line = ''.join(line) + suffix
+
+  if pos < 0: pos = len(line)
+  print(f'{pos:02d}{line}\n', end='')
+  EOF
+  )
+    [[ $? -eq 0 ]] || return
+    BUFFER=${res:2}
+    CURSOR=${res:0:2}
+  }
+  zle -N transpose-words _zle-transpose-args # bound to ESC-t by default
+
+Given that such keys are pressed sparingly, there's really no downside in using
+saner language for any non-oneliner stuff, passing code to stdin and any extra
+args/values via file descriptors like ``3<<<"some value"`` above.
+
+Opens up a lot of freedom wrt making shell prompt more friendly and avoiding
+mouse and copy-pasting to/from there for common tasks like that.
+
+
+.. _Zsh: https://www.zsh.org/
+.. _zle: http://zsh.sourceforge.net/Doc/Release/Zsh-Line-Editor.html
