@@ -6,6 +6,10 @@ cgroups initialization, libcgroup and my ad-hoc replacement for it
 :tags: python, sysadmin, rate-limiting, systemd
 
 
+**Update 2019-10-02:** This still works, but only for old cgroup-v1 interface,
+and is deprecated as such, plus largely unnecessary with modern systemd -
+see `cgroup-v2 resource limits for apps with systemd scopes and slices`_ post for more info.
+
 | Linux control groups (cgroups) rock.
 | If you've never used them at all, you bloody well should.
 
@@ -385,3 +389,6 @@ question "what else is there?" \*sigh\*.
 
 All the mentioned scripts can be found `here
 <http://fraggod.net/static/code/cgroup-tools/>`_.
+
+
+.. _cgroup-v2 resource limits for apps with systemd scopes and slices: http://blog.fraggod.net/2019/10/02/cgroup-v2-resource-limits-for-apps-with-systemd-scopes-and-slices.html

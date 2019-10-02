@@ -1,0 +1,123 @@
+cgroup-v2 resource limits for apps with systemd scopes and slices
+#################################################################
+
+:date: 2019-10-02 09:26
+:tags: tools, systemd, bash, sysadmin, rate-limiting
+
+
+Something like 8y ago, back in 2011, it was ok to manage cgroup-imposed resource
+limits in parallel to systemd (e.g. via libcgroup_ or `custom tools`_), but over
+years cgroups moved increasingly towards "unified hierarchy" (for many good
+reasons, outlined in kernel docs), joining controllers at first, and then
+creating new unified `cgroup-v2 interface`_ for it.
+
+Latter no longer allows to separate systemd process-tracking tree from ones for
+controlling specific resources, so you can't put restrictions on pids without
+either pulling them from hierarchy that systemd uses (making it loose track of
+them - bad idea) or changing cgroup configuration in parallel to systemd,
+potentially stepping on its toes (also bad idea).
+
+So with systemd running in unified cgroup-v2 hierarchy mode (can be compiled-in
+default, esp. in the future, or enabled via ``systemd.unified_cgroup_hierarchy``
+on cmdline), there are two supported options to manage custom resource limits:
+
+- By using systemd, via its slices, scopes and services.
+
+- By taking over control of some cgroup within systemd hierarchy
+  `via Delegate= in units`_.
+
+Delegation necessitates managing pids within that subtree outside of systemd
+entirely, while first one is simplier of the two, where instead of libcgroup_,
+cgmanager_ or cgconf_ config file, you'd define all these limits in systemd
+.slice unit-file hierarchy like this::
+
+  # apps.slice
+  [Slice]
+
+  CPUWeight=30
+  IOWeight=30
+
+  MemoryHigh=5G
+  MemoryMax=8G
+  MemorySwapMax=1G
+
+  # apps-browser.slice
+  [Slice]
+  CPUWeight=30
+  IOWeight=30
+  MemoryHigh=3G
+
+  # apps-misc.slice
+  [Slice]
+  MemoryHigh=700M
+  MemoryMax=1500M
+
+These can reside under whatever pre-defined slices (see ``systemctl status`` for
+full tree), including "systemd --user" slices, where users can set these up as well.
+
+Running arbitrary desktop app under such slices can be done as a .service with
+all Type=/ExecStart=/ExecStop= complications or just .scope as a bunch of
+arbitrary unmanaged processes, using systemd-run::
+
+  % systemd-run -q --user --scope \
+    --unit chrome --slice apps-browser -- chrominum
+
+Scope will inherit all limits from specified slices, as composed into hierarchy
+(with the usual hyphen-to-slash translation in unit names), and auto-start/stop
+the scope (when all pids there exit) and all slices required.
+
+So no extra scripts for mucking about in \/sys\/fs\/cgroup are needed anymore,
+whole subtree is visible and inspectable via systemd tools (e.g. ``systemctl
+status apps.slice``, ``systemd-cgls``, ``systemd-cgtop`` and such), and can be
+adjusted on the fly via e.g. ``systemctl set-property apps-misc.slice CPUWeight=30``.
+
+My old cgroup-tools_ provided few extra things for checking cgroup contents from
+scripts easily (cgls), queueing apps from shell via cgroups and such (cgwait,
+"cgrc -q"), which systemctl and systemd-run don't provide, but easy to implement
+on top as::
+
+  % cg=$(systemctl -q --user show -p ControlGroup --value -- apps-browser.scope)
+  % procs=$( [ -z "$cg" ] ||
+      find /sys/fs/cgroup"$cg" -name cgroup.procs -exec cat '{}' + 2>/dev/null )
+
+Ended up wrapping long systemd-run commands along with these into `cgrc wrapper
+shell script`_ in spirit of old tools::
+
+  % cgrc -h
+  Usage: cgrc [-x] { -l | -c | -q [opts] } { -u unit | slice }
+         cgrc [-x] [-q [-i N] [-t N]] [-u unit] slice -- cmd [args...]
+
+  Run command via 'systemd-run --scope'
+    within specified slice, or inspect slice/scope.
+  Slice should be pre-defined via .slice unit and starts/stops automatically.
+  --system/--user mode detected from uid (--system for root, --user otherwise).
+
+  Extra options:
+  -u name - scope unit name, derived from command basename by default.
+     Starting scope with same unit name as already running one will fail.
+     With -l/-c list/check opts, restricts check to that scope instead of slice.
+  -q - wait for all pids in slice/scope to exit before start (if any).
+     -i - delay between checks in seconds, default=7s.
+     -t - timeout for -q wait (default=none), exiting with code 36 afterwards.
+  -l - list all pids within specified slice recursively.
+  -c - same as -l, but for exit code check: 35 = pids exist, 0 = empty.
+  -x - 'set -x' debug mode.
+
+  % cgrc apps-browser -- chrominum &
+  % cgrc -l apps | xargs ps u
+  ...
+  % cgrc -c apps-browser || notify-send 'browser running'
+  % cgrc -q apps-browser ; notify-send 'browser exited'
+
+That + systemd slice units seem to replace all old resource-management cruft
+with modern unified v2 tree nicely, and should probably work for another decade, at least.
+
+
+.. _libcgroup: http://libcg.sourceforge.net/
+.. _custom tools: http://blog.fraggod.net/2011/02/26/cgroups-initialization-libcgroup-and-my-ad-hoc-replacement-for-it.html
+.. _cgroup-v2 interface: https://www.kernel.org/doc/Documentation/cgroup-v2.txt
+.. _via Delegate= in units: https://systemd.io/CGROUP_DELEGATION.html
+.. _cgmanager: https://linuxcontainers.org/cgmanager/
+.. _cgconf: https://github.com/mk-fg/cgroup-tools
+.. _cgroup-tools: https://github.com/mk-fg/cgroup-tools
+.. _cgrc wrapper shell script: https://github.com/mk-fg/fgtk/blob/master/cgrc
