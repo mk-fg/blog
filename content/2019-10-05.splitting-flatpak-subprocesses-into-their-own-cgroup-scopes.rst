@@ -1,0 +1,98 @@
+Splitting pids from flatpak into their own cgroup scopes
+########################################################
+
+:date: 2019-10-05 12:13
+:tags: systemd, games, rate-limiting
+
+
+As a bit of a follow-up on `earlier post about cgroup-v2 resource control`_ -
+what if you want to impose cgroup limits on some subprocess within a
+flatpak-managed scope?
+
+Had this issue with Steam games in particular, where limits really do come in
+handy, but on a regular amd64 distro, only sane way to run Steam would be via
+flatpak_ or something like that (32-bit container/chroot).
+
+flatpak is clever enough to cooperate with systemd and ``flatpak --user run
+com.valvesoftware.Steam`` creates e.g. flatpak-com.valvesoftware.Steam-165893.scope
+(number there representing initial pid), into which it puts itself and by
+extension all things related to that particular app.
+
+Scope itself can be immediately limited via e.g. ``systemctl set-property
+flatpak-com.valvesoftware.Steam-165893.scope MemoryHigh=4G``, and that can be
+good enough for most purposes.
+
+Specific issue I had though was with the game connecting and hanging forever on
+some remote API, and wanted to limit network access for it without affecting
+Steam, so was figuring a way to move it from that flatpak.scope to its own one.
+
+Since flatpak runs apps in a separate filesystem namespaces (among other
+restrictions - see "flatpak info --show-permissions ..."), its apps - unless
+grossly misconfigured by developers - don't have access to pretty much anything
+on the original rootfs, as well as linux API mounts such as /sys or dbus,
+so using something as involved as "systemd-run" in there to wrap things into a
+new scope is rather tricky.
+
+Here's how it can be done in this particular case:
+
+- Create a scope for a process subtree before starting it, e.g. in a wrapper
+  before "flatpak run ..."::
+
+    #!/bin/bash
+    systemd-run -q --user --scope --unit game -- sleep infinity &
+    trap "kill $!" EXIT
+    flatpak run com.valvesoftware.Steam "$@"
+
+  ("sleep infinity" process there is just to keep the scope around)
+
+- Allow specific flatpak app to access that specific scope (before starting it)::
+
+    % systemd-run -q --user --scope --unit game -- sleep infinity &
+    % cg=$(systemctl -q --user show -p ControlGroup --value -- game.scope)
+    % kill %1
+    % flatpak --user override --filesystem "$cg" com.valvesoftware.Steam
+
+  Overrides can be listed later via --show option or tweaked directly via ini
+  files in ~/.local/share/flatpak/overrides/
+
+- Add wrapper to affected subprocess (running within flatpak container) that'd
+  move it into such special scope::
+
+    #!/bin/bash
+    echo $$ > /sys/fs/cgroup/user.slice/.../game.scope/cgroup.procs
+    /path/to/original/app
+
+  For most apps, replacing original binary with that is probably good enough.
+
+  With Steam in particular, this is even easier to add via "Set Lauch Command..."
+  in properties of a specific game, and use something like ``/path/to/wrapper
+  %command%`` there, which will also pass $1 as the original app path to it.
+
+  (one other cool use for such wrappers with Steam, can be killing it after app
+  exits when it was started with "-silent -applaunch ..." directly, as `there's
+  no option to stop it from hanging around afterwards`_)
+
+And that should do it.
+
+To impose any limits on game.scope, some pre-configured slice unit (or hierarchy
+of such) can be used, and systemd-run to have something like "--slice games.slice"
+(see `other post`_ for more on that).
+
+Also, as I wanted to limit network access except for localhost (which is used by
+steam api libs to talk to main process), needed some additional firewall configuration.
+
+iptables can filter by cgroup2 path, so a rule with "-m cgroup --path ..." can
+work for that, but since I've switched to nftables here a while ago, couldn't do that,
+as `kernel patch to implement cgroup2 filtering there`_ apparently fell through
+the cracks back in 2016 and was never revisited :(
+
+| Solution I've ended up with instead was to use cgroup-attached eBPF filter:
+| https://github.com/mk-fg/fgtk/blob/master/bpf/cgroup-skb.nonet.c
+| (nice to have so many options, but that's a whole different story at this point)
+
+
+.. _earlier post about cgroup-v2 resource control: http://blog.fraggod.net/2019/10/02/cgroup-v2-resource-limits-for-apps-with-systemd-scopes-and-slices.html
+.. _flatpak: https://flatpak.org/
+.. _there's no option to stop it from hanging around afterwards: https://github.com/ValveSoftware/steam-for-linux/issues/1721
+.. _other post: http://blog.fraggod.net/2019/10/02/cgroup-v2-resource-limits-for-apps-with-systemd-scopes-and-slices.html
+.. _kernel patch to implement cgroup2 filtering there: http://patchwork.ozlabs.org/patch/694418/
