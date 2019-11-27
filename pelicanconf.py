@@ -16,13 +16,14 @@ DEFAULT_DATE_FORMAT = '%Y-%m-%d %H:%M'
 
 ARTICLE_URL = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
 ARTICLE_SAVE_AS = '{date:%Y}/{date:%m}/{date:%d}/{slug}.html'
+RELATIVE_URLS = True
 
 FEED_MAX_ITEMS = 10
 FEED_DOMAIN = SITEURL
 FEED_ALL_ATOM = 'feeds/atom.xml'
 FEED_ALL_RSS = 'feeds/rss.xml'
-TAG_FEED_ATOM = 'feeds/tag/%s.atom.xml'
-TAG_FEED_RSS = 'feeds/tag/%s.rss.xml'
+TAG_FEED_ATOM = 'feeds/tag/{slug}.atom.xml'
+TAG_FEED_RSS = 'feeds/tag/{slug}.rss.xml'
 
 DISPLAY_PAGES_ON_MENU = False
 
@@ -37,11 +38,10 @@ STATIC_PATHS = ['images', 'misc']
 LINKS = [
 	('Homepage', 'fraggod.net') ]
 
-
 PLUGINS = [
 	'plugins.html_rst_directive',
 	'plugins.sitemap' ]
-JINJA_EXTENSIONS = ['jinja2.ext.do']
+JINJA_ENVIRONMENT = dict(extensions=['jinja2.ext.do'])
 
 SITEMAP = dict(
 	format='xml',

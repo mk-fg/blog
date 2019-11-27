@@ -4,3 +4,4 @@
 /*.pid
 *.pyc
 *.pyo
+/sync.sh
