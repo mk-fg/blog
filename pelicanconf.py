@@ -28,8 +28,9 @@ TAG_FEED_RSS = 'feeds/tag/{slug}.rss.xml'
 DISPLAY_PAGES_ON_MENU = False
 
 STATIC_PATHS = ['images', 'misc']
-# EXTRA_PATH_METADATA = {
-# 	'extra/robots.txt': {'path': 'robots.txt'} }
+EXTRA_PATH_METADATA = {
+	'misc/favicon.ico': {'path': 'favicon.ico'},
+	'misc/robots.txt': {'path': 'robots.txt'} }
 # TEMPLATE_PAGES = {
 # 	'src/books.html': 'dest/books.html',
 # 	'src/resume.html': 'dest/resume.html',
