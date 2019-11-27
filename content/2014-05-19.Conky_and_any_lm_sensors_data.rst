@@ -124,10 +124,10 @@ Overall result in my case is something like this:
 
 .. html::
 
-	<a href="|filename|images/conky_sensors.jpg">
+	<a href="{static}images/conky_sensors.jpg">
 	<img
 		style="width: 429px;"
-		src="|filename|images/conky_sensors.jpg"
+		src="{static}images/conky_sensors.jpg"
 		title="Conky sensors display"
 		alt="conky sensors display">
 	</a>

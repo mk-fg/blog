@@ -75,10 +75,10 @@ outputs:
 
 .. html::
 
-	<a href="|filename|images/predictable_hash.jpg">
+	<a href="{static}images/predictable_hash.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/predictable_hash.jpg"
+		src="{static}images/predictable_hash.jpg"
 		title="Non-crypto Ly hash outputs"
 		alt="Ly hash outputs">
 	</a>

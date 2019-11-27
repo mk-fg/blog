@@ -45,9 +45,9 @@ appear at some corner of the screen, announcing events from other apps.
 
 .. html::
 
-  <a href="|filename|images/notification_proxy_digest.jpg">
+  <a href="{static}images/notification_proxy_digest.jpg">
   <img align="right"
-    src="|filename|images/notification_proxy_digest.jpg"
+    src="{static}images/notification_proxy_digest.jpg"
     style="width: 250px;" title="Notification digest" alt="Notification digest">
   </a>
 

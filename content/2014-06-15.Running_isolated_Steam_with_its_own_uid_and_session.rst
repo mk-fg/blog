@@ -197,10 +197,10 @@ And yay - Kerbal Space Program seem to work here way faster than on Win7.
 
 .. html::
 
-	<a href="|filename|images/steam_ksp.jpg">
+	<a href="{static}images/steam_ksp.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/steam_ksp.jpg"
+		src="{static}images/steam_ksp.jpg"
 		title="Kerbal Space Program and Steam on Linux"
 		alt="KSP and Steam on Linux">
 	</a>

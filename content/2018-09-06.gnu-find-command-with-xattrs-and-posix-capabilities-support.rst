@@ -53,4 +53,4 @@ auto-hell and gnulib changes.
 
 .. _almost all of them do in one way or another: https://forums.grsecurity.net/viewtopic.php?f=7&t=2522
 .. _findutils-git in AUR: https://aur.archlinux.org/packages/findutils-git/
-.. _findutils-git-2101eda-xattrs.patch: |filename|misc/findutils-git-2101eda-xattrs.patch
+.. _findutils-git-2101eda-xattrs.patch: {static}misc/findutils-git-2101eda-xattrs.patch

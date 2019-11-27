@@ -25,10 +25,10 @@ preserve forever, so I figured it'll bite me eventually, somewhat like this:
 
 .. html::
 
-	<a href="|filename|images/github_keys_fail.png">
+	<a href="{static}images/github_keys_fail.png">
 	<img
 		style="width: 400px;"
-		src="|filename|images/github_keys_fail.png"
+		src="{static}images/github_keys_fail.png"
 		title="Google finds everything you forget"
 		alt="massive security fail">
 	</a>

@@ -90,10 +90,10 @@ super-trippy ways, very much representative of the glacial underlying audio ryth
 
 .. html::
 
-  <a href="|filename|images/mpv-ffmpeg-vis-snapshot.jpg">
+  <a href="{static}images/mpv-ffmpeg-vis-snapshot.jpg">
   <img
     style="width: 520px;"
-    src="|filename|images/mpv-ffmpeg-vis-snapshot.jpg"
+    src="{static}images/mpv-ffmpeg-vis-snapshot.jpg"
     title="mpv ffmpeg visualization snapshot"
     alt="mpv ffmpeg visualization snapshot">
   </a>

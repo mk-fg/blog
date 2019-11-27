@@ -10,10 +10,10 @@ A friend gave me this thing to play with (and eventually adapt to his purposes).
 
 .. html::
 
-  <a href="|filename|images/launchpad.jpg">
+  <a href="{static}images/launchpad.jpg">
   <img
     style="width: 550px;"
-    src="|filename|images/launchpad.jpg"
+    src="{static}images/launchpad.jpg"
     title="Launchpad box and contents"
     alt="Launchpad box and contents">
   </a>

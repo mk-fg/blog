@@ -23,10 +23,10 @@ layout`_) page without much style:
 
 .. html::
 
-	<a href="|filename|images/ff_home_cloud.jpg">
+	<a href="{static}images/ff_home_cloud.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/ff_home_cloud.jpg"
+		src="{static}images/ff_home_cloud.jpg"
 		title="My Weird Firefox Homepage"
 		alt="homepage screenshot">
 	</a>

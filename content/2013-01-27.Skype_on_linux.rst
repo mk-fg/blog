@@ -134,7 +134,7 @@ Basically, what's needed for skype to run is it's own data/media files
 .. html::
 
   <img style="width: 550px;"
-    src="|filename|images/skype_on_vnc.jpg"
+    src="{static}images/skype_on_vnc.jpg"
     title="Skype started $DEITY-knows-where over VNC"
     alt="Skype started $DEITY-knows-where over VNC">
 

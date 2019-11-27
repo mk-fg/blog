@@ -38,7 +38,7 @@ Basically converting some free-form .rst (as in ReST or reStructuredText_) like 
 
 Into this:
 
-.. figure:: |filename|images/conky-rst-calendar.jpg
+.. figure:: {static}images/conky-rst-calendar.jpg
    :alt: conky calendar from rst
 
 Though usually with a bit less theatrical evil and more useful events you don't

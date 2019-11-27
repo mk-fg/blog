@@ -107,4 +107,4 @@ migrating to use these is too much hassle for now, here's a `patch for
 .. _they might make a comeback in the future (LWN): https://lwn.net/Articles/616859/
 .. _Arch Linux ARM: http://archlinuxarm.org/
 .. _PKGBUILD dir: https://github.com/archlinuxarm/PKGBUILDs/blob/master/core/linux-am33x/
-.. _patch for 3.19.1-bone4 am335x-bone-common.dtsi: |filename|misc/linux-3.19.1-bone4_am335x-bone-common-dtsi_enable-i2c1-i2c2.patch
+.. _patch for 3.19.1-bone4 am335x-bone-common.dtsi: {static}misc/linux-3.19.1-bone4_am335x-bone-common-dtsi_enable-i2c1-i2c2.patch

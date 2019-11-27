@@ -12,10 +12,10 @@ Basic idea is to implement something like this:
 
 .. html::
 
-  <a href="|filename|images/rpi-adc-ui-mockup.png">
+  <a href="{static}images/rpi-adc-ui-mockup.png">
   <img
     style="width: 520px;"
-    src="|filename|images/rpi-adc-ui-mockup.png"
+    src="{static}images/rpi-adc-ui-mockup.png"
     title="RPi ADC UI mockup"
     alt="RPi ADC UI mockup">
   </a>

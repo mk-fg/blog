@@ -487,4 +487,4 @@ And the diff-generation code:
   language at their disposal and db event handlers would be stored on the file
   system, where they belong, w/o tying db to the host that way.
 
-.. |list_http_availability table data| image:: |filename|images/http_availability_list.jpg
+.. |list_http_availability table data| image:: {static}images/http_availability_list.jpg

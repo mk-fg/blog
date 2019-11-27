@@ -19,10 +19,10 @@ And this has been bugging me for a while - there seem to be no easy way to get t
 
 .. html::
 
-	<a href="|filename|images/liac_interleaved_colorized_output.jpg">
+	<a href="{static}images/liac_interleaved_colorized_output.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/liac_interleaved_colorized_output.jpg"
+		src="{static}images/liac_interleaved_colorized_output.jpg"
 		title="Interleaved/colorized output for several log files"
 		alt="interleaved_and_colorized_output_image">
 	</a>

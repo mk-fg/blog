@@ -36,8 +36,8 @@ actually `coffeescript <http://jashkenas.github.com/coffee-script/>`_, `here
 
 .. html::
 
-  <a href="|filename|images/web_du.jpg">
-  <img src="|filename|images/web_du.jpg"
+  <a href="{static}images/web_du.jpg">
+  <img src="{static}images/web_du.jpg"
     style="width: 550px;" title="it's just like xdiskusage" alt="it's just like xdiskusage">
   </a>
 

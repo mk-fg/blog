@@ -9,10 +9,10 @@ Really simple curses-based tool which I've been kinda-missing for years:
 
 .. html::
 
-  <a href="|filename|images/tui-binary-conv.jpg">
+  <a href="{static}images/tui-binary-conv.jpg">
   <img
     style="width: 529px;"
-    src="|filename|images/tui-binary-conv.jpg"
+    src="{static}images/tui-binary-conv.jpg"
     title="TUI dec/hex/binary converter tool"
     alt="TUI dec/hex/binary converter tool">
   </a>

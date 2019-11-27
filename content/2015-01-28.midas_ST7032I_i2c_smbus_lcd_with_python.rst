@@ -15,10 +15,10 @@ and 3.3V BeagleBone Black I2C bus:
 
 .. html::
 
-	<a href="|filename|images/st7032i_midas_i2c_lcd.jpg">
+	<a href="{static}images/st7032i_midas_i2c_lcd.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/st7032i_midas_i2c_lcd.jpg"
+		src="{static}images/st7032i_midas_i2c_lcd.jpg"
 		title="Simple digital clock code on LCD over ST7032I I2C (clicky!)"
 		alt="simple digital clock on lcd">
 	</a>

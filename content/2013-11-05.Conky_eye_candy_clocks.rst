@@ -14,10 +14,10 @@ at it?
 
 .. html::
 
-	<a href="|filename|images/conky_clocks.jpg">
+	<a href="{static}images/conky_clocks.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/conky_clocks.jpg"
+		src="{static}images/conky_clocks.jpg"
 		title="Fancy conky meters and clocks (clicky!)"
 		alt="conky screenshot">
 	</a>

@@ -78,7 +78,7 @@ Scenario 1: fully network-aware client.
 
 .. html::
 
-  <img align="right" src="|filename|images/gluster_sc1.png">
+  <img align="right" src="{static}images/gluster_sc1.png">
 
 That's actually the simpliest scenario - glusterfsd.vol files on "nodes" should
 just export local disks and client configuration ties it all together.
@@ -103,8 +103,8 @@ Scenario 2: server-side replication.
 
 .. html::
 
-  <img align="right" src="|filename|images/gluster_sc2_1.png">
-  <img align="right" src="|filename|images/gluster_sc2_2.png">
+  <img align="right" src="{static}images/gluster_sc2_1.png">
+  <img align="right" src="{static}images/gluster_sc2_2.png">
 
 Here, "nodes" export local disks for each other and gather local+remote db1 into
 cluster/replicate and then export this already-replicated volume. Client just
@@ -125,7 +125,7 @@ Scenario 3: server-side replication + fully-aware client.
 
 .. html::
 
-  <img align="right" src="|filename|images/gluster_sc3.png">
+  <img align="right" src="{static}images/gluster_sc3.png">
 
 db1 replicas are synced by "nodes" and client mounts all three volumes (2 x db1,
 1 x db2) with either cluster/unify layer and nufa scheduler (listing both db1

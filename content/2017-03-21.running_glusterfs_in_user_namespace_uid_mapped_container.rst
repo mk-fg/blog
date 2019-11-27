@@ -65,7 +65,7 @@ time (is made of) flies :)
 
 .. _glusterfs: http://gluster.org/
 .. _user_namespaces(7): http://man7.org/linux/man-pages/man7/user_namespaces.7.html
-.. _glusterfs-3.10.0--xattr-user-namespace.patch: |filename|misc/glusterfs-3.10.0--xattr-user-namespace.patch
-.. _glusterfs-xattr-trusted-to-user.py: |filename|misc/glusterfs-xattr-trusted-to-user.py
+.. _glusterfs-3.10.0--xattr-user-namespace.patch: {static}misc/glusterfs-3.10.0--xattr-user-namespace.patch
+.. _glusterfs-xattr-trusted-to-user.py: {static}misc/glusterfs-xattr-trusted-to-user.py
 .. _patch-nspawn-ids: https://github.com/mk-fg/fgtk/blob/master/patch-nspawn-ids
 .. _short patch-nspawn-ids description: https://github.com/mk-fg/fgtk/#patch-nspawn-ids

@@ -172,6 +172,6 @@ tool `has been added`_ to `openvg lib`_ repo under `"go-client/splash"`_.
 .. _feh: http://feh.finalrewind.org/
 .. _VideoCore APIs: http://elinux.org/Raspberry_Pi_VideoCore_APIs
 .. _openvg lib: https://github.com/ajstarks/openvg/
-.. _overlay-image.go: |filename|misc/overlay-image.go
+.. _overlay-image.go: {static}misc/overlay-image.go
 .. _has been added: https://github.com/ajstarks/openvg/pull/38
 .. _"go-client/splash": https://github.com/ajstarks/openvg/blob/master/go-client/splash/splash.go

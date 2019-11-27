@@ -14,7 +14,7 @@ right of FF menu bar (which I have always-visible):
 .. html::
 
   <img
-    src="|filename|images/ff_extension_button_target.jpg"
+    src="{static}images/ff_extension_button_target.jpg"
     title="FF Extension button that I want clicked"
     alt="ff extension button">
 
@@ -68,7 +68,7 @@ Whole process can be split into several steps:
   .. html::
 
     <img
-      src="|filename|images/ff_extension_button_id.jpg"
+      src="{static}images/ff_extension_button_id.jpg"
       title="FF Extension button 'id' attribute"
       alt="ff extension button 'id' attribute">
 

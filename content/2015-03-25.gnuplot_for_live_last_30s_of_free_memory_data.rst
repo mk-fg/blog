@@ -137,9 +137,9 @@ terminals had in the past`_:
 
 .. html::
 
-  <a href="|filename|images/gnuplot_xterm_output.jpg">
+  <a href="{static}images/gnuplot_xterm_output.jpg">
   <img style="width: 520px;"
-    src="|filename|images/gnuplot_xterm_output.jpg"
+    src="{static}images/gnuplot_xterm_output.jpg"
     title="gnuplot and Xterm Tektronix 4014 Mode"
     alt="gnuplot and Xterm Tektronix 4014 Mode">
   </a>
@@ -150,9 +150,9 @@ Regular x11 output looks nice and clean enough though:
 
 .. html::
 
-  <a href="|filename|images/gnuplot_x11_output.jpg">
+  <a href="{static}images/gnuplot_x11_output.jpg">
   <img style="width: 520px;"
-    src="|filename|images/gnuplot_x11_output.jpg"
+    src="{static}images/gnuplot_x11_output.jpg"
     title="gnuplot x11 output" alt="gnuplot x11 output">
   </a>
 

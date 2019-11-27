@@ -15,10 +15,10 @@ Basically, I needed this:
 
 .. html::
 
-	<a href="|filename|images/d3_scales_graph.jpg">
+	<a href="{static}images/d3_scales_graph.jpg">
 	<img
 		style="width: 520px;"
-		src="|filename|images/d3_scales_graph.jpg"
+		src="{static}images/d3_scales_graph.jpg"
 		title="Different d3 scales with same domain/range"
 		alt="d3 scales graph">
 	</a>

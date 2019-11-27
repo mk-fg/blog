@@ -184,8 +184,8 @@ whatever is advertised, if hw supports all that stuff.
 .. _hostapd tool: https://w1.fi/hostapd/
 .. _configuration file: https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf
 .. _DFS (dynamic frequency selection): https://en.wikipedia.org/wiki/Channel_allocation_schemes#DFS
-.. _hostapd-2.6-no-bss-conflicts.patch: |filename|misc/hostapd-2.6-no-bss-conflicts.patch
-.. _crda-3.18-remove-sig-check.patch: |filename|misc/crda-3.18-remove-sig-check.patch
-.. _wireless-regdb-2016.06.10-regdb-US-unlock.patch: |filename|misc/wireless-regdb-2016.06.10-regdb-US-unlock.patch
+.. _hostapd-2.6-no-bss-conflicts.patch: {static}misc/hostapd-2.6-no-bss-conflicts.patch
+.. _crda-3.18-remove-sig-check.patch: {static}misc/crda-3.18-remove-sig-check.patch
+.. _wireless-regdb-2016.06.10-regdb-US-unlock.patch: {static}misc/wireless-regdb-2016.06.10-regdb-US-unlock.patch
 .. _hostapd.conf: https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf
 .. _wpa_supplicant: https://w1.fi/wpa_supplicant/

@@ -16,10 +16,10 @@ So here's the plot:
 
 .. html::
 
-  <a href="|filename|images/d3_t_rh_chart.jpg">
+  <a href="{static}images/d3_t_rh_chart.jpg">
   <img
     style="width: 520px;"
-    src="|filename|images/d3_t_rh_chart.jpg"
+    src="{static}images/d3_t_rh_chart.jpg"
     title="d3 t/rh chart"
     alt="d3 t/rh chart image">
   </a>

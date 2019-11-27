@@ -26,9 +26,9 @@ directly into the board.
 
 .. html::
 
-  <a href="|filename|images/led_notification.jpg">
+  <a href="{static}images/led_notification.jpg">
   <img align="right"
-    src="|filename|images/led_notification.jpg"
+    src="{static}images/led_notification.jpg"
     title="LED indicators from a mini-ITX board"
     alt="LED indicators from a mini-ITX board">
   </a>

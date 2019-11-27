@@ -29,16 +29,11 @@ help:
 	@echo '                                                                       '
 
 
-html: | clean $(OUTPUTDIR)/index.html update_legacy_links
+html: | clean $(OUTPUTDIR)/index.html
 	@echo 'Done'
 
 $(OUTPUTDIR)/%.html:
 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(CONFFILE) $(PELICANOPTS)
-
-update_legacy_links:
-	@awk\
-		'match($$0,/^\s*<!-- legacy-link: (.*) -->\s*$$/,a) {sub(/^output\//, "", FILENAME); print a[1], FILENAME}'\
-		output/*/*/*/*.html | sort -u | ./dynamic/legacy_redirect.py
 
 clean:
 	find $(OUTPUTDIR) -mindepth 1 -delete
@@ -64,12 +59,12 @@ stopserver:
 	$(BASEDIR)/develop_server.sh stop &>/dev/null
 	@echo 'Stopped Pelican and SimpleHTTPServer processes running in background.'
 
-publish_build:
+publish:
 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(PUBLISHCONF) $(PELICANOPTS)
 
-publish: | publish_build update_legacy_links
-
-appengine: publish
+sync: publish
 	$(BASEDIR)/sync.sh
 
-.PHONY: html update_legacy_links help clean regenerate serve devserver stopserver publish publish_build appengine
+appengine: sync
+
+.PHONY: html help clean regenerate serve devserver stopserver publish appengine sync
