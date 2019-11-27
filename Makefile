@@ -18,14 +18,14 @@ help:
 	@echo 'Makefile for a pelican Web site                                        '
 	@echo '                                                                       '
 	@echo 'Usage:                                                                 '
-	@echo '   make html                        (re)generate the web site          '
-	@echo '   make clean                       remove the generated files         '
+	@echo '   make html                        (re)generate htmls in output dir   '
+	@echo '   make clean                       remove generated files             '
 	@echo '   make regenerate                  regenerate files upon modification '
 	@echo '   make publish                     generate using production settings '
 	@echo '   make serve [PORT=8000]           serve site at http://localhost:8000'
 	@echo '   make devserver [PORT=8000]       start/restart develop_server.sh    '
 	@echo '   make stopserver                  stop local server                  '
-	@echo '   make appengine                   push data up to the mothership     '
+	@echo '   make sync                        push data up to the mothership     '
 	@echo '                                                                       '
 
 
