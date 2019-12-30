@@ -1,0 +1,406 @@
+My list of essential firefox setup hacks in 2019
+################################################
+
+:date: 2019-12-30 14:05
+:tags: desktop, web
+
+
+I've been hopping between browsers for as long as I remember using them,
+and in this last iteration, had a chance to setup waterfox_ from scratch.
+
+"Waterfox" is a fork of Mozilla Firefox with no ads, tracking and other
+user-monetization nonsense, and with mandatory extension signing disabled.
+
+So thought to collect my (incomplete) list of hacks which had to be applied
+on top and around it, to make the thing work like I want it to, though it's
+impossible to remember them all, especially most obvious must-have stuff that
+you don't even think about.
+
+This list should get outdated fast, and probably won't be updated,
+so be sure to check whether stuff on it is still relevant first.
+
+
+- waterfox_ itself, built from stable source, with any kind of local extra
+  patches can be applied and tracked in `that build script (Arch PKGBUILD)`_.
+
+  Note that it comes in two variants - Current and Classic, and "Classic" is
+  almost certainly not the one you want, unless you know exactly what you want it
+  for (old pre-webext addons, some integration features, memory constraints, etc).
+
+  Key feature for me, also mentioned above, is that it allows installing any
+  modified extensions - want to be able to edit anything I install, plus add my
+  own without asking mozilla for permission.
+
+  | Removal of various Mozilla's adware and malware from it is also a plus.
+  | Oh, and it has Dark Theme out of the box too!
+
+  | Build takes a while and uses ~8G of RAM for linking libxul.so.
+  | Not really a problem though - plenty of spare cpu in the background and overnight.
+
+.. _waterfox: https://www.waterfoxproject.org/
+.. _that build script (Arch PKGBUILD): https://github.com/mk-fg/archlinux-pkgbuilds/tree/master/waterfox-current
+
+
+- `Restrictive AppArmor profile for waterfox-current`_
+
+  Modern browsers are very complex bloatware with ton of bugs and impossible to
+  secure, despite devs' monumental efforts to contain and patch these pillars of
+  crap from leaking, so something like this is absolutely essential.
+
+  I use custom AppArmor profile as I've been writing them for years,
+  but something pre-made like firejail_ would probably work too.
+
+.. _Restrictive AppArmor profile for waterfox-current: https://github.com/mk-fg/apparmor-profiles/blob/master/profiles/usr.bin.waterfox
+.. _firejail: https://wiki.archlinux.org/index.php/Firejail
+
+
+- CGroups for controlling resource usage.
+
+  Again, browsers are notorious for this. Nuff said.
+
+  See earlier `cgroup-v2-resource-limits-for-apps`_ post here and `cgrc tool`_
+  for more info, as well as `kernel docs on cgroup-v2`_ (or `cgroup-v1 docs`_ if
+  you still use these).
+
+  They are very simple to use, even via something like ``mkdir ff && echo 3G >
+  ff/memory.max && pgrep waterfox > ff/cgroup.procs``, without any extra tools.
+
+.. _cgroup-v2-resource-limits-for-apps: https://blog.fraggod.net/2019/10/02/cgroup-v2-resource-limits-for-apps-with-systemd-scopes-and-slices.html
+.. _cgrc tool: https://github.com/mk-fg/fgtk#cgrc
+.. _kernel docs on cgroup-v2: https://www.kernel.org/doc/Documentation/cgroup-v2.txt
+.. _cgroup-v1 docs: https://www.kernel.org/doc/Documentation/cgroup-v1/
+
+
+- `ghacks user.js`_ - basic cleanup of Mozilla junk and generally useless features.
+
+  There are some other similar user.js templates/collections,
+  see `compare-user.js`_ and Tor Browser user.js hacks somewhere.
+  Be sure to start from "what is user.js" page, and go through the whole thing,
+  overriding settings there that don't make sense for you.
+
+  I would suggest installing it not as a modified user.js, but as a vendor.js
+  file without any modification, which would make it easier to diff and maintain
+  later, as it won't copy all its junk to your prefs.js forever, and just use
+  values as about:config defaults instead.
+
+  vendor.js files are drop-in .js files in dir like
+  ``/opt/waterfox-current/browser/defaults/preferences``, which are read
+  last-to-first alphabetically, so I'd suggest putting ghacks user.js as
+  "%ghacks.js" or such there, and it'll override anything.
+
+  Important note: replace ``user_pref(`` with ``pref(`` there, which should be
+  easy to replace back for diffs/patches later.
+
+  I'm used to browser always working in "Private Mode", storing anything I want
+  to remember in bookmarks or text files for later reference, and never
+  remembering anything between browser restarts, so most severe UI changes there
+  make sense for me, but might annoy someone more used to having e.g. urlbar
+  suggestions, persistent logins or password storage.
+
+.. _ghacks user.js: https://github.com/ghacksuserjs/ghacks-user.js/
+.. _compare-user.js: https://jm42.github.io/compare-user.js/
+
+
+- Notable user.js tweaks:
+
+  - ``user_pref("privacy.resistFingerprinting.letterboxing", false);``
+
+    | Obnoxious privacy setting in ghacks to avoid fingerprinting by window size.
+    | It looks really ugly and tbh I don't care that much about privacy.
+
+  - ``user_pref("permissions.default.shortcuts", 2);``
+
+    Disallows sites to be able to override basic browser controls.
+
+  - Lower audio volume - prevents sites from deafening you every time:
+
+    | ``user_pref("media.default_volume", "0.1");``
+    | ``user_pref("media.volume_scale", "0.01");``
+
+  - Various tabs-related behavior - order of adding, switching, closing, etc:
+
+    | ``user_pref("browser.tabs.closeWindowWithLastTab", false);``
+    | ``user_pref("browser.tabs.loadBookmarksInTabs", true);``
+    | ``user_pref("browser.tabs.insertAfterCurrent", true);``
+    | ``user_pref("browser.ctrlTab.recentlyUsedOrder", false);``
+
+  - Disable all "where do you want to download?" dialogs, disable opening .mp3
+    and such in browser, disable "open with" (won't work from container anyway):
+
+    | ``user_pref("browser.download.useDownloadDir", true);``
+    | ``user_pref("browser.download.forbid_open_with", true);``
+    | ``user_pref("media.play-stand-alone", false);``
+
+    See also handlers.json file for tweaking filetype-specific behavior.
+
+  - Disable media autoplay: ``user_pref("media.autoplay.default", 5);``
+
+  - Disable all web-notification garbage:
+
+    | ``user_pref("dom.webnotifications.enabled", false);``
+    | ``user_pref("dom.webnotifications.serviceworker.enabled", false);``
+
+  - Disable browser-UI/remote debugging in user.js, so that you'd have to enable
+    it every time on per-session basis, when it's (rarely) needed:
+
+    | ``user_pref("devtools.chrome.enabled", false);``
+    | ``user_pref("devtools.debugger.remote-enabled", false);``
+
+  - Default charset to utf-8 (it's 2019 ffs!):
+
+    | ``user_pref("intl.charset.fallback.override", "utf-8");``
+
+  - Disable as many webapis and protocols that I never use as possible:
+
+    | ``user_pref("permissions.default.camera", 2);``
+    | ``user_pref("permissions.default.microphone", 2);``
+    | ``user_pref("geo.enabled", false);``
+    | ``user_pref("permissions.default.geo", 2);``
+    | ``user_pref("network.ftp.enabled", false);``
+    | ``user_pref("full-screen-api.enabled", false);``
+    | ``user_pref("dom.battery.enabled", false);``
+    | ``user_pref("dom.vr.enabled", false);``
+
+    Note that some of such APIs are disabled by ghacks, but not all of them,
+    as presumably some people want them, sometimes, maybe, not sure why.
+
+  - Reader Mode (``about:reader=<url>``, see also keybinding hack below):
+
+    | ``user_pref("reader.color_scheme", "dark");``
+    | ``user_pref("reader.content_width", 5);``
+
+  - Disable lots of "What's New", "Greetings!" pages, "Are you sure?" warnings,
+    "pocket" (malware) and "identity" (Mozilla tracking account) buttons:
+
+    | ``user_pref("browser.startup.homepage_override.mstone", "ignore");``
+    | ``user_pref("startup.homepage_welcome_url", "");``
+    | ``user_pref("startup.homepage_welcome_url.additional", "");``
+    | ``user_pref("startup.homepage_override_url", "");``
+    | ``user_pref("browser.messaging-system.whatsNewPanel.enabled", false);``
+    | ``user_pref("extensions.pocket.enabled", false);``
+    | ``user_pref("identity.fxaccounts.enabled", false);``
+    | ``user_pref("browser.tabs.warnOnClose", false);``
+    | ``user_pref("browser.tabs.warnOnCloseOtherTabs", false);``
+    | ``user_pref("browser.tabs.warnOnOpen", false);``
+    | ``user_pref("full-screen-api.warning.delay", 0);``
+    | ``user_pref("full-screen-api.warning.timeout", 0);``
+
+  - Misc other stuff:
+
+    | ``user_pref("browser.urlbar.decodeURLsOnCopy", true);``
+    | ``user_pref("browser.download.autohideButton", false);``
+    | ``user_pref("accessibility.typeaheadfind", true);`` - "Find As You Type"
+    | ``user_pref("findbar.highlightAll", true);``
+    | ``user_pref("clipboard.autocopy", false);`` - Linux Xorg auto-copy
+    | ``user_pref("layout.spellcheckDefault", 0);``
+    | ``user_pref("browser.backspace_action", 2);`` - 2=do-nothing
+    | ``user_pref("general.autoScroll", false);`` - middle-click scrolling
+    | ``user_pref("ui.key.menuAccessKey", 0);`` - alt-key for menu bar on top
+
+  Most other stuff I have there are overrides for ghacks vendor.js file,
+  so again, be sure to scroll through that one and override as necessary.
+
+
+- omni.ja keybinding hacks - browser quit key and reader key.
+
+  Linux-default Ctrl+Q key is too close to Ctrl+W (close tab), and is
+  frustrating to mis-press and kill all your tabs sometimes.
+
+  Easy to rebind to e.g. Ctrl+Alt+Shift+Q by unpacking
+  ``/opt/waterfox-current/omni.ja`` zip file and changing stuff there.
+
+  File you want in there is ``chrome/browser/content/browser/browser.xul``,
+  set ``modifiers="accel,shift,alt"`` for key_quitApplication there,
+  and remove ``disabled="true"`` from key_toggleReaderMode (also use
+  ``modifiers="alt"`` for it, as Ctrl+Alt+R is already used for cache-ignoring reload).
+
+  ``zip -qr0XD ../omni.ja *`` command can be used to pack stuff back into "omni.ja".
+
+  After replacing omni.ja, do ``rm -Rf ~/.cache/waterfox/*/startupCache/`` too.
+
+  Note that bunch of other non-hardcoded stuff can also be changed there easily,
+  see e.g. `shallowsky.com modifying-omni.ja post`_.
+
+.. _shallowsky.com modifying-omni.ja post: http://shallowsky.com/blog/tech/web/modifying-omni.ja.html
+
+
+- Increase browser UI font size and default page fonts.
+
+  First of all, user.js needs
+  ``user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);``
+  line to easily change UI stuff from profile dir (instead of omni.ja or such).
+
+  Then ``<profile>/chrome/userChrome.css`` can be used to set UI font size::
+
+    * { font-size: 15px !important; }
+
+  Page font sizes can be configured via Preferences or user.js::
+
+    user_pref("font.name.monospace.x-western", "Liberation Mono");
+    user_pref("font.name.sans-serif.x-western", "Liberation Sans");
+    user_pref("font.name.serif.x-western", "Liberation Sans");
+    user_pref("font.size.monospace.x-western", 14);
+    user_pref("font.size.variable.x-western", 14);
+
+  I also keep ``pref("browser.display.use_document_fonts", 0);`` from ghacks
+  enabled, so it's important to set some sane defaults here.
+
+
+- Hide all "search with" nonsense from URL bar and junk from context menus.
+
+  Also done via userChrome.css - see "UI font size" above for more details::
+
+    #urlbar-results .search-one-offs { display: none !important; }
+
+  If context menus (right-click) have options you never use,
+  they can also be removed::
+
+    #context-bookmarklink, #context-searchselect,
+      #context-openlinkprivate { display: none !important; }
+
+  See `UserChrome.css_Element_Names/IDs`_ page on mozillazine.org for IDs of
+  these, or enable "browser chrome" + "remote" debugging (two last ones) in
+  F12 - F1 menu and use Ctrl+Shift+Alt+I to inspect browser GUI (note that all
+  menu elements are already there, even if not displayed - look them up via css
+  selectors).
+
+.. _UserChrome.css_Element_Names/IDs: http://kb.mozillazine.org/UserChrome.css_Element_Names/IDs#Firefox_menus
+
+
+- Remove crazy/hideous white backgrounds blinding you every time you open
+  browser windows or tabs there.
+
+  AFAIK this is not possible to do cleanly with extension only - needs
+  userChrome.css / userContent.css hacks as well.
+
+  All of these tweaks I've documented in `mk-fg/waterfox#new-tab`_, with end
+  result being removing all white backgrounds in new browser/window/tab pages
+  and loading 5-liner html with static image background there.
+
+  Had to make my own extension, as all others doing this are overcomplicated,
+  and load background js into every tab, use angular.js and bunch of other junk.
+
+.. _mk-fg/waterfox#new-tab: https://github.com/mk-fg/waterfox#new-tab
+
+
+- Extensions!
+
+  I always install and update these manually after basic code check
+  and understanding how they work, as it's fun and helps to keep the bloat
+  as well as any unexpected surprises at bay.
+
+  Absolutely essential multipurpose ones:
+
+  - `uBlock Origin`_
+
+    Be sure to also check how to add "My Filters" there, as these are just as
+    useful as adblocking for me.
+
+    Modern web pages are bloated with useless headers, sidebars, stars, modal
+    popups, social crap, buttons, etc - just as much as with ads, so it's very
+    useful to remove all this shit, except for actual content.
+    For example - stackoverflow::
+
+      stackoverflow.com## .top-bar
+      stackoverflow.com## #left-sidebar
+      stackoverflow.com## #sidebar
+      stackoverflow.com## #js-gdpr-consent-banner
+      stackoverflow.com## .js-dismissable-hero
+
+    Just use Ctrl+Shift+C and tree to find junk elements and add their
+    classes/ids there on per-site basis like that, they very rarely change.
+
+  - uMatrix_ - best NoScript-type addon.
+
+    Blocks all junk-js, tracking and useless integrations with minimal setup,
+    and is very easy to configure for sites on-the-fly.
+
+  General usability ones:
+
+  - `Add custom search engine`_ - I use these via urlbar keywords all the time
+    (e.g. "d some query" for ddg), not just for search, and have few dozen of
+    them, all created via this handy extension.
+
+    Alternative can be using https://ready.to/search/en/ - which also generates
+    OpenSearch XML from whatever you enter there.
+
+    Firefox search is actually a bit limited wrt how it builds resulting URLs
+    due to forced encoding (e.g. can't transform "ghr mk-fg/blog" to github repo
+    URL), which can be fixed via an external tool - see `mk-fg/waterfox#redirectorml`_
+    for more details.
+
+  - `Mouse Gesture Events`_ - simpliest/fastest one for gestures that I could find.
+
+    Some other ones are quite appalling wrt bloat they bring in, unlike this one.
+
+  - `HTTPS by default`_ - better version of "HTTPS Everywhere" - much simplier
+    and more well-suited for modern web, where defaulting to ``http://`` is just
+    wrong, as everyone and their dog are either logging these or putting
+    ads/malware into them on-the-fly.
+
+  - `Proxy Toggle`_ with some modifications (see `mk-fg/waterfox#proxy-toggle-local`_).
+
+    Allows to toggle proxy on/off in one keypress or click, with good visual
+    indication, and is very simple internally - only does what it says on the tin.
+
+  - `force-english-language`_ - my fix for otherwise-useful ghacks'
+    anti-fingerprinting settings confusing sites into thinking that I want them
+    to guess language from my IP address.
+
+    This is never a good thing, so this simple 10-js-lines addon adds back
+    necessary headers and JS values to make sites always use english.
+
+  - `Download Manager S3`_ - adds sane indication for downloads.
+
+.. _uBlock Origin: https://github.com/gorhill/uBlock/releases
+.. _uMatrix: https://github.com/gorhill/uMatrix/releases
+.. _Add custom search engine: https://addons.mozilla.org/en-US/firefox/addon/add-custom-search-engine/?src=search
+.. _mk-fg/waterfox#redirectorml: https://github.com/mk-fg/waterfox#redirectorml
+.. _Mouse Gesture Events: https://addons.mozilla.org/en-US/firefox/addon/mouse-gestures/
+.. _HTTPS by default: https://addons.mozilla.org/en-US/firefox/addon/https-by-default/
+.. _Proxy Toggle: https://addons.mozilla.org/en-US/firefox/addon/proxy-toggle/
+.. _mk-fg/waterfox#proxy-toggle-local: https://github.com/mk-fg/waterfox#proxy-toggle-local
+.. _force-english-language: https://github.com/mk-fg/waterfox#force-english-language
+.. _Download Manager S3: https://addons.mozilla.org/en-US/firefox/addon/s3download-statusbar/
+
+
+- Handling for bittorrent magnet URLs.
+
+  Given AppArmor container (see above), using xdg-open for these is quite
+  "meh" - opens up a really fat security exception.
+
+  But there is another - simplier (for me at least) - way, to use some trivial
+  wrapper binary - see all details in `mk-fg/waterfox#url-handler-c`_.
+
+.. _mk-fg/waterfox#url-handler-c: https://github.com/mk-fg/waterfox#url-handler-c
+
+
+- RSS and Atom feeds.
+
+  Browsers stopped supporting these, but they're still useful for various
+  periodic content.
+
+  Used to work around this limitation via extensions (rendering feeds in
+  browser) and webapps like feedjack_, but found that feed contents are only
+  useful for notifications or to deliver and download files anyway (e.g. podcast
+  feeds), so ended up making and using external tools for that - rss-get_ and riet_.
+
+.. _feedjack: https://github.com/mk-fg/feedjack
+.. _rss-get: https://github.com/mk-fg/fgtk#rss-get
+.. _riet: https://github.com/mk-fg/rst-icalendar-event-tracker
+
+
+Was kinda surprised to be able to work around most usability issues I had with
+FF so far, without any actual C++ code patches, and mostly without patches at
+all (keybindings kinda count, but can be done without rebuild).
+
+People love to hate on browsers (me too), but looking at any of the issues above
+(like "why can't I do X easier?"), there's almost always an open bug (which you
+can subscribe to), often with some design, blockers and a roadmap even, so can
+at least understand how these hang around for years in such a massive project.
+
+Also, comparing it to ungoogled-chromium_ that I've used for about a year before
+migrating here, FF still offers much more customization and
+power-user-friendliness, even if not exactly out of the box.
+
+.. _ungoogled-chromium: https://github.com/Eloston/ungoogled-chromium

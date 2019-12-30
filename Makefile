@@ -22,8 +22,7 @@ help:
 	@echo '   make clean                       remove generated files             '
 	@echo '   make regenerate                  regenerate files upon modification '
 	@echo '   make publish                     generate using production settings '
-	@echo '   make serve [PORT=8000]           serve site at http://localhost:8000'
-	@echo '   make devserver [PORT=8000]       start/restart develop_server.sh    '
+	@echo '   make devserver                   start/restart develop_server.sh    '
 	@echo '   make stopserver                  stop local server                  '
 	@echo '   make sync                        push data up to the mothership     '
 	@echo '                                                                       '
@@ -41,23 +40,13 @@ clean:
 regenerate: clean
 	$(PELICAN) -r $(INPUTDIR) -o $(OUTPUTDIR) -s $(CONFFILE) $(PELICANOPTS)
 
-serve:
-ifdef PORT
-	cd $(OUTPUTDIR) && $(PY) -m pelican.server $(PORT)
-else
-	cd $(OUTPUTDIR) && $(PY) -m pelican.server
-endif
-
 devserver:
-ifdef PORT
-	$(BASEDIR)/develop_server.sh restart $(PORT) &>/dev/null
-else
-	$(BASEDIR)/develop_server.sh restart &>/dev/null
-endif
+	@cgrc -ru pelican apps-misc -- $(PELICAN) -ql --autoreload -r $(INPUTDIR) -o $(OUTPUTDIR) -s $(CONFFILE) $(PELICANOPTS) &>/dev/null &
+	@sleep 1 && { cgrc -rcu pelican || echo 'Pelican server is running in the background.'; }
 
 stopserver:
-	$(BASEDIR)/develop_server.sh stop &>/dev/null
-	@echo 'Stopped Pelican and SimpleHTTPServer processes running in background.'
+	@cgrc -lru pelican | xargs kill
+	@echo 'Stopped Pelican server.'
 
 publish:
 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(PUBLISHCONF) $(PELICANOPTS)
