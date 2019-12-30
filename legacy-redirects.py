@@ -62,7 +62,7 @@ def application(env, start_response):
 	if not url_redirect:
 		start_response('404 Not Found', [('Content-Type', 'text/html')])
 		err = f'404: Requested URL was not found: {url}'
-		return [f'<img alt="{err}" title="{err}" src=misc/ie404.png>'.encode()]
+		return [f'<img alt="{err}" title="{err}" src="/misc/ie404.png">'.encode()]
 
 	url_redirect = f'/{url_redirect}'
 	start_response( '301 Moved Permanently',

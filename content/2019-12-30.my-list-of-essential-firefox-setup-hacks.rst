@@ -21,9 +21,9 @@ so be sure to check whether stuff on it is still relevant first.
 
 
 - waterfox_ itself, built from stable source, with any kind of local extra
-  patches can be applied and tracked in `that build script (Arch PKGBUILD)`_.
+  patches applied and tracked in `that build script (Arch PKGBUILD)`_.
 
-  Note that it comes in two variants - Current and Classic, and "Classic" is
+  Note that it comes in two variants - Current and Classic, where "Classic" is
   almost certainly not the one you want, unless you know exactly what you want it
   for (old pre-webext addons, some integration features, memory constraints, etc).
 
@@ -212,7 +212,7 @@ so be sure to check whether stuff on it is still relevant first.
   File you want in there is ``chrome/browser/content/browser/browser.xul``,
   set ``modifiers="accel,shift,alt"`` for key_quitApplication there,
   and remove ``disabled="true"`` from key_toggleReaderMode (also use
-  ``modifiers="alt"`` for it, as Ctrl+Alt+R is already used for cache-ignoring reload).
+  ``modifiers="alt"`` for it, as Ctrl+Alt+R is already used for browser restart).
 
   ``zip -qr0XD ../omni.ja *`` command can be used to pack stuff back into "omni.ja".
 
@@ -377,13 +377,14 @@ so be sure to check whether stuff on it is still relevant first.
 
 - RSS and Atom feeds.
 
-  Browsers stopped supporting these, but they're still useful for various
+  Browsers stopped supporting these, but they're still useful for some
   periodic content.
 
   Used to work around this limitation via extensions (rendering feeds in
-  browser) and webapps like feedjack_, but found that feed contents are only
-  useful for notifications or to deliver and download files anyway (e.g. podcast
-  feeds), so ended up making and using external tools for that - rss-get_ and riet_.
+  browser) and webapps like feedjack_, but it's not 2010 anymore, and remaining
+  feed contents are mostly good for notifications or for download links
+  (e.g. podcast feeds), both of which don't need browser at all, so ended up
+  making and using external tools for that - rss-get_ and riet_.
 
 .. _feedjack: https://github.com/mk-fg/feedjack
 .. _rss-get: https://github.com/mk-fg/fgtk#rss-get
@@ -400,7 +401,7 @@ can subscribe to), often with some design, blockers and a roadmap even, so can
 at least understand how these hang around for years in such a massive project.
 
 Also, comparing it to ungoogled-chromium_ that I've used for about a year before
-migrating here, FF still offers much more customization and
-power-user-friendliness, even if not exactly out of the box.
+migrating here, FF still offers much more customization and power-user-friendliness,
+even if not always out of the box, and not as much as it used to.
 
 .. _ungoogled-chromium: https://github.com/Eloston/ungoogled-chromium
