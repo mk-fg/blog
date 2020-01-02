@@ -189,7 +189,7 @@ so be sure to check whether stuff on it is still relevant first.
 
     | ``user_pref("browser.urlbar.decodeURLsOnCopy", true);``
     | ``user_pref("browser.download.autohideButton", false);``
-    | ``user_pref("accessibility.typeaheadfind", true);`` - "Find As You Type"
+    | ``user_pref("accessibility.typeaheadfind", false);`` - disable "Find As You Type"
     | ``user_pref("findbar.highlightAll", true);``
     | ``user_pref("clipboard.autocopy", false);`` - Linux Xorg auto-copy
     | ``user_pref("layout.spellcheckDefault", 0);``
