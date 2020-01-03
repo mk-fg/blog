@@ -58,7 +58,7 @@ extra lib, as its API is very easy to use via ctypes, e.g.:
     dump = ct.c_char_p()
     run( 'sd_bus_message_read', reply, b's', ct.byref(dump),
       sig=[ct.POINTER(sd_bus_msg), ct.c_char_p, ct.POINTER(ct.c_char_p)] )
-    return dump.value.decode()
+    print(dump.value.decode())
   finally: run('sd_bus_flush_close_unref', bus, check=False)
 
 Which can be a bit more verbose than dbus-python API, but only needs libsystemd,
