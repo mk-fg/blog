@@ -350,7 +350,8 @@ so be sure to check whether stuff on it is still relevant first.
     This is never a good thing, so this simple 10-js-lines addon adds back
     necessary headers and JS values to make sites always use english.
 
-  - `Download Manager S3`_ - adds sane indication for downloads.
+  - `flush-site-data`_ - clears all stuff that sites store in browser without
+    needing to restart it. Useful to log out of all sites and opt out of all tracking.
 
 .. _uBlock Origin: https://github.com/gorhill/uBlock/releases
 .. _uMatrix: https://github.com/gorhill/uMatrix/releases
@@ -361,7 +362,7 @@ so be sure to check whether stuff on it is still relevant first.
 .. _Proxy Toggle: https://addons.mozilla.org/en-US/firefox/addon/proxy-toggle/
 .. _mk-fg/waterfox#proxy-toggle-local: https://github.com/mk-fg/waterfox#proxy-toggle-local
 .. _force-english-language: https://github.com/mk-fg/waterfox#force-english-language
-.. _Download Manager S3: https://addons.mozilla.org/en-US/firefox/addon/s3download-statusbar/
+.. _flush-site-data: https://github.com/mk-fg/waterfox#flush-site-data
 
 
 - Handling for bittorrent magnet URLs.
