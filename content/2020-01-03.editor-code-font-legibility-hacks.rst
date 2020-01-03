@@ -1,0 +1,77 @@
+Editor/code font legibility hacks
+#################################
+
+:date: 2020-01-03 05:11
+:tags: desktop, emacs, linux
+
+
+Doesn't seem to be a common thing to pay attention to outside of graphic/UI/UX
+design world, but if you stare at the code for significant chunk of the day,
+it's a good thing to customize/optimize at least a bit.
+
+I've always used var-width fonts for code in emacs_, and like them vs monospace
+ones for general readability and being much more compact, but noticed one major
+shortcoming over the years: some punctuation marks are very hard to tell apart.
+
+While this is not an issue in free-form text, where you don't care much whether
+some tiny dot is a comma or period, it's essential to differentiate these in code.
+
+And in fonts which I tend to use (like Luxi Sans or Liberation Sans), "." and
+"," in particular tend to differ by something like 1-2 on-screen pixels, which
+is bad, as I've noticed straining to distinguish the two sometimes, or putting
+one instead of another via typo and not noticing, because it's hard to notice.
+
+It's a kind of thing that's like a thorn that always torments, but easy to
+fix once you identify it as a problem and actually look into it.
+
+Emacs in particular allows to replace one char with another visually::
+
+  (unless standard-display-table
+    (setq standard-display-table (make-display-table)))
+  (aset standard-display-table ?, (vconcat "˾"))
+  (aset standard-display-table ?. (vconcat "❟"))
+
+Most fonts have ton of never-used-in-code unicode chars to choose distinctive
+replacements from, which are easy to browse via gucharmap_ or such.
+
+One problem can be emacs using faces with different font somewhere after such
+replacement, which might not have these chars in them, so will garble these,
+but that's rare and also easy to fix (via e.g. custom-set-faces).
+
+Another notable (original) use of this trick - "visual tabs"::
+
+  (aset standard-display-table ?\t (vconcat "˙ "))
+
+I.e. marking each "tab" character by a small dot, which helps a lot with telling
+apart indentation levels, esp. in langs like python where it matters just as
+much as commas vs periods.
+
+Recently also wanted to extend this to colons and semicolons, which are just as
+hard to tell apart as these dots (: vs ;), but replacing them with something
+weird everywhere seem to be more jarring, and there's a proper fix for all of
+these issues - edit the glyphs in the font directly.
+
+fontforge_ is a common app for that, and for same-component ".:,;" chars there's
+an easy way to scale them, copy-paste parts between glyphs, positioning them
+precisely at the same levels.
+
+Scaling outlines by e.g. 200% makes it easy to tell them apart by itself,
+but I've also found it useful to make a dot slightly horizontally stretched,
+while leaving comma vertical - eye immediately latches onto this distinction,
+unlike with just "dot" vs "dot plus a tiny beard".
+
+It's definitely less of an issue in monospace fonts, and there seem to be a
+large selection of "coding fonts" optimized for legibility, but still worth
+remembering that glyphs in these are not immutable at all - you're not stuck
+with whatever aesthetics-vs-legibility trade-offs their creators made for all
+chars, and can easily customize them according to your own issues and needs,
+same as with editor_, `shell/terminal`_, browser_ or `desktop environemnt`_.
+
+
+.. _emacs: https://www.gnu.org/software/emacs/
+.. _gucharmap: https://wiki.gnome.org/Apps/Gucharmap
+.. _fontforge: https://fontforge.github.io/
+.. _editor: https://github.com/mk-fg/emacs-setup
+.. _shell/terminal: https://blog.fraggod.net/2019/07/17/extending-zsh-line-editor-zle-with-python-widgets.html
+.. _browser: https://blog.fraggod.net/2019/12/30/my-list-of-essential-firefox-setup-hacks-in-2019.html
+.. _desktop environemnt: https://github.com/mk-fg/de-setup
