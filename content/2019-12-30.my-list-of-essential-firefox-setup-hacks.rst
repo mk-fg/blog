@@ -8,7 +8,7 @@ My list of essential firefox setup hacks in 2019
 I've been hopping between browsers for as long as I remember using them,
 and in this last iteration, had a chance to setup waterfox_ from scratch.
 
-"Waterfox" is a fork of Mozilla Firefox with no ads, tracking and other
+"Waterfox" is a fork of Mozilla Firefox Browser with no ads, tracking and other
 user-monetization nonsense, and with mandatory extension signing disabled.
 
 So thought to collect my (incomplete) list of hacks which had to be applied
