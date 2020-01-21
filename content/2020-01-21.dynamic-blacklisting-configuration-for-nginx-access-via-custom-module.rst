@@ -1,0 +1,117 @@
+Dynamic blacklisting configuration for nginx access via custom module
+#####################################################################
+
+:date: 2020-01-03 05:11
+:tags: sysadmin, linux, web, c, python, rate-limiting
+
+
+This is a fix for a common "bots hammering on all doors on the internet" issue,
+applied in this case to `nginx http daemon`_, where random bots keep creating
+bunch of pointless server load by indexing or requesing stuff that they never
+should bother with.
+
+Example can be large dump of static files like distro packages mirror or any
+kind of dynamic content prohibited by robots.txt, which nice bots tend to
+respect, but dumb and malicious bots keep scraping over and over again without
+any limits or restraint.
+
+One way of blocking such pointless busywork-activity is to process access_log
+and block IPs via ipsets, nftables sets or such, but this approach blocks ALL
+content on http/https port instead of just hosts and URLs where such bots have
+no need to be.
+
+So ideally you'd have something like ipsets in nginx itself, blocking only "not
+for bots" locations, and it actually does have that, but paywalled behind Nginx
+Plus subscription (premium version) in `keyval module`_, where dynamic blacklist
+can be updated in-memory via JSON API.
+
+Thinking about how to reimplement this as a custom module for myself, in some
+dead-simple and efficient way, thought of this nginx.conf hack::
+
+  try_files /some/block-dir/$remote_addr @backend;
+
+This will have nginx try to serve templated ``/some/block-dir/$remote_addr``
+file path, or go to @backend location if it doesn't exists.
+
+But if it does exist, yet can't be accessed due to filesystem permissions, nginx
+will faithfully return "403 Forbidden", which is pretty much the desired result for me.
+
+Except this is hard to get working with autoindex module (i.e. have nginx
+listing static filesystem directories), looks up paths relative to root/alias
+dirs, has ton of other limitations, and is a bit clunky and non-obvious.
+
+So, in the same spirit, implemented "stat_check" command via `nginx-stat-check module`_::
+
+  load_module /usr/lib/nginx/modules/ngx_http_stat_check.so;
+  ...
+  location /my-files {
+    alias /srv/www/my-files;
+    autoindex on;
+    stat_check /tmp/blacklist/$remote_addr;
+  }
+
+This check runs handler on NGX_HTTP_ACCESS_PHASE that either returns NGX_OK or
+NGX_HTTP_FORBIDDEN, latter resulting in 403 error (which can be further handled
+in config, e.g. via custom error page).
+
+Check itself is what it says on the tin - very simple and liteweight stat()
+call, checking if specified path exists, and - as it is for blacklisting -
+returning http 403 status code if it does when accessing that location block.
+
+This also allows to use `any of the vast number of nginx variables`_,
+including those matched by regexps (e.g. from location URL), mapped via "map",
+provided by modules like bundled realip, geoip, ssl and such, any third-party
+ones or assembled via "set" directive, i.e. good for use with pretty much any
+parameter known to nginx.
+
+stat() looks up entry in a memory-cached B-tree or hash table dentry list
+(depends on filesystem), with only a single syscall and minimal overhead
+possible for such operation, except for maybe pure in-nginx-memory lookups, so
+might even be better solution for persistent blacklists than keyval module.
+
+Custom dynamic nginx module .so is very easy to build, see `"Build / install"
+section of README in the repo`_ for exact commands.
+
+Also wrote corresponding nginx-access-log-stat-block_ script that maintains such
+filesystem-database blacklist from access.log-like file (only cares about
+remote_addr being first field there), produced for some honeypot URL, e.g. via::
+
+  log_format stat-block '$remote_addr';
+
+  location = /distro/package/mirror/open-and-get-banned.txt {
+    alias /srv/pkg-mirror/open-and-get-banned.txt;
+    access_log /run/nginx/bots.log stat-block;
+  }
+
+Add corresponding stat_check for dir that script maintains in "location" blocks
+where it's needed and done.
+
+tmpfs (e.g. at /tmp or /run) can be used to keep such block-list completely in
+memory, or otherwise I'd recommend using good old ReiserFS_ (3.6 one that's in
+mainline linux) with tail packing, which is enabled by default there, as it's
+incredibly efficient with large number of small files and lookups for them.
+
+Files created by nginx-access-log-stat-block_ contain blocking timestamp and
+duration (which are used to unblock addresses after --block-timeout), and are
+only 24B in size, so ReiserFS should pack these right into inodes (file metadata
+structure) instead of allocating extents and such (as e.g. ext4 would do),
+being pretty much as efficient for such data as any disk-backed format can
+possibly be.
+
+Note that if you're reading this post in some future, aforementioned premium
+"keyval" module might be already merged into plebeian open-source nginx release,
+allowing on-the-fly highly-dynamic configuration from external tools out of the box,
+and is probably good enough option for this purpose, if that's the case.
+
+| Github links:
+| - https://github.com/mk-fg/nginx-stat-check
+| - https://github.com/mk-fg/fgtk#nginx-access-log-stat-block
+
+
+.. _nginx http daemon: https://nginx.org/
+.. _keyval module: https://docs.nginx.com/nginx/admin-guide/security-controls/blacklisting-ip-addresses/
+.. _"Build / install" section of README in the repo: https://github.com/mk-fg/nginx-stat-check#build--install
+.. _nginx-stat-check module: https://github.com/mk-fg/nginx-stat-check
+.. _any of the vast number of nginx variables: https://nginx.org/en/docs/varindex.html
+.. _nginx-access-log-stat-block: https://github.com/mk-fg/fgtk#nginx-access-log-stat-block
+.. _ReiserFS: https://en.wikipedia.org/wiki/ReiserFS
