@@ -1,0 +1,254 @@
+Desktop background / wallpaper setter image processing pipeline
+###############################################################
+
+:date: 2020-05-09 13:20
+:tags: linux, desktop, python
+
+
+One of my weird hobbies have always been collecting "personal favorite" images
+from places like DeviantArt_ or ArtStation_ for desktop backgrounds.
+
+And thing about arbitrary art is that they never fit any kind of monitor
+resolution - some images are tall, others are wide, all have to be scaled, etc -
+and that processing has to be done somewhere.
+
+Most WMs/DEs seem to be cropping largest aspect-correct rectangle from the
+center of the image and scaling that, which doesn't work well for tall images on
+wide displays and generally can be improved upon.
+
+Used my aura_ project for that across ~10 years, which did a lot of custom
+processing using GIMP_ plugin, as it was the only common image-processing thing
+supporting `seam carving (or liquid rescale / lqr)`_ algo at the time
+(around 2011) for neat content-aware image resizing.
+
+It always worked fairly slowly, mostly due to GIMP startup times and various
+inefficiencies in the process there, and by now it is also heavily deprecated
+due to using Python2 (which is `no longer supported in any way`_ past April 2020),
+as well as GIMP's Python-Fu API, which will probably also be gone in GIMP 3.0+
+(with its migration to gobject-introspection bindings).
+
+Wanted to document how it was working somewhere for myself, which was useful for
+fgbg_ rewrite (see below), and maybe it might be useful to cherry-pick ideas
+from to someone else who'd randomly stumble upon this list :)
+
+Tool was doing roughly this:
+
+- `aura.sh script`_ running as a daemon, with some wakeup interval to update backgrounds.
+
+  - Most details of the process were configurable in ``~/.aurarc``.
+
+  - xprintidle_ was used to check if desktop is idle - no need to change backgrounds if so.
+
+  - Number of displays to run `lqr_wpset.py`_ for was checked via xrandr cli tool.
+
+  - Image was picked mostly-randomly, but with bias towards "favorites" and
+    ignoring blacklisted ones.
+
+    Both faves and blacklist was supported and updated via cli options
+    (-f/--fave and -b/--blacklist), allowing to easily set "like" or "never use
+    again" status for current image, with lists of these stored in ``~/.aura``.
+
+    Haven't found much use for these honestly - all images work great with proper processing,
+    and there seem to be little use in limiting their variety that way.
+
+  - GIMP was run in batch mode and parameters passed via env, using lqr_wpset.py
+    plugin to either set background on specified display or print some
+    "WPS-ERR:" string to pick some other image (on errors or some sanity-checks failing there).
+
+  - Image picks and all GIMP output were stored in ``~/.aura/picker.log``
+    (overridable via aurarc, same as most other params), with a special file for
+    storing just currently-used image source path(s).
+
+  - Command-line options to wake up daemon via signal or print currently-used
+    image source were also supported and quite useful.
+
+- Actual heavy-lifting was done in `lqr_wpset.py`_ GIMP plugin, which handled
+  image processing, some caching to speed things up when re-using same source
+  image, as well as actual background-setting.
+
+  Uses old dbus and pygtk modules to set background in various DEs at the last step.
+
+  - Solid-color edges are stripped from the image - e.g. black stripes on the
+    top/bottom - to get actual image size and contents to use.
+
+    This is done by making a "mask" layer from image, which gets blurred and
+    then contrast-adjusted to average-out any minor color fluctuations in these
+    edges, and then cropped by gimp to remove them.
+
+    Resulting size/position of cropped remains of that "mask" is then used to
+    crop relevant part out of the original image.
+
+  - 50% random chance to flip image horizontally for more visual variety.
+
+    Given that parts of my desktop background are occluded by conky and
+    terminals, this is actually very useful, as it will show diff parts of same
+    image(s) from under these.
+
+    Only works weirdly with text on images, which is unreadable when mirrored,
+    but that's very rare and definitely not a big deal, as it's often there for
+    signage and such, not for actual reading.
+
+  - If image is way too large or small - e.g. 6x diff by area or 3x diff by
+    width/height, abort processing, as it'll be either too expensive cpu-wise or
+    won't get nice result anyway (for tiny images).
+
+  - If image aspect is too tall compared to display's - scale it smartly to one
+    side of the screen.
+
+    This is somewhat specific to my use-case, as my most used virtual desktop is #1
+    with transparent conky system-monitor on the left and terminal window on the right.
+
+    So background shows through on the left there, and tall images can easily
+    fill that space, but "gravity" value can be configured in the script to
+    position such image anywhere horizontally (0-100, default - 25 for "center
+    at 25% left-to-right").
+
+    Processing in this case is a bit complicated:
+
+    - Render specified bg color (if any) on display-sized canvas, e.g. just black.
+
+    - Scale/position image in there using specified "gravity" value as center
+      point, or against left/right side, if it'd go beyond these.
+
+    - Pick specified number of "edge" pixels (e.g. 25px) on left/right sides of
+      the image, which aren't bumping into canvas edge, and on a layer
+      in-between solid-color background (first step) and scaled/positioned image, do:
+
+      - Scale this edge to fill rest of the canvas in empty direction.
+      - Blur result a lot, so it'd look vague and indistinct, like background noise.
+      - Use some non-100% opacity for it, something like 70%, to blend-in with bg color.
+
+      This would produce a kind of "blurred halo" stretching from tall image
+      sides, and filling otherwise-empty parts of canvas very nicely.
+
+    - Gradient-blend above "edge" pixels with produced stretched/blurred background.
+
+    Arrived at this process after some experimentation, I think something like
+    that with scaling and blur is common way to make fitting bg underlay for
+    sharp centered images in e.g. documentaries and such.
+
+  - If image is at least 30% larger by area, scale it preserving aspect with the
+    regular "cubic" algo.
+
+    This turns out to be very important pre-processing step for LQR scaling
+    later - on huge source images, such scaling can take many minutes, e.g. when
+    scaling 4k image to 1080p.
+
+    And also - while this tool didn't do that (fixed later in fgbg_ script) -
+    it's also important to scale ALL images as close to final resolution as
+    possible, so that seam carving algo will add as little distortion as possible.
+
+    Generally you want LQR to do as little work as possible, if other
+    non-distorting options are available, like this aspect-scaling option.
+
+  - Run seam carving / lqr algo to match image aspect to display size exactly.
+
+    Look it up on e.g. wikipedia_ or youtube_ if you've never seen it - a very
+    cool and useful algorithm.
+
+  - Cache produced result, to restart from this step when using same source
+    image and h-flip-chance next time.
+
+    Text added on top in the next step can vary with current date/time,
+    so intermediate result is cached here.
+
+    This helps a lot with performance, obviously.
+
+  - Add text plaque in the image corner with its filename, timestamps and/or
+    some tag metadata.
+
+    This is mostly useful when proper image titles stored in EXIF tags, as well
+    as creation time/place for photos.
+
+    Metadata from exiv2_ (used via pyexiv2_) has a ton of various keys for same
+    things, so script does its best to include ~20 potential keys for each
+    useful field like "author", "creation date" or "title".
+
+    Font used to be rendered in a contrasting color, picked via L\*a\*b\*
+    colorspace against "averaged" background color (via blur or such).
+
+    This produced too wild and still bad results on busy backgrounds, so
+    eventually switched to a simplier and better "light text with dark outline" option.
+
+    Outline is technically rendered as a "glow" - a soft gradient shadow (solid
+    dark color to full trasparency) expanding in all directions from font outline.
+
+  - Try all known background-setting options, skipping expected errors,
+    as most won't work with one specific DE running.
+
+    Can ideally be configured via env (from ``~/.aurarc``) to skip unnecessary
+    work here, but they all are generally easy/quick to try anyway.
+
+    - GNOME/Unity - ``gsettings set org.gnome.desktop.background picture-uri
+      file://...`` command.
+
+    - Older GNOME/XFCE - use "gconf" python module to set
+      "/desktop/gnome/background/picture_filename" path.
+
+    - XFCE - set via DBus call to /org/xfce/Xfconf [org.xfce.Xfconf].
+
+      Has multiple different props to set there.
+
+    - Enlightenment (E17+) - DBus calls to /org/enlightenment/wm/RemoteObject
+      [org.enlightenment.wm.service].
+
+      Can have many images there, for each virtual desktop and such.
+
+    - Paint X root window via pygtk!
+
+      This works for many ancient window managers, and is still showing through
+      in some DEs too, occasionally.
+
+    Collected and added these bg-setting steps via experiments with different
+    WMs/DEs over the years, and it's definitely nowhere near exhaustive list.
+
+    These days there might be some more uniform way to do it, especially with
+    wayland compositors.
+
+At some point, mostly due to everything in this old tool being deprecated out of
+existance, did a full rewrite with all steps above in some form, as well as
+major improvements, in the form of modern `fgbg script`_ (in `mk-fg/de-setup`_ repo).
+
+It uses ImageMagick_ and python3 `Wand module`_, which also support LQR and all
+these relatively-complex image manipulations these days, but work few orders of
+magnitude faster than old "headless GIMP" for such automated processing purpose.
+
+New script is much less complicated, as well as self-contained daemon,
+with only optional extra wand-py and xprintidle (see above) dependencies
+(when e.g. image processing is enabled via -p/--process option).
+
+Also does few things more and better, drawing all lessions from that old aura_
+project, which can finally be scrapped, I guess.
+
+Actually, one missing bit there atm (2020-05-09) is various background-setting
+methods from different DEs, as I've only used it with Enlightement_ so far,
+where it can set multiple background images in configurable ways via DBus
+(using xrandr and sd-bus lib from systemd via ctypes).
+
+Should be relatively trivial to support more DEs there by adding specific
+commands for these, working more-or-less same as in the old script (and maybe
+just copying methods from there), but these just need to be tested, as my
+limited knowledge of interfaces in all these DEs is probably not up to date.
+
+
+.. _DeviantArt: https://www.deviantart.com/
+.. _ArtStation: https://www.artstation.com/
+.. _aura: https://github.com/mk-fg/aura
+.. _GIMP: https://www.gimp.org/
+.. _seam carving (or liquid rescale / lqr): https://en.wikipedia.org/wiki/Seam_carving
+.. _no longer supported in any way: https://mail.python.org/archives/list/python-dev@python.org/message/OFCIETIXLX34X7FVK5B5WPZH22HXV342/
+
+.. _aura.sh script: https://github.com/mk-fg/aura/blob/master/aura.sh
+.. _lqr_wpset.py: https://github.com/mk-fg/aura/blob/master/lqr_wpset.py
+.. _xprintidle: https://github.com/g0hl1n/xprintidle
+.. _wikipedia: https://en.wikipedia.org/wiki/Seam_carving
+.. _youtube: https://www.youtube.com/watch?v=vIFCV2spKtg
+.. _exiv2: https://www.exiv2.org/index.html
+.. _pyexiv2: https://github.com/LeoHsiao1/pyexiv2
+
+.. _fgbg: https://github.com/mk-fg/de-setup#bin
+.. _fgbg script: https://github.com/mk-fg/de-setup/blob/master/bin/fgbg
+.. _mk-fg/de-setup: https://github.com/mk-fg/de-setup
+.. _ImageMagick: https://imagemagick.org/
+.. _Wand module: https://docs.wand-py.org/
+.. _Enlightement: http://www.enlightenment.org/
