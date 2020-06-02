@@ -1,0 +1,56 @@
+Simple testing for DNS resolver operation
+#########################################
+
+:date: 2020-06-02 14:32
+:tags: monitoring, sysadmin, python
+
+After replacing DNS resolver daemons a bunch of weeks ago in couple places,
+found the hard way that nothing is quite as reliable as (t)rusty dnscache
+from djbdns_, which is sadly too venerable and lacks some essential features
+at this point.
+
+Complex things like systemd-resolved and unbound_ either crash, hang
+`or just start dropping all requests silently for no clear reason`_
+(happens outside of conditions described in that email as well, to this day).
+
+But whatever, such basic service as name resolver needs some kind of watchdog
+anyway, and seem to be easy to test too - delegate some subdomain to a script
+(NS entry + glue record) which would give predictable responses to arbitrary
+queries and make/check those.
+
+Implemented both sides of that testing process in `dns-test-daemon`_ script,
+which can be run with some hash-key for BLAKE2S HMAC::
+
+  % ./dns-test-daemon -k hash-key -b 127.0.0.1:5533 &
+  % dig -p5533 @127.0.0.1 aaaa test.com
+  ...
+  test.com. 300 IN AAAA eb5:7823:f2d2:2ed2:ba27:dd79:a33e:f762
+  ...
+
+And then query it like above, getting back first bytes of keyed name hash after
+inet_ntop conversion as a response address.
+
+Good thing about it is that name can be something random like
+"o3rrgbs4vxrs.test.mydomain.com", to force DNS resolver to actually do its job
+and not just keep returning same "google.com" from the cache or something.
+And do it correctly too, as otherwise resulting hash won't match expected value.
+
+So same script has client mode to use same key and do the checking,
+as well as randomizing queried names::
+
+  % dns-test-daemon -k hash-key --debug @.test.mydomain.com
+
+(optionally in a loop too, with interval/retries/timeout opts, and checking
+general network availability via fping to avoid any false alarms due to that)
+
+Ended up running this tester/hack to restart unbound occasionally when it
+craps itself, which restored reliable DNS operation for me,
+essential thing for any outbound network access, pretty big deal.
+
+| Script info: https://github.com/mk-fg/fgtk#dns-test-daemon
+| Code link: https://github.com/mk-fg/fgtk/blob/master/dns-test-daemon
+
+.. _djbdns: https://cr.yp.to/djbdns.html
+.. _unbound: https://nlnetlabs.nl/projects/unbound/
+.. _or just start dropping all requests silently for no clear reason: https://lists.nlnetlabs.nl/pipermail/unbound-users/2020-April/006801.html
+.. _dns-test-daemon: https://github.com/mk-fg/fgtk/blob/master/dns-test-daemon
