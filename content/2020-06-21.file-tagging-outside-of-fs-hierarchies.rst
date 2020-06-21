@@ -1,0 +1,103 @@
+File tagging outside of fs hierarchies and db for tags
+######################################################
+
+:date: 2020-06-21 17:32
+:tags: desktop, tools, python, fail
+
+
+File tagging is one useful concept that stuck with me since I started using tmsu_
+and `made a codetag tool a while ago`_ to auto-add tags to local files.
+
+For example, with code, you'd usually have code files and whatever assets
+arranged in some kind of project trees, with one dir per project and all files
+related to it in git repo under that.
+
+But then when you work on something unrelated and remember "oh, I did implement
+or seen this already somewhere", there's no easy and quick "grep all python
+files" option with such hierarchy, as finding all of them on the whole fs tends
+to take a while, or too long for a quick check anyway to not be distracting.
+
+And on top of that filesystem generally only provides filenames as metadata,
+while e.g. script shebangs or file magic are not considered, so "filetag" python
+script won't even be detected when naively grepping all \*.py files.
+
+Easy and sufficient fix that I've found for that is to have cronjob/timer to go
+over files in all useful non-generic fs locations and build a db for later querying,
+which is what codetag_ and tmsu_ did for years.
+
+But I've never came to like golang_ in any way (would highly recommend checking
+out OCAML_ instead), and tmsu never worked well for my purposes - was slow to
+interface with, took a lot of time to build db, even longer to check and clean
+it up, while quierying interface was clunky and lackluster (long commands, no
+NUL-separated output, gone files in output, etc).
+
+So couple months ago found time to just rewrite all that in one python script -
+filetag_ - which does all codetag + tmsu magic in something like 100 lines of
+actual code, faster, and doesn't have shortcomings of the old tools.
+
+Was initially expecting to use sqlite there, but then realized that I only
+index/lookup stuff by tags, so key-value db should suffice, and it won't
+actually need to be updated either, only rebuilt from scratch on each indexing,
+so used simple gdbm at first.
+
+Didn't want to store many duplicates of byte-strings there however, so split
+keys into three namespaces and stored unique paths and tags as numeric indexes,
+which can be looked-up in the same db, which ended up looking like this:
+
+  | "\\0" "tag_bits" = tag1 "\\0" tag2 ...
+  | "\\1" path-index-1 = path-1
+  | "\\1" path-index-2 = path-2
+  | ...
+  | "\\2" tag-index-1 = path-index-1 path-index-2 ...
+  | "\\2" tag-index-2 = path-index-1 path-index-2 ...
+  | ...
+
+So db lookup loads "tag_bits" value, finds all specified tag-indexes there
+(encoded using minimal number of bytes), then looks up each one, getting a set
+of path indexes for each tag (uint64 numbers).
+
+If any logic have to be applied on such lookup, i.e. "want these tags or these,
+but not those", it can be compiled into DNF "OR of bitmasks" list,
+which is then checked against each tag-bits of path-index superset,
+doing the filtering.
+
+Resulting paths are looked up by their index and printed out.
+
+Looks pretty minimal and efficient, nothing is really duplicated, right?
+
+In RDBMS like sqlite, I'd probably store this as a simple tag + path table,
+with index on the "tag" field and have it compress that as necessary.
+
+Well, running filetag on my source/projects dirs in ~ gets 100M gdbm file with
+schema described above and 2.8M sqlite db with such simple schema.
+
+Massive difference seem to be due to sqlite compressing such repetitive and
+sometimes-ascii data and just being generally very clever and efficient.
+
+| Compressing gdbm file with zstd gets 1.5M too, i.e. down to 1.5% - impressive!
+| And it's not mostly-empty file, aside from all those zero-bytes in uint64 indexes.
+
+Anyhow, point and my take-away here was, once again - "just use sqlite where
+possible, and don't bother with other local storages".
+
+It's fast, efficient, always available, very reliable, easy to use, and covers a
+ton of use-cases, working great for all of them, even when they look too simple
+for it, like the one above.
+
+One less-obvious aspect from the list above, which I've bumped into many times
+myself, and probably even mentioned on this blog already, is "very reliable" -
+dbm modules and many other "simple" databases have all sorts of poorly-documented
+failure modes, corrupting db and loosing data where sqlite always "just works".
+
+Wanted to document this interesting fail here mostly to reinforce the notion
+in my own head once more.
+sqlite_ is really awesome, basically :)
+
+
+.. _made a codetag tool a while ago: https://blog.fraggod.net/2013/02/04/codetag-tmsu-tag-all-the-things-and-go.html
+.. _tmsu: https://tmsu.org/
+.. _codetag: https://github.com/mk-fg/codetag
+.. _golang: https://golang.org/
+.. _OCAML: https://ocaml.org/
+.. _filetag: https://github.com/mk-fg/fgtk/blob/master/desktop/filetag
+.. _sqlite: https://sqlite.org/
