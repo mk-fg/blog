@@ -1,0 +1,83 @@
+Network interface SNMP traffic counters for accounting in Prometheus and Grafana
+################################################################################
+
+:date: 2020-06-26 16:57
+:tags: python, sysadmin, vis
+
+
+Usual and useful way to represent traffic counters for accounting purposes like
+"how much inbound/outbound traffic passed thru this day/month/year?" are bar
+charts or tables I think, i.e. something like this:
+
+.. html::
+
+  <a href="{static}images/grafana-snmp-traffic-counters.jpg">
+  <img
+    style="width: 529px;"
+    src="{static}images/grafana-snmp-traffic-counters.jpg"
+    title="Interface traffic counters for accounting purposes"
+    alt="Interface traffic counters for accounting purposes">
+  </a>
+
+With one bar or table entry there for each day, month or year (accounting periods).
+
+Counter values in general are not special in prometheus_, so grafana_ builds the
+usual monotonic-line graphs for these by default, which are not very useful.
+
+Results of prometheus query like ``increase(iface_traffic_bytes_total[1d])``
+are also confusing, as it returns arbitrary sliding windows,
+with points that don't correspond to any fixed accounting periods.
+
+But grafana is not picky about its data sources, so it's easy to query
+prometheus and re-aggregate (and maybe cache) data as necessary,
+e.g. via its `"Simple JSON" datasource plugin`_.
+
+To get all historical data, it's useful to go back to when metric first appeared,
+and official prometheus clients add "_created" metric for counters, which can be
+queried for min value to get (slightly pre-) earliest value timestamp, for example
+``min_over_time(iface_traffic_bytes_created[10y])``.
+
+From there value for each bar will be min/max for each accounting interval,
+which can be queried naively via min_over_time + max_over_time, but if exporter is
+written smartly or persistent 64-bit counters are used (like SNMP IF-MIB::ifXEntry),
+these lookups can be simplified a lot by just querying min/max values at the
+start and end of the period, instead of having prometheus do full sweep,
+which can be especially bad on something like a year of datapoints.
+
+Such optimization has potential to return no values, if data at that interval
+start/end was missing, but that's easy to work around by expanding lookup range
+until something is returned.
+
+Deltas between resulting max/min values are easy to dump as JSON for bar chart
+or table in response to grafana HTTP requests.
+
+Had to implement this as a `prometheus-grafana-simplejson-aggregator`_ py3
+script (no deps), which runs either on timer to query/aggregate latest data from
+prometheus (to sqlite), or as a uWSGI_ app which can be queried anytime from grafana.
+
+Also needed to collect/export data into prometheus over SNMP for that,
+so related script is `prometheus-snmp-iface-counters-exporter`_ for SNMPv3
+IF-MIB/hrSystemUptime queries, exporting counters via prometheus client module.
+
+(note: you'd probably want to check and increase retention period in prometheus
+for data like that, as it defaults to dropping datapoints older than a month)
+
+I think aggregation for such accounting use-case can be easily implemented in
+either prometheus or grafana, with a special fixed-intervals query type in the
+former or more clever queries like described above in the latter, but found that
+both seem to explicitly reject such use-case as "not supported". Oh well.
+
+Code links (see README in the repo and -h/--help for usage info):
+
+- `github.com/mk-fg/fgtk/metrics/prometheus-snmp-iface-counters-exporter`_
+- `github.com/mk-fg/fgtk/metrics/prometheus-grafana-simplejson-aggregator`_
+
+
+.. _prometheus: https://prometheus.io/
+.. _grafana: https://grafana.com/
+.. _"Simple JSON" datasource plugin: https://grafana.com/grafana/plugins/grafana-simple-json-datasource
+.. _prometheus-grafana-simplejson-aggregator: https://github.com/mk-fg/fgtk#prometheus-grafana-simplejson-aggregator
+.. _prometheus-snmp-iface-counters-exporter: https://github.com/mk-fg/fgtk#prometheus-snmp-iface-counters-exporter
+.. _uWSGI: https://uwsgi-docs.readthedocs.io/
+.. _github.com/mk-fg/fgtk/metrics/prometheus-snmp-iface-counters-exporter: https://github.com/mk-fg/fgtk/blob/master/metrics/prometheus-snmp-iface-counters-exporter
+.. _github.com/mk-fg/fgtk/metrics/prometheus-grafana-simplejson-aggregator: https://github.com/mk-fg/fgtk/blob/master/metrics/prometheus-grafana-simplejson-aggregator
