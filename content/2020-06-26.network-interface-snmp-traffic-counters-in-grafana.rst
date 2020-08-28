@@ -2,7 +2,7 @@ Network interface SNMP traffic counters for accounting in Prometheus and Grafana
 ################################################################################
 
 :date: 2020-06-26 16:57
-:tags: python, sysadmin, vis
+:tags: python, sysadmin, vis, monitoring
 
 
 Usual and useful way to represent traffic counters for accounting purposes like

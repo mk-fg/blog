@@ -1,0 +1,116 @@
+YouTube feed parser, ewma and state logs
+########################################
+
+:date: 2020-08-28 7:44
+:tags: python, web, notification
+
+
+Recently Google `stopped sending email notifications for YouTube subscription
+feeds`_, as apparently conversion of these to page views was 0.1% or something.
+
+And even though I've used these to track updates exclusively,
+guess it's fair, as I also had xdg-open script jury-rigged to just open any
+youtube links in mpv_ instead of bothering with much inferior ad-ridden
+in-browser player.
+
+One alternative workaround is to grab OPML_ of subscription Atom_ feeds
+and only use those from now on, converting these to familiar to-watch
+notification emails, which I kinda like for this purpose because they are
+persistent and have convenient state tracking (via read/unread and tags) and
+info text without the need to click through, collected in a dedicated mailbox dir.
+
+Fetching/parsing feeds and sending emails are long-solved problems (feedparser_
+in python does great job on former, MTAs on the latter), while check intervals
+and state tracking usually need to be custom, and can have a few tricks that I
+haven't seen used too widely.
+
+-----
+
+**Trick One** - use `moving average`_ for an estimate of when events (feed updates) happen.
+
+Some feeds can have daily activity, some have updates once per month, and
+checking both every couple hours would be incredibly wasteful to both client and server,
+yet it seem to be common practice in this type of scenario.
+
+Obvious fix is to get some "average update interval" and space-out checks in
+time based on that, but using simple mean value ("sum / n") has significant
+drawbacks for this:
+
+- You have to keep a history of old timestamps/intervals to calculate it.
+- It treats recent intervals same as old ones, even though they are more relevant.
+
+Weighted moving average value fixes both of these elegantly::
+
+  interval_ewma = w * last_interval + (1 - w) * interval_ewma
+
+Where "w" is a weight for latest interval vs all previous ones, e.g. 0.3 to have
+new value be ~30% determined by last interval, ~30% of the remainder by pre-last,
+and so on.
+
+Allows to keep only one "interval_ewma" float in state (for each individual feed)
+instead of a list of values needed for mean and works better for prediction
+due to higher weights for more recent values.
+
+For checking feeds in particular, it can also be updated on "no new items" attempts,
+to have backoff interval increase (up to some max value), instead of using last
+interval ad infinitum, long past the point when it was relevant.
+
+**Trick Two** - keep a state log.
+
+Very useful thing for debugging automated stuff like this, where instead of keeping
+only last "feed last_timestamp interval_ewma ..." you append every new one to a log file.
+
+When such log file grows to be too long (e.g. couple megs), rename it to .old
+and seed new one with last states for each distinct thing (feed) from there.
+
+Add some timestamp and basic-info prefix before json-line there and it'd allow
+to trivially check when script was run, which feeds did it check, what change(s)
+it did detect there (affecting that state value), as well as e.g. easily remove
+last line for some feed to test-run processing last update there again.
+
+When something goes wrong, this kind of log is invaluable, as not only you can
+re-trace what happened, but also repeat last state transition with
+e.g. some --debug option and see what exactly happened there.
+
+Keeping only one last state instead doesn't allow for any of that, and you'd
+have to either keep separate log of operations for that anyway, and manually
+re-construct older state from there to retrace last script steps properly,
+tweak the inputs to re-construct state that way, or maybe just drop old state
+and hope that re-running script with latest inputs without it hits same bug(s).
+
+I.e. there's basically no substitute for that, as text log is pretty much same thing,
+describing state changes in non-machine-readable and often-incomplete text,
+which can be added to such state-log instead as an extra metadata anyway.
+
+With youtube-rss-tracker script with multiple feeds, it's a single log file,
+storing mostly-json lines like these (wrapped for readability)::
+
+  2020-08-28 05:59 :: UC2C_jShtL725hvbm1arSV9w 'CGP Grey' ::
+    {"chan": "UC2C_jShtL725hvbm1arSV9w", "delay_ewma": 400150.7167069313,
+      "ts_last_check": 1598576342.064458, "last_entry_id": "FUV-dyMpi8K_"}
+  2020-08-28 05:59 :: UCUcyEsEjhPEDf69RRVhRh4A 'The Great War' ::
+    {"chan": "UCUcyEsEjhPEDf69RRVhRh4A", "delay_ewma": 398816.38761319243,
+      "ts_last_check": 1598576342.064458, "last_entry_id": "UGomntKCjFJL"}
+
+Text prefix there is useful when reading the log, while script itself only cares
+about json bit after that.
+
+Anything doesn't work well - notifications missing, formatted badly, errors, etc -
+you just remove last state and tweak/re-run the script (maybe in --dry-run mode too),
+and get pretty much exactly same thing as happened last, aside from any input
+(feed) changes, which should be very predictable in this particular case.
+
+Not sure what this concept is called in CS, there gotta be some fancy name for it.
+
+-----
+
+| Link to YouTube feed email-notification script used as an example here:
+| https://github.com/mk-fg/fgtk/blob/master/yt-feed-to-email
+
+
+.. _stopped sending email notifications for YouTube subscription feeds: https://support.google.com/youtube/thread/63269933?hl=en
+.. _mpv: https://mpv.io/
+.. _OPML: https://en.wikipedia.org/wiki/OPML
+.. _Atom: https://en.wikipedia.org/wiki/Atom_(Web_standard)
+.. _feedparser: https://github.com/kurtmckee/feedparser
+.. _moving average: https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
