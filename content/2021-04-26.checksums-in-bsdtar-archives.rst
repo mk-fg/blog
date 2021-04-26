@@ -1,0 +1,148 @@
+Mandatory consistency checksums in bsdtar archives
+##################################################
+
+:date: 2021-04-26 16:27
+:tags: tools, compression, unix
+
+
+bsdtar from libarchive_ is the usual go-to tool for packing stuff up in linux
+scripts, but it always had an annoying quirk for me - no data checksums built
+into tar formats.
+
+Ideally you'd unpack any .tar and if it's truncated/corrupted in any way, bsdtar
+will spot that and tell you, but that's often not what happens, for example:
+
+.. code-block:: console
+
+  % dd if=/dev/urandom of=file.orig bs=1M count=1
+
+  % cp -a file{.orig,} && bsdtar -czf file.tar -- file
+  % bsdtar -xf file.tar && b2sum -l96 file{.orig,}
+  2d6b00cfb0b8fc48d81a0545  file.orig
+  2d6b00cfb0b8fc48d81a0545  file
+
+  % python -c 'f=open("file.tar", "r+b"); f.seek(512 * 2**10); f.write(b"\x01\x02\x03")'
+  % bsdtar -xf file.tar && b2sum -l96 file{.orig,}
+  2d6b00cfb0b8fc48d81a0545  file.orig
+  c9423358edc982ba8316639b  file
+
+In a compressed multi-file archives such change can get tail of an archive
+corrupted-enough that it'd affect one of tarball headers, and those have
+checksums, so might be detected, but it's very unreliable, and won't affect
+uncompressed archives (e.g. media files backup which won't need compression).
+
+Typical solution is to put e.g. .sha256 files next to archives and hope that
+people check those, but of course no one ever does in reality - bsdtar itself
+has to always do it implicitly for that kind of checking to stick,
+extra opt-in steps won't work.
+
+(putting checksum in the filename is a bit better, but still not useful for the
+same reason - almost no one will ever check it, unless it's automatic)
+
+Luckily bsdtar has at least some safe options there, which I think should always
+be used by default, unless there's a good reason not to in some particular case:
+
+- ``bsdtar --xz`` (and its ``--lzma`` predecessor):
+
+  .. code-block:: console
+
+    % bsdtar -cf file.tar.xz --xz -- file
+    % python -c 'f=open("file.tar.xz", "r+b"); f.seek(...); f.write(...)'
+
+    % bsdtar -xf file.tar.xz && b2sum -l96 file{.orig,}
+    file: Lzma library error: Corrupted input data
+
+    % tar -xf file.tar.xz && b2sum -l96 file{.orig,}
+    xz: (stdin): Compressed data is corrupt
+
+  Heavier on resources than .gz and might be a bit less compatible, but given that even
+  GNU tar supports it out of the box and much better compression (with faster decompression),
+  in addition to mandatory checksumming, should always be a default for compressed archives.
+
+  Lowering compression level might help a bit with performance as well.
+
+- ``bsdtar --format zip``:
+
+  .. code-block:: console
+
+    % bsdtar -cf file.zip --format zip -- file
+    % python -c 'f=open("file.zip", "r+b"); f.seek(...); f.write(...)'
+
+    % bsdtar -xf file.zip && b2sum -l96 file{.orig,}
+    file: ZIP bad CRC: 0x2c1170b7 should be 0xc3aeb29f
+
+  Can be an OK option if there's no need for unixy file metadata, streaming decompression,
+  and/or max compatibility is a plus, as good old zip should be readable everywhere.
+
+  Simple deflate compression is inferior to .xz, so not the best for linux-only
+  stuff or if compression is not needed, BUT there is ``--options zip:compression=store``,
+  which basically just adds CRC32 checksums.
+
+- ``bsdtar --use-compress-program zstd`` but NOT its built-in ``--zstd`` flag:
+
+  .. code-block:: console
+
+    % bsdtar -cf file.tar.zst --use-compress-program zstd -- file
+    % python -c 'f=open("file.tar.zst", "r+b"); f.seek(...); f.write(...)'
+
+    % bsdtar -xf file.tar.zst && b2sum -l96 file{.orig,}
+    file: Lzma library error: Corrupted input data
+
+    % tar -xf file.tar.zst && b2sum -l96 file{.orig,}
+    file: Zstd decompression failed: Restored data doesn't match checksum
+
+  Very fast and efficient, gains popularity quickly, but ``bsdtar --zstd`` flag
+  is likely to use libzstd with its defaults instead of binary and won't add
+  checksums (!!!), even though it validates data against them on decompression.
+
+  Still good alternative to above, as long as you pretend that ``--zstd`` option
+  does not (yet) exist and always go with the command-line zstd binary instead.
+
+  `GNU tar`_ does not seem to have this problem, as --zstd there option always uses binary.
+
+- ``bsdtar --lz4 --options lz4:block-checksum``:
+
+  .. code-block:: console
+
+    % bsdtar -cf file.tar.lz4 --lz4 --options lz4:block-checksum -- file
+    % python -c 'f=open("file.tar.lz4", "r+b"); f.seek(...); f.write(...)'
+
+    % bsdtar -xf file.tar.lz4 && b2sum -l96 file{.orig,}
+    bsdtar: Error opening archive: malformed lz4 data
+
+    % tar -I lz4 -xf file.tar.lz4 && b2sum -l96 file{.orig,}
+    Error 66 : Decompression error : ERROR_blockChecksum_invalid
+
+  lz4 barely adds any compression resource overhead, so is essentially free,
+  same for xxHash32_ checksums there, so can be a safe replacement for uncompressed tar.
+
+  bsdtar manpage says that lz4 should have stream checksum default-enabled,
+  but it doesn't seem to help at all with corruption - only block-checksums
+  like used here do.
+
+  GNU tar doesn't understand lz4 by default, so requires explicit ``-I lz4``.
+
+- ``bsdtar --bzip2`` - actually checks integrity, but is very inefficient algo
+  cpu-wise, so best to always avoid it in favor of --xz or zstd these days.
+
+- ``bsdtar --lzop`` - similar to lz4, somewhat less common,
+  but always respects data consistency via adler32_ checksums.
+
+- ``bsdtar --lrzip`` - opposite of ``--lzop`` above wrt compression, but even
+  less-common/niche wrt install base and use-cases. Adds/checks md5 hashes by default.
+
+It's still sad that tar can't have some post-data checksum headers, but always
+using one of these as a go-to option seem to mitigate that shortcoming,
+and these options seem to cover most common use-cases pretty well.
+
+What DOES NOT provide consistency checks with bsdtar: -z/--gz, --zstd (sometimes),
+--lz4 without lz4:block-checksum option, base no-compression mode.
+
+With -z/--gz being replaced by .zst everywhere, hopefully bsdtar/libarchive
+will get a patch to default-enable checksums there, like the cli tool does.
+
+
+.. _libarchive: https://www.libarchive.org/
+.. _xxHash32: https://github.com/Cyan4973/xxHash
+.. _GNU tar: https://www.gnu.org/software/tar/
+.. _adler32: https://en.wikipedia.org/wiki/Adler-32
