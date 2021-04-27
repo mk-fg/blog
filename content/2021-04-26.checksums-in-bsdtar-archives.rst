@@ -92,13 +92,15 @@ be used by default, unless there's a good reason not to in some particular case:
     file: Zstd decompression failed: Restored data doesn't match checksum
 
   Very fast and efficient, gains popularity quickly, but ``bsdtar --zstd`` flag
-  is likely to use libzstd with its defaults instead of binary and won't add
-  checksums (!!!), even though it validates data against them on decompression.
+  will use libzstd defaults (using explicit ``zstd --no-check`` with binary too)
+  and won't add checksums (!!!), even though it validates data against them on
+  decompression.
 
   Still good alternative to above, as long as you pretend that ``--zstd`` option
-  does not (yet) exist and always go with the command-line zstd binary instead.
+  does not exist and always go with explicit zstd command instead.
 
-  `GNU tar`_ does not seem to have this problem, as --zstd there option always uses binary.
+  `GNU tar`_ does not seem to have this problem, as ``--zstd`` there always uses
+  binary and its defaults (and -C/--check in particular).
 
 - ``bsdtar --lz4 --options lz4:block-checksum``:
 
@@ -123,7 +125,7 @@ be used by default, unless there's a good reason not to in some particular case:
   GNU tar doesn't understand lz4 by default, so requires explicit ``-I lz4``.
 
 - ``bsdtar --bzip2`` - actually checks integrity, but is very inefficient algo
-  cpu-wise, so best to always avoid it in favor of --xz or zstd these days.
+  cpu-wise, so best to always avoid it in favor of ``--xz`` or zstd these days.
 
 - ``bsdtar --lzop`` - similar to lz4, somewhat less common,
   but always respects data consistency via adler32_ checksums.
@@ -135,11 +137,13 @@ It's still sad that tar can't have some post-data checksum headers, but always
 using one of these as a go-to option seem to mitigate that shortcoming,
 and these options seem to cover most common use-cases pretty well.
 
-What DOES NOT provide consistency checks with bsdtar: -z/--gz, --zstd (sometimes),
---lz4 without lz4:block-checksum option, base no-compression mode.
+What DOES NOT provide consistency checks with bsdtar: -z/--gz, --zstd (not even
+when it's built without libzstd!), --lz4 without lz4:block-checksum option,
+base no-compression mode.
 
-With -z/--gz being replaced by .zst everywhere, hopefully bsdtar/libarchive
-will get a patch to default-enable checksums there, like the cli tool does.
+With -z/--gz being replaced by .zst everywhere, hopefully either libzstd changes
+its no-checksums default or bsdtar/libarchive might override it, though I wouldn't
+hold much hope for either of these, just gotta be careful with that particular mode.
 
 
 .. _libarchive: https://www.libarchive.org/
