@@ -1,0 +1,106 @@
+Sharing Linux kernel build cache between machines
+#################################################
+
+:date: 2021-08-30 21:26
+:tags: tools, c, caching, linux
+
+
+Being an old linux user with slackware/gentoo background, I still prefer to
+compile kernel for local desktop/server machines from sources, if only to check
+which new things get added there between releases and how they're organized.
+
+This is nowhere near as demanding on resources as building a distro kernel with
+all possible modules, but still can take a while, so not a great fit for my old
+ultrabook or desktop machine, which both must be 10yo+ by now.
+
+Two obvious ways to address this seem to be distributed compilation via distcc_
+or just building the thing on a different machine.
+
+And distcc turns out to be surprisingly bad for this task - it doesn't support
+gcc plugins that modern kernel uses for some security features, requires
+suppressing a bunch of gcc warnings, and even then with or without pipelining it
+eats roughly same amount of machine's CPU as a local build, without even fully
+loading remote i5 machine, as I guess local preprocessing and distcc's own
+overhead is a lot with the kernel code already.
+
+Second option is a fully-remote build, but packaging just kernel + module
+binaries like distros do there kinda sucks, as that adds an extra dependency
+(for something very basic) and then it's hard to later quickly tweak and rebuild
+it or add some module for some new networking or hardware thingy that you want
+to use - and for that to be fast, kbuild/make's build cache of .o object files
+needs to be local as well.
+
+Such cache turns out to be a bit hard to share/rsync between machines,
+due to following caveats:
+
+- Absolute paths used in intermediate kbuild files.
+
+  Just running ``mv linux-5.13 linux-5.13-a`` will force full rebuild for "make"
+  inside, so have to build the thing in the same dir everywhere, e.g.
+  ``/var/src/linux-5.13`` on both local/remote machines.
+
+  Symlinks don't help with this, but bind mounts should, or just using
+  consistent build location work as well.
+
+  There's a default-disabled `KBUILD_ABS_SRCTREE`_ make-flag for this, with docs
+  saying "Kbuild uses a relative path to point to the tree when possible",
+  but that doesn't seem to be case for me at all - maybe "when possible" is too
+  limited, or was only true with older toolchains.
+
+- Some caches use "ls -l | md5" as a key, which breaks between machines due to
+  different usernames or unstable ls output in general.
+
+  One relevant place where this happens for me is ``kernel/gen_kheaders.sh``,
+  and can be worked around using "find -printf ..." there:
+
+  .. code-block:: diff
+
+    % patch -tNp1 -l <<'EOF'
+    diff --git a/kernel/gen_kheaders.sh b/kernel/gen_kheaders.sh
+    index 34a1dc2..bfa0dd9 100755
+    --- a/kernel/gen_kheaders.sh
+    +++ b/kernel/gen_kheaders.sh
+    @@ -44,4 +44,5 @@ all_dirs="$all_dirs $dir_list"
+    -headers_md5="$(find $all_dirs -name "*.h"			|
+    -		grep -v "include/generated/compile.h"	|
+    -		grep -v "include/generated/autoconf.h"	|
+    -		xargs ls -l | md5sum | cut -d ' ' -f1)"
+    +headers_md5="$(
+    +		find $all_dirs -name "*.h" -printf '%p :: %Y:%l :: %s :: %T@\n' |
+    +		grep -v "include/generated/compile.h" |
+    +		grep -v "include/generated/autoconf.h" |
+    +		sed 's/\.[0-9]\+$//' | LANG=C sort | md5sum | cut -d ' ' -f1)"
+    @@ -50 +51 @@ headers_md5="$(find $all_dirs -name "*.h"			|
+    -this_file_md5="$(ls -l $sfile | md5sum | cut -d ' ' -f1)"
+    +this_file_md5="$(md5sum $sfile | cut -d ' ' -f1)"
+    EOF
+
+  One funny thing there is an extra ``sed 's/\.[0-9]\+$//'`` to cut precision
+  from find's %T@ timestamps, as some older filesystems (like reiserfs, which is
+  still great for tiny-file performance and storage efficiency) don't support
+  too high precision on these, and that will change them in this output without
+  any complaints from e.g. rsync.
+
+- Host and time-dependent KBUILD\_\* variables.
+
+  These embed build user/time/host etc, are relevant for `reproducible builds`_,
+  and maybe not so much here, but still best to lock down for consistency via e.g.::
+
+    make KBUILD_BUILD_USER=user KBUILD_BUILD_HOST=host \
+      KBUILD_BUILD_VERSION=b1 KBUILD_BUILD_TIMESTAMP=e1
+
+  `All these vars are documented`_ under Documentation/ in the kernel tree.
+
+- Compiler toolchain must be roughly same between these machines.
+
+  Not hard to do if they're both same Arch, but otherwise probably best way to
+  get this is to have same distro(s) for the build within containers (e.g. nspawn).
+
+This allows to ``rsync -rtlz`` the build tree from remote after "make" and do
+the usual "make install" or tweak it locally later without doing slow full rebuilds.
+
+
+.. _distcc: https://github.com/distcc/distcc
+.. _KBUILD_ABS_SRCTREE: https://www.kernel.org/doc/html/latest/kbuild/kbuild.html#kbuild-abs-srctree
+.. _reproducible builds: https://www.kernel.org/doc/html/latest/kbuild/reproducible-builds.html
+.. _All these vars are documented: https://www.kernel.org/doc/html/latest/kbuild/kbuild.html
