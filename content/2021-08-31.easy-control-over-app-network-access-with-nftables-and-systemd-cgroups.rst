@@ -1,0 +1,175 @@
+Easy control over applications' network access using nftables and systemd cgroup-v2 tree
+########################################################################################
+
+:date: 2021-08-31 12:07
+:tags: tools, linux, sysadmin
+
+
+Linux 5.13 finally merged nftables_ feature that `seem to have been forgotten and lost
+as a random PATCH on LKML since ~2016`_ - "cgroupsv2" path match (`upstreamed patch here`_).
+
+Given how no one seemed particulary interested in it for years, guess either
+distros only migrated to using `unified cgroup hierarchy (cgroup-v2)`_ by
+default rather recently, so probably not many people use network filtering by
+these either, even though it's really neat.
+
+On a modern linux with systemd_, cgroup tree is mostly managed by it, and looks
+something like this when you run e.g. ``systemctl status``::
+
+  /init.scope # pid-1 systemd itself
+  /system.slice/systemd-udevd.service
+  /system.slice/systemd-networkd.service
+  /system.slice/dbus.service
+  /system.slice/sshd.service
+  /system.slice/postfix.service
+  ...
+  /system.slice/system-getty.slice/getty@tty1.service
+  /system.slice/system-getty.slice/getty@tty2.service
+  ...
+  /user.slice/user-1000.slice/user@1000.service/app.slice/dbus.service
+  /user.slice/user-1000.slice/user@1000.service/app.slice/pulseaudio.service
+  /user.slice/user-1000.slice/user@1000.service/app.slice/xorg.service
+  /user.slice/user-1000.slice/user@1000.service/app.slice/WM.service
+  ...
+
+I.e. every defined app neatly separated into its own cgroup, and there are
+well-defined ways to group these into slices (or manually-started stuff into scopes),
+which is done automatically for instantiated units, user sessions, and some special stuff.
+
+See earlier `"cgroup-v2 resource limits for apps with systemd scopes and slices"`_
+post for more details on all these and some neat ways to use them for any arbitrary
+pids (think "systemd-run") as well as on-the-fly cgroup-controller resource limits.
+
+Such `"cgroup-controller" resource limits`_ notably do not include networking,
+as it's historically been filtered separately from cpu/memory/io stuff via
+systemd-wide firewalls - ipchains, iptables, nftables - and more recently via
+various eBPFs microkernels - either bpfilter_ or cgroup and socket-attached BPFs
+(e.g. `"cgroup/skb" eBPF`_).
+
+And that kind of per-cgroup filtering is a very useful concept, since you already
+have these nicely grouping and labelling everything in the system, and any new
+(sub-)groups are easy to add with extra slices/scopes or systemd-run wrappers.
+
+It allows you to say, for example - "only my terminal app is allowed to access
+VPN network, and only on ssh ports", or "this game doesn't get any network access",
+or "this ssh user only needs this and this network access", etc.
+
+systemd allows some very basic filtering for this kind of stuff via
+IPAddressAllow=/IPAddressDeny= (`systemd.resource-control`_) and `custom BPFs`_,
+and these can work fine in some use-cases, but are somewhat unreliable (systemd
+doesn't treat missing resource controls as failure and quietly ignores them),
+have very limited matching capabilities (unless you code these yourself into
+custom BPFs), and are spread all over the system with "systemd --user" units
+adding/setting their own restrictions from home dirs, often in form of tiny
+hard-to-track override files.
+
+
+But these days nftables and iptables can be used to filter by cgroups instead,
+with a single coherent and easy-to-read system-wide policy in one file,
+using rules like::
+
+  add rule inet filter vpn.whitelist socket cgroupv2 level 5 \
+    "user.slice/user-1000.slice/user@1000.service/app.slice/claws-mail.scope" \
+    ip daddr mail.intranet.local tcp dport {25, 143} accept
+
+For me using system/container-wide firewalls everywhere, this seem to be a more
+convenient and much more powerful approach from a top-down system admin perspective,
+while attaching custom BPF filters for apps is more useful in a bottom-up
+scenario and should be done by devs or packagers and shipped/bundled with the apps
+(though still frustratingly not supported by flatpaks_ in 2021!).
+
+But there's a quirk in these "socket cgroupsv2" rules in nftables (and their
+iptables "-m cgroup --path ..." counterpart) - they don't actually match cgroup
+paths, but rather resolve them to numeric cgroup IDs when such rules are loaded
+into kernel, and not automatically update them in any way afterwards.
+
+This means that:
+
+- Firewall rules can't be added for not-yet-existing cgroups.
+
+  I.e. loading nftables.conf with a rule like the one above on early boot would
+  produce "Error: cgroupv2 path fails: No such file or directory" from nft (and
+  "xt_cgroup: invalid path, errno=-2" error in dmesg for iptables).
+
+- When cgroup gets removed and re-created, none of the existing rules will apply
+  to it, as it will have new and unique ID.
+
+Basically such rules in a system-wide policy config only work for cgroups
+that are created early on boot and never removed after that, which is not how
+systemd works with its cgroups, obviously - they are entirely transient and get
+added/removed as necessary.
+
+But this doesn't mean that such filtering is unusable at all, just that it
+`has to work slightly differently, in a "decoupled" fashion`_::
+
+  Following the decoupled approach: If the cgroup is gone, the filtering
+  policy would not match anymore. You only have to subscribe to events
+  and perform an incremental updates to tear down the side of the
+  filtering policy that you don't need anymore. If a new cgroup is
+  created, you load the filtering policy for the new cgroup and then add
+  processes to that cgroup. You only have to follow the right sequence
+  to avoid problems.
+
+There seem to be no easy-to-find helpers to manage such filtering policy around
+yet though. It was proposed for systemd itself to do that in `RFE-7327`_,
+but as it doesn't manage system firewall (yet?), this seem to be a non-starter.
+
+Easy to do via small helper tool however, so I've made one here -
+`mk-fg/systemd-cgroup-nftables-policy-manager`_ (scnpm) - to monitor system/user
+unit events from systemd journal tags (think "journalctl -o json-pretty") and
+(re-)apply rules for these via libnftables.
+
+Since such rules can't be applied directly, and to be explicit wrt what to monitor,
+they have to be specified as a comment lines in nftables.conf, e.g.::
+
+  ## Allow connections to smtp over vpn for system postfix.service
+  # postfix.service :: add rule inet filter vpn.whitelist \
+  #   socket cgroupv2 level 2 "system.slice/postfix.service" tcp dport 25 accept
+
+  ## Allow connections to intranet mail for a scope unit running under "systemd --user"
+  ## "systemd-run" can be used to easily start apps in custom scopes or slices
+  # app-mail.scope :: add rule inet filter vpn.whitelist socket cgroupv2 level 5 \
+  #   "user.slice/user-1000.slice/user@1000.service/app.slice/app-mail.scope" \
+  #   ip daddr mail.intranet.local tcp dport {25, 143} accept
+
+  ## Only allow whitelisted apps to connect over "my-vpn" iface
+  add rule inet filter output oifname my-vpn jump vpn.whitelist
+  add rule inet filter output oifname my-vpn reject with icmpx type admin-prohibited
+
+And this works pretty well for my purposes so far.
+
+One particular relevant use-case as per example above is migrating everything to
+use "zero-trust" overlay networks (or just VPNs), but on modern server setups,
+access to these tend to be much easier to manage by running something like
+innernet_ (or tailscale_, or `one of a dozen other WireGuard tunnel managers`_)
+in netns containers (docker, systemd-nspawn, lxc) or VMs, as access in these
+systems tend to be regulated by just link availability/bridging, which
+translates to having right crypto keys for a set of endpoints with wg tunnels.
+
+So this is more of a thing for more complicated desktop machines rather than
+proper containerized servers, but still very nice way to handle access controls,
+instead of just old-style IP/port/etc matching without specifying which app
+should have that kind of access, as that's almost never universal (outside of
+aforementioned dedicated single-app containers), composing it all together in
+one coherent systemd-wide policy file.
+
+
+.. _nftables: https://nftables.org/
+.. _seem to have been forgotten and lost as a random PATCH on LKML since ~2016: https://patchwork.ozlabs.org/project/netfilter-devel/patch/1479114761-19534-1-git-send-email-pablo@netfilter.org/
+.. _upstreamed patch here: https://patchwork.ozlabs.org/project/netfilter-devel/patch/20210426171056.345271-3-pablo@netfilter.org/
+.. _unified cgroup hierarchy (cgroup-v2): https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
+.. _systemd: https://systemd.io/
+.. _"cgroup-v2 resource limits for apps with systemd scopes and slices": https://blog.fraggod.net/2019/10/02/cgroup-v2-resource-limits-for-apps-with-systemd-scopes-and-slices.html
+.. _"cgroup-controller" resource limits: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#controlling-controllers
+.. _bpfilter: https://lwn.net/Articles/755919/
+.. _"cgroup/skb" eBPF: https://github.com/mk-fg/fgtk/blob/master/bpf/cgroup-skb.nonet.c
+.. _systemd.resource-control: https://man.archlinux.org/man/systemd.resource-control.5.en
+.. _custom BPFs: https://kailueke.gitlab.io/systemd-bpf-firewall-loader/
+
+.. _flatpaks: https://docs.flatpak.org/en/latest/sandbox-permissions-reference.html
+.. _has to work slightly differently, in a "decoupled" fashion: https://patchwork.ozlabs.org/project/netfilter-devel/patch/1479114761-19534-1-git-send-email-pablo@netfilter.org/#1511797
+.. _RFE-7327: https://github.com/systemd/systemd/issues/7327
+.. _mk-fg/systemd-cgroup-nftables-policy-manager: https://github.com/mk-fg/systemd-cgroup-nftables-policy-manager
+.. _innernet: https://github.com/tonarino/innernet
+.. _tailscale: https://tailscale.com/
+.. _one of a dozen other WireGuard tunnel managers: https://github.com/cedrickchee/awesome-wireguard#mesh-network
