@@ -16,13 +16,13 @@ will spot that and tell you, but that's often not what happens, for example:
 
   % dd if=/dev/urandom of=file.orig bs=1M count=1
 
-  % cp -a file{.orig,} && bsdtar -czf file.tar -- file
-  % bsdtar -xf file.tar && b2sum -l96 file{.orig,}
+  % cp -a file{.orig,} && bsdtar -czf file.tar.gz -- file
+  % bsdtar -xf file.tar.gz && b2sum -l96 file{.orig,}
   2d6b00cfb0b8fc48d81a0545  file.orig
   2d6b00cfb0b8fc48d81a0545  file
 
-  % python -c 'f=open("file.tar", "r+b"); f.seek(512 * 2**10); f.write(b"\x01\x02\x03")'
-  % bsdtar -xf file.tar && b2sum -l96 file{.orig,}
+  % python -c 'f=open("file.tar.gz", "r+b"); f.seek(512 * 2**10); f.write(b"\1\2\3")'
+  % bsdtar -xf file.tar.gz && b2sum -l96 file{.orig,}
   2d6b00cfb0b8fc48d81a0545  file.orig
   c9423358edc982ba8316639b  file
 
@@ -35,9 +35,8 @@ Typical solution is to put e.g. .sha256 files next to archives and hope that
 people check those, but of course no one ever does in reality - bsdtar itself
 has to always do it implicitly for that kind of checking to stick,
 extra opt-in steps won't work.
-
-(putting checksum in the filename is a bit better, but still not useful for the
-same reason - almost no one will ever check it, unless it's automatic)
+Putting checksum in the filename is a bit better, but still not useful for the
+same reason - almost no one will ever check it, unless it's automatic.
 
 Luckily bsdtar has at least some safe options there, which I think should always
 be used by default, unless there's a good reason not to in some particular case:
@@ -56,7 +55,7 @@ be used by default, unless there's a good reason not to in some particular case:
     xz: (stdin): Compressed data is corrupt
 
   Heavier on resources than .gz and might be a bit less compatible, but given that even
-  GNU tar supports it out of the box and much better compression (with faster decompression),
+  GNU tar supports it out of the box and much better compression (with faster decompression)
   in addition to mandatory checksumming, should always be a default for compressed archives.
 
   Lowering compression level might help a bit with performance as well.
