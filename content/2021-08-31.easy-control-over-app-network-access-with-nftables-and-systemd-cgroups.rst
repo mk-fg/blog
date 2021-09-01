@@ -64,7 +64,7 @@ adding/setting their own restrictions from home dirs, often in form of tiny
 hard-to-track override files.
 
 
-But these days nftables and iptables can be used to filter by cgroups instead,
+But nftables and iptables can be used to filter by cgroups too,
 with a single coherent and easy-to-read system-wide policy in one file,
 using rules like::
 
@@ -72,16 +72,18 @@ using rules like::
     "user.slice/user-1000.slice/user@1000.service/app.slice/claws-mail.scope" \
     ip daddr mail.intranet.local tcp dport {25, 143} accept
 
-For me using system/container-wide firewalls everywhere, this seem to be a more
-convenient and much more powerful approach from a top-down system admin perspective,
-while attaching custom BPF filters for apps is more useful in a bottom-up
-scenario and should be done by devs or packagers and shipped/bundled with the apps
-(though still frustratingly not supported by flatpaks_ in 2021!).
+I already use system/container-wide firewalls everywhere, so to me this looks
+like a more convenient and much more powerful approach from a top-down system
+admin perspective, while attaching custom BPF filters for apps is more useful in
+a bottom-up scenario and should probably mostly be left for devs and packagers,
+shipped/bundled with the apps, just like landlock_ or seccomp_ rulesets and
+such wrappers - e.g. set in apps' systemd unit files or flatpak containers
+(`flatpaks only support trivial network on/off switch`_ atm though).
 
-But there's a quirk in these "socket cgroupsv2" rules in nftables (and their
-iptables "-m cgroup --path ..." counterpart) - they don't actually match cgroup
-paths, but rather resolve them to numeric cgroup IDs when such rules are loaded
-into kernel, and not automatically update them in any way afterwards.
+There's a quirk in these "socket cgroupsv2" rules in nftables however (same as
+their iptables "-m cgroup --path ..." counterpart) - they don't actually match
+cgroup paths, but rather resolve them to numeric cgroup IDs when such rules are
+loaded into kernel, and not automatically update them in any way afterwards.
 
 This means that:
 
@@ -114,37 +116,32 @@ There seem to be no easy-to-find helpers to manage such filtering policy around
 yet though. It was proposed for systemd itself to do that in `RFE-7327`_,
 but as it doesn't manage system firewall (yet?), this seem to be a non-starter.
 
-Easy to do via small helper tool however, so I've made one here -
-`mk-fg/systemd-cgroup-nftables-policy-manager`_ (scnpm) - to monitor system/user
-unit events from systemd journal tags (think "journalctl -o json-pretty") and
-(re-)apply rules for these via libnftables.
+So had to add one myself - `mk-fg/systemd-cgroup-nftables-policy-manager`_
+(scnpm) - a small tool to monitor system/user unit events from systemd journal
+tags (think "journalctl -o json-pretty") and (re-)apply rules for these via libnftables.
 
 Since such rules can't be applied directly, and to be explicit wrt what to monitor,
 they have to be specified as a comment lines in nftables.conf, e.g.::
 
-  ## Allow connections to smtp over vpn for system postfix.service
   # postfix.service :: add rule inet filter vpn.whitelist \
   #   socket cgroupv2 level 2 "system.slice/postfix.service" tcp dport 25 accept
 
-  ## Allow connections to intranet mail for a scope unit running under "systemd --user"
-  ## "systemd-run" can be used to easily start apps in custom scopes or slices
   # app-mail.scope :: add rule inet filter vpn.whitelist socket cgroupv2 level 5 \
   #   "user.slice/user-1000.slice/user@1000.service/app.slice/app-mail.scope" \
   #   ip daddr mail.intranet.local tcp dport {25, 143} accept
 
-  ## Only allow whitelisted apps to connect over "my-vpn" iface
   add rule inet filter output oifname my-vpn jump vpn.whitelist
   add rule inet filter output oifname my-vpn reject with icmpx type admin-prohibited
 
 And this works pretty well for my purposes so far.
 
-One particular relevant use-case as per example above is migrating everything to
-use "zero-trust" overlay networks (or just VPNs), but on modern server setups,
-access to these tend to be much easier to manage by running something like
-innernet_ (or tailscale_, or `one of a dozen other WireGuard tunnel managers`_)
-in netns containers (docker, systemd-nspawn, lxc) or VMs, as access in these
-systems tend to be regulated by just link availability/bridging, which
-translates to having right crypto keys for a set of endpoints with wg tunnels.
+One particularly relevant use-case as per example above is migrating everything
+to use "zero-trust" overlay networks (or just VPNs), though on modern server
+setups access to these tend to be much easier to manage by running something
+like innernet_ (or tailscale_, or `one of a dozen other WireGuard tunnel
+managers`_) in netns containers (docker, systemd-nspawn, lxc) or VMs, as access
+in these systems tend to be regulated by just link availability/bridging,
+which translates to having right crypto keys for a set of endpoints with wg tunnels.
 
 So this is more of a thing for more complicated desktop machines rather than
 proper containerized servers, but still very nice way to handle access controls,
@@ -166,7 +163,9 @@ one coherent systemd-wide policy file.
 .. _systemd.resource-control: https://man.archlinux.org/man/systemd.resource-control.5.en
 .. _custom BPFs: https://kailueke.gitlab.io/systemd-bpf-firewall-loader/
 
-.. _flatpaks: https://docs.flatpak.org/en/latest/sandbox-permissions-reference.html
+.. _landlock: https://landlock.io/
+.. _seccomp: https://en.wikipedia.org/wiki/Seccomp
+.. _flatpaks only support trivial network on/off switch: https://docs.flatpak.org/en/latest/sandbox-permissions-reference.html
 .. _has to work slightly differently, in a "decoupled" fashion: https://patchwork.ozlabs.org/project/netfilter-devel/patch/1479114761-19534-1-git-send-email-pablo@netfilter.org/#1511797
 .. _RFE-7327: https://github.com/systemd/systemd/issues/7327
 .. _mk-fg/systemd-cgroup-nftables-policy-manager: https://github.com/mk-fg/systemd-cgroup-nftables-policy-manager
