@@ -1,0 +1,84 @@
+Dynamic policy routing to work around internet restrictions
+###########################################################
+
+:date: 2022-04-05 13:39
+:tags: tools, linux, sysadmin, policy, web
+
+
+Internet have been heavily restricted here for a while (Russia), but with recent
+events, local gov seem to have gotten a renewed shared interest in blocking
+whatever's left of it with everyone else in the world, so it obviously got worse.
+
+Until full whitelist and/or ML-based filtering for "known-good" traffic is
+implemented though, simple way around it seem to be tunneling traffic through
+any IP that's not blocked yet.
+
+I've used simple "ssh -D" socks-proxy with an `on-off button in a browser`_ to
+flip around restrictions (or more like different restriction regimes),
+but it does get tiresome these days, and some scripts and tools outside of
+browsing start to get affected.
+So ideally traffic to some services/domains should be routed around internal
+censorship or geo-blocking on the other side automatically.
+
+Linux routing tables allow to do that for specific IPs (which is usually called
+"policy(-based) routing" or PBR), but one missing component for my purposes was
+something to sync these tables with the reality of internet services using DNS
+hostnames of ever-shifting IPs, blocks applied on HTTP protocol level or dropped
+after DPI filter on connection, and these disruptions being rather dynamic
+from day to day, most times looking like some fickle infants flipping on/off
+switches on either side.
+
+Having a script to http(s)-check remote endpoints and change routing on the fly
+seem to work well for most stuff in my case, having a regular linux box as a
+router here, which can run such script and easily accomodate for such changes,
+implemented here:
+
+  https://github.com/mk-fg/name-based-routing-policy-controller
+
+Checks are pretty straightforward parallel curl fetches (as curl_ can be
+generally relied upon to work with all modern http[s] stuff properly),
+but processing their results `can be somewhat tricky`_,
+and dynamic routing itself can be implemented in a bunch of different ways.
+
+Generally sending traffic through tunnels needs some help from the firewall
+(esp. since straight-up "nat" in "ip rule" is deprecated), to at least NAT
+packets going through whatever local IPs and exclude checker app itself from
+workarounds (so that it can do its checks), so it seem to make sense marking
+route-around traffic there as well.
+
+fwmarks based on nftables set work well for that, together with "ip rule"
+sending marked pkts through separate routing table, while simple ``skuid``
+match or something like `cgroup service-based filtering`_ works for exceptions.
+There's a (hopefully) more comprehensive example of such routing setup in the
+`nbrpc project's repo/README`_.
+
+Strongly suspect that this kind of workaround is only a beginning though,
+and checks for different/mangled content (instead of just HTTP codes indicating blocking)
+might be needed there, workarounds being implemented as something masquerading
+as multiplexed H2 connections instead of straightforward encrypted wg tunnels,
+with individual exit points checked for whether they got discovered and have to
+be cycled today, as well as ditching centrally-subverted TLS PKI for any kind of
+authenticity guarantees.
+
+This heavily reminds me of relatively old `"Internet Perspectives"`_ and
+Covergence_ ideas/projects (see also second part of `old post here`_),
+most of which seem to have been long-abandoned, as people got used to
+corporate-backed internet being mostly-working and mostly-secure, with
+apparently significant money riding on that being the case.
+
+Only counter-examples being heavily-authoritarian, lawless and/or pariah states
+where global currency no longer matters as much, and commercial internet doesn't
+care about those.
+Feel like I might need to at least re-examine those efforts here soon enough,
+if not just stop bothering and go offline entirely.
+
+
+.. _on-off button in a browser: https://github.com/mk-fg/waterfox#proxy-toggle-local
+.. _curl: https://curl.se/
+.. _can be somewhat tricky: https://github.com/mk-fg/name-based-routing-policy-controller#routing-policy-decision-making-logic
+.. _cgroup service-based filtering: https://blog.fraggod.net/2021/08/31/easy-control-over-applications-network-access-using-nftables-and-systemd-cgroup-v2-tree.html
+.. _nbrpc project's repo/README: https://github.com/mk-fg/name-based-routing-policy-controller#setup-example-with-linux-policy-routing
+.. _"Internet Perspectives": https://addons.thunderbird.net/en-us/firefox/addon/perspectives/
+.. _Covergence: https://github.com/mk-fg/convergence
+.. _old post here: https://blog.fraggod.net/2013/04/29/recent-fixes-to-great-tools-0bin-and-convergence.html
+.. _Moxie Marlinspike talk on YT: https://www.youtube.com/watch?v=Z7Wl2FW2TcA
