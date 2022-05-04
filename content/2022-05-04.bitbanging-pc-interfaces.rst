@@ -1,0 +1,69 @@
+Bit-banging interfaces on a PC motherboard
+##########################################
+
+:date: 2022-05-04 13:07
+:tags: hardware
+
+
+It's usually easy to get computers to talk over ethernet, but making traditional
+PC hardware to talk to electronics or a GPIO line tends to be more difficult.
+
+Issue came up when I wanted to make a smart wakeup switch for a local backup
+ARM-board the other day, which would toggle separate 5V power to it and its
+drive in-between weekly backups, so went on to explore the options there.
+
+Simpliest one is actually to wake up an ARM board using Wake-on-LAN_, which can
+then control own and peripherals' power via its GPIO lines, but don't think mine
+has that.
+
+Next easiest one (from my pov) seem to be grabbing any Arduino-ish MCU laying
+around, hook that up to a relay and make it into a "smart switch" via couple
+dozen lines of glue code.
+
+Problem with that approach is that PC mobos tend not to have simple GPIO lines
+easily exposed and intended for use from userspace, but there are options:
+
+- Parallel port, if motherboard is ancient enough, or if hooked-up via one of
+  cheap USB-to-LPT cables with tiny controller in the connector.
+
+  These have a bunch of essentially GPIO lines, albeit in a funny connector
+  package, and with a weird voltage, but pretty sure only really old mobos have
+  that built-in by now.
+
+- RS-232 COM port, likely via a header on the board.
+
+  Dunno about latest hardware, but at least ones from 6-7 years ago can still
+  have these.
+
+  Even though it's a serial port, they have DTR and RTS pins, which are easy
+  to control directly, using ioctl() with TIOCM_DTR and TIOCM_RTS flags on \/dev\/ttyS\*.
+
+  Outside of pure bit-banging, RS-232 can usually be hooked-up to simplier
+  hardware's UART pins via RS232-to-TTL chip, instead of just GPIO via optocoupler.
+
+- PC Speaker!
+
+  That's a 5V signal too (PWM, sure, but still no problem to read),
+  and not like it's in much demand for anything else these days.
+
+  Might have to either emit/detect distinct frequency or sequence of beeps
+  to make sure that's not the signal of machine booting on the other side.
+
+- 3-pin fan headers with a voltage level controls.
+
+  Can be a neat use for those analog pins on arduinos, though not all monitoring
+  chips are RE-ed enough to have linux drivers with control over fans, unfortunately.
+
+- Power on USB ports as a signal - at least some mobos can put those to sleep
+  via sysfs, I think, usually with per-controller level of granularity.
+
+For my purposes, COM was available via an easy pin header, and it was easy
+enough to use its control pins, with some simple voltage-level shifting
+(COM itself has -12V/+12V for 0/1).
+
+Bit of a shame that PCs don't traditionally have robust GPIO headers for users,
+feel like that'd have enabled a lot of fancy cas modding, home automation,
+or got more people into understanding basic electronics, if nothing else.
+
+
+.. _Wake-on-LAN: https://en.wikipedia.org/wiki/Wake-on-LAN
