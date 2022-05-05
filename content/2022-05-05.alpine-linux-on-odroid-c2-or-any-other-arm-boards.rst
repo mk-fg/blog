@@ -1,0 +1,398 @@
+Alpine Linux on ODROID-C2 or any other ARM boards
+#################################################
+
+:date: 2022-05-05 12:41
+:tags: arm, linux
+
+
+`Alpine Linux`_ is a tiny distro (like ~50 MiB for the whole system),
+which is usually very good for a relatively single-purpose setup,
+dedicated to running only a couple things at once.
+
+It doesn't really sacrifice much in the process, since busybox_ and OpenRC_
+there provide pretty complete toolkit for setting things up to start
+and debugging everything, its repos have pretty much anything,
+and what they don't have is trivial to build via APKBUILD_ files
+very similar to Arch's PKGBUILDs.
+
+Really nice thing seem to have happened to it with the rise of docker/podman
+and such single-app containers, when it got a huge boost in popularity,
+being almost always picked as an OS base in these, and so these days
+it seem to be well-supported to cover all linux architectures,
+and likely will be for quite a while.
+
+So it's a really good choice for an appliance-type ARM boards to deploy and
+update for years, but it doesn't really bother specializing itself for each of
+those or supporting board-specific quirks, which is why some steps to set it up
+for a specific board have to be done manually.
+
+Since I've done it for a couple different boards relatively recently, and been
+tinkering with these for a while, thought to write down a list of steps on how
+to set alpine up for a new board here.
+
+In this case, it's a relatively-old ODROID-C2_ that I have from 2016, which is
+well-supported in mainline linux kernel by now, as popular boards tend to be,
+after a couple years since release, and roughly same setup steps should apply
+to any of them.
+
+.. _Alpine Linux: https://alpinelinux.org/
+.. _busybox: https://busybox.net/
+.. _OpenRC: https://github.com/OpenRC/openrc
+.. _APKBUILD: https://wiki.alpinelinux.org/wiki/APKBUILD_examples:Simple
+.. _ODROID-C2: https://en.wikipedia.org/wiki/ODROID
+
+Current Alpine is 3.15.4 and Linux is 5.18 (or 5.15 LTS) atm of writing this.
+
+
+- Get USB-UART dongle (any dirt-cheap $5 one will do) and a couple jumper wires,
+  lookup where main UART pins are on the board (ones used by firmware/u-boot).
+
+  `Official documentation or wiki`_ is usually the best source of info on that.
+  There should be RX/TX and GND pins, only those need to be connected.
+
+  ``screen /dev/ttyUSB0 115200`` command is my go-to way to interact with those,
+  but there're other tools for that too.
+
+  If there's another ARM board laying around, they usually have same UART
+  pins, so just twist TX/RX and connect to the serial console from there.
+
+  .. _Official documentation or wiki:
+    https://wiki.odroid.com/odroid-c2/application_note/gpio/uart#pin_mapuart_pin_on_the_4-pin_con5_connector
+
+- Check which System-on-Chip (SoC) family/vendor device uses, look it up wrt
+  mainline linux support, and where such effort might be coordinated.
+
+  | For example, for Amlogic SoC in ODC2, `linux-meson.com`_ has all the info.
+  | Allwinner SoCs tend to be documented at `linux-sunxi.org`_ wiki.
+  | Beaglebones' TI SoC at `elinux.org`_, RPi's site/community, ... etc etc.
+
+  There're usually an IRC or whatever chat channels linked on those too,
+  and tons of helpful info all around, though sometimes outdated and distro-specific.
+
+  .. _linux-meson.com: https://linux-meson.com/
+  .. _linux-sunxi.org: https://linux-sunxi.org/
+  .. _elinux.org: https://elinux.org/
+
+
+- Get `U-Boot`_ for the board, ideally configured for some sane filesystem layout.
+
+  "Generic ARM" images on `Alpine Downloads page`_ tend to have these,
+  but architecture is limited to armv7/aarch64 boards, but a board vendor's
+  u-boot will work just as well, and it might come with pre-uboot stages or
+  signing anyway, which definitely have to be downloaded from their site and docs.
+
+  With ODC2, `there're docs and download links`_ for bootloader specifically,
+  which include an archive with a signing tool and a script to sign/combine all blobs
+  and dd them into right location on microSD card, where firmware will try to run it from.
+
+  Bootloader can also be extracted from some vendor-supplied distro .img
+  (be it ubuntu or android), if there's no better option - dd that on the card
+  and ``rm -rf`` all typical LFS dirs on the main partition there, as well as
+  kernel/initramfs in /boot - what's left should be a bootloader
+  (incl. parts of it dd'ed before partitions) and its configs.
+
+  Often all magic there is "which block to dd u-boot.img to", and if
+  Alpine Generic ARM has u-boot blob for specific board (has one for ODROID-C2),
+  then that one should be good to use, along with blobs in /efi and its main
+  config file in /extlinux - dd/cp u-boot to where firmware expects it to be
+  and copy those extra stage/config dirs.
+
+  `Alpine wiki`_ might have plenty of board-specific advice too, e.g. check out
+  `Odroid-C2 page`_ there.
+
+  .. _U-Boot: https://www.denx.de/wiki/U-Boot
+  .. _Alpine Downloads page: https://alpinelinux.org/downloads/
+  .. _there're docs and download links:
+    https://wiki.odroid.com/odroid-c2/software/building_u-boot#installation_to_blank_card
+  .. _Alpine wiki: https://wiki.alpinelinux.org/
+  .. _Odroid-C2 page: https://wiki.alpinelinux.org/wiki/Odroid-C2
+
+
+- Boot the board into u-boot with UART console connected, get that working.
+
+  There should be at least output from board's firmware, even without any
+  microSD card, then u-boot will print a lot of info about itself and what
+  it's doing, and eventually it (or later stages) will try to load linux kernel,
+  initramfs and dtb files, specified in whatever copied configs.
+
+  If "Generic ARM" files or whatever vendor distro was not cleaned-up from card
+  partitions, it might even start linux and some kind of proper OS, though kernel
+  in that generic alpine image seem to be lacking ODC2 board support and has no
+  dtb for it.
+
+  Next part is to drop some working linux kernel/dtb (+initramfs maybe),
+  rootfs, and that should boot into something interactive.
+  Conversely, no point moving ahead with the rest of the setup until bootloader
+  and console connected there all work as expected.
+
+
+- Get or build a working Linux kernel.
+
+  It's not a big deal (imo at least) to configure and build these manually,
+  as there aren't really that many options when configuring those for ARM -
+  you basically pick the SoC and all options with MESON or SUNXI in the name
+  for this specific model, plus whatever generic features/filesystems/etc
+  you will need in there.
+  Idea is to enable with =y (compile-in) all drivers that are needed
+  for SoC to boot, and the rest can be =m (loadable modules).
+
+  Ideally after being built somewhere, kernel should be installed via proper
+  Alpine package, and for my custom ODC2 kernel, I just reused linux-lts
+  APKBUILD file from `"aports" git repository`_, running "make nconfig" in
+  src/build-... dir to make new .config and then copy it back for abuild to use.
+
+  Running ``abuild -K build rootpkg`` is generally how kernel package can be
+  rebuilt after any .config modifications in the build directory, i.e. after
+  fixing whatever forgotten things needed for boot.
+  (good doc/example of the process can be found `at strfry's blog here`_)
+
+  These builds can be run in same-arch alpine chroot, in a VM or on some other board.
+  I've used an old RPi3 board to do aarch64 build with an RPi Alpine image
+  there - there're special pre-configured ones for those boards, likely
+  due to their massive popularity (so it was just the easiest thing to do).
+
+  I'd also suggest renaming the package from linux-lts to something unique for
+  specific build/config, like "linux-odc2-5-15-36", with idea there being able
+  to install multiple such linux-\* packages alongside each other easily.
+
+  This can help a lot if one of them might have issues in the future -
+  not booting, crashes/panics, any incompatibilities, etc - as you can then
+  simply flip bootloader config to load earlier version, and test new versions
+  without comitting to them easily via kexec_ (especially cool for remote
+  headless setups - see below).
+
+  For C2 board kconfig, I've initially grabbed one from
+  `superna9999/meta-meson`_ repo, built/booted that (on 1G-RAM RPi3, that large
+  build needed zram_ enabled for final vmlinuz linking), to test if it works at all,
+  and then configured much more minimal kernel from scratch.
+
+  One quirk needed there for ODC2 was enabling CONFIG\_REGULATOR\_\* options for
+  "X voltage supplied by Y" messages in dmesg that eventually enable MMC reader,
+  but generally kernel's console output is pretty descriptive wrt what might be missing,
+  especially if it can be easily compared with an output from a working build like that.
+
+  For the purposes of initial boot, linux kernel is just one "vmlinuz" file
+  inside resulting .apk (tar can unpack those), but dtbs-\* directory must be
+  copied from package alongside it too for ARM boards like these odroids, as they
+  use blobs there to describe what is connected where and how to kernel.
+
+  Specific dtb can also be concatenated into kernel image file, to have it all-in-one,
+  but there should be no need to do that, as all such board bootloaders expect
+  to have dtbs and have configuration lines to load them already.
+
+  So, to recap:
+
+  - Linux configuration: enable stuff needed to boot and for accessing MMC slot,
+    or whatever rootfs/squashfs storage.
+
+  - Build scripts: use APKBUILD from Alpine aports, just tweak config there
+    and maybe rename it, esp. if you want multiple/fallback kernels.
+
+  - Build machine: use other same-arch board or VM with alpine or its chroot.
+
+  - Install: "tar -xf" apk, drop vmlinuz file and dtbs dir into /boot.
+
+  .. _"aports" git repository: https://gitlab.alpinelinux.org/alpine/aports
+  .. _at strfry's blog here: https://strfry.github.io/blog/building-alpine-kernel.html
+  .. _kexec: https://wiki.archlinux.org/title/Kexec
+  .. _superna9999/meta-meson: https://github.com/superna9999/meta-meson/
+  .. _zram: https://wiki.archlinux.org/title/ZRAM
+
+
+- Update extlinux.conf or whatever bootloader config for new kernel files, boot that.
+
+  E.g. after dropping vmlinuz and dtbs from "linux-c51536r01" package for u-boot.bin
+  from Alpine's "Generic ARM" build (running efi blob with extlinux.conf support)::
+
+    TIMEOUT 20
+    PROMPT 1
+    DEFAULT odc2
+
+    LABEL odc2
+    MENU LABEL Linux odc2
+    KERNEL /boot/vmlinuz-c51536r01
+    # INITRD /boot/initramfs-c51536r01
+    FDTDIR /boot/dtbs-c51536r01
+    APPEND root=/dev/mmcblk0p1
+
+  Idea with this boot config is to simply get kernel to work and mount some
+  rootfs without issues, so e.g. for custom non-generic/modular one,
+  built specifically for ODROID-C2 board in prev step, there's no need for
+  that commented-out INITRD line.
+
+  Once this boots and mounts rootfs (and then presumably panics as it can't find
+  /sbin/init there), remaining part is to bootstrap/grab basic alpine rootfs for
+  it to run userspace OS parts from.
+
+  This test can also be skipped for more generic and modular kernel config,
+  as it's not hard to test it with proper roots and initramfs later either.
+
+
+- Setup bootable Alpine rootfs.
+
+  It can be grabbed from the same Alpine downloads URL for any arch,
+  but if there's already a same-arch alpine build setup for kernel package,
+  might be easier to bootstrap it with all necessary packages there instead::
+
+    # apk='apk -p odc2-root -X https://dl.alpinelinux.org/alpine/v3.15/main/ -U --allow-untrusted'
+    # $apk --arch aarch64 --initdb add alpine-base
+    # $apk add linux-firmware-none mkinitfs
+    # $apk add e2fsprogs # or ones for f2fs, btrfs or whatever
+    # $apk add linux-c51536r01-5.15.36-r1.apk
+
+  To avoid needing --allow-untrusted for anything but that local linux-c51536r01
+  package, apk keys can be pre-copied from /etc/apk to odc2-root/etc/apk just
+  like Alpine's setup-disk script does it.
+
+  That rootfs will have everything needed for ODC2 board to boot, including
+  custom kernel with initramfs generated for it, containing any necessary modules.
+  Linux files on /boot should overwrite manually-unpacked/copied ones in earlier
+  test, INITRD or similar line can be enabled/corrected for bootloader,
+  but after cp/rsync, rootfs still needs a couple additional tweaks
+  (again similar to what setup-disk Alpine script does):
+
+  - etc/fstab: add e.g. ``/dev/mmcblk0p1 / ext4 rw,noatime 0 1`` to fsck/remount rootfs.
+
+    I'd add ``tmpfs /tmp tmpfs size=30%,nodev,nosuid,mode=1777 0 0`` there as well,
+    since Alpine's OpenRC is not systemd and doesn't have default mountpoints
+    all over the place.
+
+  - etc/inittab: comment-out all default tty's and enable UART one.
+
+    E.g. ``ttyAML0::respawn:/sbin/getty -L ttyAML0 115200 vt100`` for ODROID-C2 board.
+
+    This is important to get login prompt on the right console,
+    so make sure to check kernel output to find the right one, e.g. with ODC2 board::
+
+      c81004c0.serial: ttyAML0 at MMIO 0xc81004c0 (irq = 23, base_baud = 1500000) is a meson_uart
+
+    But it can also be ttyS0 or ttyAMA0 or something else on other ARM platforms.
+
+  - etc/securetty: add ``ttyAML0`` line for console there too, same as with inittab.
+
+    Otherwise even though login prompt will be there, getty will refuse to ask
+    for password on that console, and immediately respond with "user is disabled"
+    or something like that.
+
+  This should be enough to boot and login into working OS on the same UART console.
+
+
+- Setup basic stuff on booted rootfs.
+
+  With initial rootfs booting and login-able, all that's left to get this to
+  a more typical OS with working network and apk package management.
+
+  "vi" is default editor in busybox, and it can be easy to use once you know to
+  press "i" at the start (switching it to a notepad-like "insert" mode),
+  and press "esc" followed by ":wq" + "enter" at the end to save edits
+  (or ":q!" to discard).
+
+  - /etc/apk/repositories should have couple lines like
+    ``https://dl.alpinelinux.org/alpine/v3.15/main/``, appropriate for this
+    Alpine release and repos (just main + community, probably)
+
+  - ``echo nameserver 1.1.1.1 > /etc/resolv.conf`` + /etc/network/interfaces::
+
+      printf '%s\n' >/etc/network/interfaces \
+        'auto lo' 'iface lo inet loopback' 'auto eth0' 'iface eth0 inet dhcp'
+
+    Or something like that.
+
+    Also, to dhcp-configure network right now::
+
+      ip link set eth0 up && udhcpc
+      ntpd -dd -n -q -p pool.ntp.org
+
+  - ``rc-update add`` anything used/useful from /etc/init.d.
+
+    There aren't many scripts in there by default,
+    and all should be pretty self-explanatory wrt what they are for.
+
+    Something like this can be a good default::
+
+      for s in bootmisc hostname modules sysctl syslog ; do rc-update add $s boot; done
+      for s in devfs dmesg hwdrivers mdev ; do rc-update add $s sysinit; done
+      for s in killprocs mount-ro savecache ; do rc-update add $s shutdown; done
+      for s in networking ntpd sshd haveged ; do rc-update add $s; done
+
+    Run ``rc-update show -v`` to get a full picture of what is setup to run when
+    with openrc, should be much simplier and more comprehensible than systemd in general.
+
+    sshd and haveged there can probably be installed after network works, or in
+    earlier rootfs-setup step (and haveged likely unnecessary with more recent
+    kernels that fixed blocking /dev/random).
+
+  - ``ln -s /usr/share/zoneinfo/... /etc/localtime`` maybe?
+
+  That should be it - supported and upgradable Alpine with a custom kernel apk
+  and bootloader for this specific board.
+
+
+- Extra: kexec for updating kernels safely, without breaking the boot.
+
+  Once some initial linux kernel boots and works, and board is potentially
+  tucked away somewhere where it's hard to reach for pulling microSD card out,
+  it can be scary to update kernel to potentially something that won't be able
+  to boot, start crashing, etc.
+
+  Easy solution for that is kexec_ - syscall/mechanism to start a new kernel
+  from another working kernel/OS.
+
+  Might need to build/install kexec-tools apk to use it - it's missing on some
+  architectures, but APKBUILD from aports and the tool itself should work just
+  fine without changes. Also don't forget to enable it in the kernel.
+
+  Using multiple kernel packages alongside each other like suggested above,
+  something like this should work for starting new linux from an old one immediately::
+
+    # apk install --allow-untrusted linux-c51705r08-5.17.5-r0.apk
+    # kexec -sf /boot/vmlinuz-c51705r08 --initrd /boot/initramfs-c51705r08 --reuse-cmdline
+
+  It works just like userspace exec() syscalls, but gets current kernel to exec
+  a new one instead, which generally looks like reboot, except without involving
+  firmware and bootloader at all.
+
+  This way it's easy to run and test anything in new kernel or in its cmdline
+  options safely, with simple reboot or power-cycling reverting it back to an
+  old known-good linux/bootloader setup.
+
+  Once everything is confirmed-working with new kernel, bootloader config can
+  potentially be updated to use it instead, and old linux-something package
+  replaced with a new one as a known-good fallback on the next update.
+
+  This process is not entirely foolproof however, as sometimes linux drivers or
+  maybe hardware have some kind of init-state mismatch, which actually happens
+  with C2 board, where its built-in network card fails to work after kexec,
+  unless its linux module is unloaded before that.
+
+  Something like this inside "screen" session can be used to fix that particular issue::
+
+    # rmmod dwmac_meson8b stmmac_platform stmmac && kexec ... ; reboot
+
+  "reboot" at the end should never run if "kexec" works, but if any of this fails,
+  C2 board won't end up misconfigured/disconnected, and just reboot back into
+  old kernel instead.
+
+  So far I've only found such hack needed with ODROID-C2, other boards seem to
+  work fine after kexec, so likely just a problem in this specific driver expecting
+  NIC to be in one specific state on init.
+
+
+This post is kinda long because of how writing works, but really it all boils
+down to "dd" for board-specific bootloader and using board-specific kernel
+package with a generic Alpine rootfs, so not too difficult, especially given how
+simple and obvious everything is in Alpine Linux itself.
+
+Supporting many different boards, each with its unique kernel, bootloader and
+quirks seem to be a pain for most distros, which can barely get by with x86 support,
+but if the task is simplified to just providing rootfs and pre-built package
+repository, a reasonably well-supported distro like Alpine has a good chance
+to work well in the long run, I think.
+
+ArchLinuxARM, Armbian and various vendor distros like Raspbian provide nicer
+experience out-of-the-box, but eventually have to drop support for old
+hardware, while these old ARM boards don't really go anywhere in my experience,
+and keep working fine for their purpose, hence more long-term bet on something
+like alpine seems more reasonable than distro-hopping or needless hardware
+replacement every couple years, and alpine in particular is just a great fit
+for such smaller systems.
