@@ -1,0 +1,118 @@
+LESSOUTPUT filter workaround for broken unicode en-dash characters in manpages
+##############################################################################
+
+:date: 2022-05-30 08:18
+:tags: tools, fail, documentation, bash
+
+
+Using ``man <something>`` in the terminal as usual, I've been noticing more and
+more manpages being broken by tools that produce them over the years in this one
+specific way - long command-line options with double-dash are being mangled into
+having `unicode en-dash`_ "–" prefix instead of "--".
+
+Most recent example that irked me was `yt-dlp(1) manpage`_, which looks like
+this atm (excerpt as of 2022-05-30)::
+
+  -h, –help
+    Print this help text and exit
+  –version
+    Print program version and exit
+  -i, –ignore-errors
+    Ignore download and postprocessing errors. The download
+    will be considered successful even if the postprocessing fails
+  –no-abort-on-error
+    Continue with next video on download errors;
+    e.g. to skip unavailable videos in a playlist (default)
+  –abort-on-error
+    Abort downloading of further videos if an error occurs
+    (Alias: –no-ignore-errors)
+
+If you habitually copy-paste any of the long opts there into a script (or yt-dlp
+config, as it happens), to avoid retyping these things, it won't work, because
+e.g ``–help`` cli option should of course actually be ``--help``, i.e. have two
+ascii hyphens and not any kind of unicode dash characters.
+
+From a brief look, this seem to happen because of conversion from markdown and
+probably not enough folks complaining about it, which is a pattern that I too
+chose to follow, and make a workaround instead of reporting a proper bug :)
+
+(tbf, youtube-dl forks have like 1000s of these in tracker, and I'd rather not add to
+that, unless I have a patch for some .md tooling it uses, which I'm too lazy to look into)
+
+"man" command (from `man-db`_ on linux) uses a pager tool to display its stuff
+in a terminal cli (controlled by PAGER= or MANPAGER= env vars), which is
+typically set to use `less tool`_ on desktop linuxes (with the exception of
+minimal distros like Alpine_, where it comes from busybox).
+
+"less" somewhat-infamously supports filtering of its output (which is
+occasionally abused in infosec contexts to make a file that installs rootkit if
+you run "less" on it), which can be used here for selective filtering and fixes
+when manpage is being displayed through it.
+
+Relevant variable to set in ~/.zshrc or ~/.bashrc env for running a filter-script is::
+
+  LESSOPEN='|-man-less-filter %s'
+
+With ``|-`` magic before ``man-less-filter %s`` command template indicating that
+command should be also used for pipes and when less is displaying stdin.
+
+"man-less-filter" helper script should be in PATH, and can look something like
+this to fix issues in yt-dlp manpage excerpt above:
+
+.. code-block:: sh
+
+  #!/bin/sh
+  ## Script to fix/replace bogus en-dash unicode chars in broken manpages
+  ## Intended to be used with LESSOPEN='|-man-less-filter %s'
+
+  [ -n "$MAN_PN" ] || exit 0 # no output = use original input
+
+  # \x08 is backspace-overprint syntax that "man" uses for bold chars
+  # Bold chars are used in option-headers, while opts in text aren't bold
+  seds='s/–\x08–\(.\x08\)/-\x08--\x08-\1/g;'`
+    `' s/\([ [:punct:]]\)–\([a-z0-9]\)/\1--\2/'
+  [ "$1" != - ] || exec sed "$seds"
+  exec sed "$seds" "$1"
+
+It looks really funky for a reason - simply using ``s/–/--/`` doesn't work,
+as manpages use old typewriter/teletype backspace-overtype convention for
+highlighting options in manpages.
+
+So, for example, ``-h, –help`` line in manpage above is actually this sequence
+of utf-8 - ``-\x08-h\x08h,\x08, –\x08–h\x08he\x08el\x08lp\x08p\n`` - with
+en-dash still in there, but \\x08 backspaces being used to erase and retype
+each character twice, which makes "less" display them in bold font in the terminal
+(using its own different set of code-bytes for that from ncurses/terminfo).
+
+Simply replacing all dashes with double-hyphens will break that overtyping
+convention, as each backspace erases a single char before it, and double-dash is
+two of those.
+
+Which is why the idea in the script above is to "exec sed" with two substitution
+regexps, first one replacing all overtyped en-dash chars with correctly-overtyped
+hyphens, and second one replacing all remaining dashes in the rest of the text
+which look like options (i.e. immediately followed by letter/number instead of space),
+like "Alias: –no-ignore-errors" in manpage example above, where text isn't in bold.
+
+MAN_PN env-var check is to skip all non-manpage files, where "less" understands
+empty script output as "use original text without filtering".
+`/bin/dash`_ can be used instead of \/bin\/sh on some distros (e.g. Arch, where
+sh is usually symlinked to bash_) to speed up this tiny script startup/runs.
+
+Not sure whether "sed" might have to be a `GNU sed`_ to work with unicode char
+like that, but any other implementation can probably use ``\xe2\x80\x93`` escape-soup
+instead of ``–`` in regexps, which will sadly make them even less readable than usual.
+
+Such manpage bugs should almost certainly be reported to projects/distros and fixed,
+instead of using this hack, but thought to post it here anyway, since google
+didn't help me find an exising workaround, and fixing stuff properly is more work.
+
+
+.. _unicode en-dash: https://en.wikipedia.org/wiki/Dash
+.. _yt-dlp(1) manpage: https://manpages.debian.org/unstable/yt-dlp/yt-dlp.1.en.html
+.. _man-db: https://gitlab.com/cjwatson/man-db
+.. _less tool: https://www.greenwoodsoftware.com/less/
+.. _Alpine: https://alpinelinux.org/
+.. _/bin/dash: http://gondor.apana.org.au/~herbert/dash/
+.. _bash: https://www.gnu.org/software/bash/bash.html
+.. _GNU sed: https://www.gnu.org/software/sed/
