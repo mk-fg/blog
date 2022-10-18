@@ -44,7 +44,7 @@ in a modern python can be packed into something like this:
     while True:
       if not (entry := acl.read(8)): break
       elif len(entry) != 8: raise ValueError('ACL length mismatch')
-      tag, perm, n = struct.unpack('<HHI', entry)
+      tag, perm, n = struct.unpack('HHI', entry)
       tag, perm = ACLTag(tag), ACLPerm(perm)
       match tag:
         case ACLTag.uo | ACLTag.go:
@@ -62,9 +62,7 @@ in a modern python can be packed into something like this:
     return '\n'.join(f'{prefix}{s}' for s in lines)
 
   p = 'myfile.bin'
-  xattrs = dict(
-    (k, os.getxattr(p, k, follow_symlinks=False))
-    for k in os.listxattr(p, follow_symlinks=False) )
+  xattrs = dict((k, os.getxattr(p, k)) for k in os.listxattr(p))
   if acl := xattrs.get('system.posix_acl_access'):
     print('Access ACLs:\n' + parse_acl(acl, '  '))
   if acl := xattrs.pop('system.posix_acl_default', ''):
@@ -78,7 +76,7 @@ them, and capabilities are even simplier, except for ever-growing enum of them:
   import os, io, enum, struct, dataclasses as dcs
 
   CapSet = enum.IntFlag('CapSet', dict((cap, 1 << n) for n, cap in enumerate((
-    'chown dac_override dac_read_search fowner fsetid kill setgid setuid setpcap'
+    ' chown dac_override dac_read_search fowner fsetid kill setgid setuid setpcap'
     ' linux_immutable net_bind_service net_broadcast net_admin net_raw ipc_lock'
     ' ipc_owner sys_module sys_rawio sys_chroot sys_ptrace sys_pacct sys_admin'
     ' sys_boot sys_nice sys_resource sys_time sys_tty_config mknod lease'
@@ -109,7 +107,7 @@ them, and capabilities are even simplier, except for ever-growing enum of them:
   except OSError: pass
 
 Bit weird that wrappers along these lines can't be found in today's python 3.10,
-like maybe most people sadly still stick to suid and more crude hacks where more
+but maybe most people sadly still stick to suid and more crude hacks where more
 complex access permissions are needed.
 
 One interesting thing I found here is how silly my old py2 `stracl.c`_ and

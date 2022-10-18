@@ -14,6 +14,12 @@ sources in `"content" dir`_.
 
 Blog instance is deployed at: https://blog.fraggod.net/
 
+Repository URLs:
+
+- https://github.com/mk-fg/blog
+- https://codeberg.org/mk-fg/blog
+- https://fraggod.net/code/git/blog
+
 Feel free to re-use any original content under WTFPL_ license as you see fit.
 
 .. _bloog: https://github.com/DocSavage/bloog
