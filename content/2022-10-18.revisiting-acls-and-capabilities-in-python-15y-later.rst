@@ -1,0 +1,138 @@
+Revisiting POSIX ACLs and Capabilities in python some 15 years later
+####################################################################
+
+:date: 2022-10-18 07:10
+:tags: tools, python, unix
+
+
+A while ago as I've `discovered for myself`_ using xattrs, ACLs and capabilities
+for various system tasks, and have been using those `in python2-based tools`_
+via `C wrappers for libacl and libcap`_ (in old `mk-fg/fgc`_ repo) pretty much
+everywhere since then.
+
+Tools worked without any issues for many years now, but as these are one of the
+last scripts left still in python2, time has come to update those, and revisit
+how to best access same things in python3.
+
+Somewhat surprisingly, despite being supported on linux since forever, and
+imo very useful, support for neither ACLs nor capabilities haven't made it
+into python 3.10's stdlib, but there is now at least built-in support for
+reading/writing extended attributes (without ctypes, that is), and both of these
+are simple structs stored in them.
+
+So, disregarding any really old legacy formats, parsing ACL from a file
+in a modern python can be packed into something like this:
+
+.. code-block:: python
+
+  import os, io, enum, struct, pwd, grp
+
+  class ACLTag(enum.IntEnum):
+    uo = 0x01; u = 0x02; go = 0x04; g = 0x08
+    mask = 0x10; other = 0x20
+    str = property(lambda s: s._name_)
+
+  class ACLPerm(enum.IntFlag):
+    r = 4; w = 2; x = 1
+    str = property(lambda s: ''.join(
+      (v._name_ if v in s else '-') for v in s.__class__ ))
+
+  def parse_acl(acl, prefix=''):
+    acl, lines = io.BytesIO(acl), list()
+    if (v := acl.read(4)) != b'\2\0\0\0':
+      raise ValueError(f'ACL version mismatch [ {v} ]')
+    while True:
+      if not (entry := acl.read(8)): break
+      elif len(entry) != 8: raise ValueError('ACL length mismatch')
+      tag, perm, n = struct.unpack('<HHI', entry)
+      tag, perm = ACLTag(tag), ACLPerm(perm)
+      match tag:
+        case ACLTag.uo | ACLTag.go:
+          lines.append(f'{tag.str[0]}::{perm.str}')
+        case ACLTag.u | ACLTag.g:
+          try:
+            name = ( pwd.getpwuid(n).pw_name
+              if tag is tag.u else grp.getgrgid(n).gr_name )
+          except KeyError: name = str(n)
+          lines.append(f'{tag.str}:{name}:{perm.str}')
+        case ACLTag.other: lines.append(f'o::{perm.str}')
+        case ACLTag.mask: lines.append(f'm::{perm.str}')
+        case _: raise ValueError(tag)
+    lines.sort(key=lambda s: ('ugmo'.index(s[0]), s))
+    return '\n'.join(f'{prefix}{s}' for s in lines)
+
+  p = 'myfile.bin'
+  xattrs = dict(
+    (k, os.getxattr(p, k, follow_symlinks=False))
+    for k in os.listxattr(p, follow_symlinks=False) )
+  if acl := xattrs.get('system.posix_acl_access'):
+    print('Access ACLs:\n' + parse_acl(acl, '  '))
+  if acl := xattrs.pop('system.posix_acl_default', ''):
+    print('Default ACLs:\n' + parse_acl(acl, '  d:'))
+
+Where it's just a bunch of 8B entries with uids/gids and permission bits in
+them, and capabilities are even simplier, except for ever-growing enum of them:
+
+.. code-block:: python
+
+  import os, io, enum, struct, dataclasses as dcs
+
+  CapSet = enum.IntFlag('CapSet', dict((cap, 1 << n) for n, cap in enumerate((
+    'chown dac_override dac_read_search fowner fsetid kill setgid setuid setpcap'
+    ' linux_immutable net_bind_service net_broadcast net_admin net_raw ipc_lock'
+    ' ipc_owner sys_module sys_rawio sys_chroot sys_ptrace sys_pacct sys_admin'
+    ' sys_boot sys_nice sys_resource sys_time sys_tty_config mknod lease'
+    ' audit_write audit_control setfcap mac_override mac_admin syslog wake_alarm'
+    ' block_suspend audit_read perfmon bpf checkpoint_restore' ).split())))
+
+  @dcs.dataclass
+  class Caps: effective:bool; permitted:CapSet; inheritable:CapSet
+
+  def parse_caps(cap):
+    cap, lines = io.BytesIO(cap), list()
+    ver, eff = ((v := struct.unpack('I', cap.read(4))[0]) >> 3*8) & 0xff, v & 1
+    if ver not in [2, 3]: raise ValueError(f'Unsupported capability v{ver}')
+    perm1, inh1, perm2, inh2 = struct.unpack('IIII', cap.read(16))
+    if (n := len(cap.read())) != (n_tail := {2:0, 3:4}[ver]):
+      raise ValueError(f'Cap length mismatch [ {n} != {n_tail} ]')
+    perm_bits, inh_bits = perm2 << 32 | perm1, inh2 << 32 | inh1
+    perm, inh = CapSet(0), CapSet(0)
+    for c in CapSet:
+      if perm_bits & c.value: perm |= c; perm_bits -= c.value
+      if inh_bits & c.value: inh |= c; inh_bits -= c.value
+    if perm_bits or inh_bits:
+      raise ValueError(f'Unrecognized cap-bits: P={perm_bits:x} I={inh_bits:x}')
+    return Caps(eff, perm, inh)
+
+  p = 'myfile.bin'
+  try: print(parse_caps(os.getxattr(p, 'security.capability')))
+  except OSError: pass
+
+Bit weird that wrappers along these lines can't be found in today's python 3.10,
+like maybe most people sadly still stick to suid and more crude hacks where more
+complex access permissions are needed.
+
+One interesting thing I found here is how silly my old py2 `stracl.c`_ and
+`strcaps.c`_ look in comparison - it's screenfuls of lines of more complicated
+C code, tied into python's c-api, and have to be compiled wherever these tools
+are used, with an extra python wrappers on top - all for parsing a couple of
+trivial structs, which under linux ABI compatibility promises, can be relied
+upon to be stable enough anyway.
+
+Somehow it's been the obvious solution back then, to have compiler check all
+headers and link these libs as compatibility wrappers, but I'd never bother
+these days - it'll be either ctypes wrapper, or parsing simple stuff in python,
+to avoid having extra jank and hassle of dependencies where possible.
+
+Makes me wonder if that's also the dynamic behind relatively new js/rust devs
+dragging in a bunch of crap (like the infamous `left-pad`_) into their apps,
+still thinking that it'd make life simplier or due to some "good practice" dogmas.
+
+
+.. _discovered for myself: https://blog.fraggod.net/2010/02/01/posix-capabilities-for-python.html
+.. _in python2-based tools: https://github.com/mk-fg/fgtk/blob/e7d4c0e/README.rst#scim-set
+.. _C wrappers for libacl and libcap: https://blog.fraggod.net/2010/02/01/posix-capabilities-for-python.html
+.. _mk-fg/fgc: https://github.com/mk-fg/fgc
+.. _stracl.c: https://github.com/mk-fg/fgc/blob/master/stracl.c
+.. _strcaps.c: https://github.com/mk-fg/fgc/blob/master/strcaps.c
+.. _left-pad: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/
