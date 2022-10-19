@@ -1,0 +1,87 @@
+Make cursor stand-out more in Emacs by having it blink through different colors
+###############################################################################
+
+:date: 2022-10-19 14:24
+:tags: emacs, lisp, desktop, vis
+
+
+When playing some game (Starsector_, probably) on the primary display recently,
+having `aux emacs frame`_ (an extra X11 window) on the second one with some
+ERC chat in there (`all chats translate to irc`_), I've had a minor bug somewhere
+and noticed that cursor in that frame/window wasn't of the usual
+translucent-green-foreground-text color (on a dark bg), but rather stayed simply
+#fff-white (likely because of some screwup in `my theme-application func`_
+within that frame).
+
+And an interesting observation is that it's actually really good when cursor is
+of a different color from both foreground-text and the background colors,
+because then it easily stands out against both, and doesn't get lost in a wall
+of text either - neat!
+
+Quickly googling around for a hack to make this fluke permanent, stumbled upon
+`this reply on Stack Overflow`_, which, in addition to easy ``(set-cursor-color
+...)`` answer, went on to give an example of changing color on every cusor blink.
+
+Which seems like a really simple way to make the thing stand out not just
+against bg/fg colors, but also against any syntax-highlighting color anywhere,
+and draw even more attention to itself, which is even better.
+
+With only a couple lines replacing a timer-func that normally turns cursor
+on-and-off (aka blinking), now it blinks with a glorious rainbow of colors:
+
+  https://github.com/mk-fg/emacs-setup/blob/afc1477/core/fg_lookz.el#L485-L505
+
+And at least I can confirm that it totally works for even greater/more-immediate
+visibility, especially in multiple emacs windows (e.g. usual vertical split
+showing two code buffers), where all these cursors now change colors and
+impossible to miss at a glance, so you always know which point in code you're
+jumping to upon switching there - can recommend to at least try it out.
+
+Bit weird that most code editor windows seem to have narrow-line cursor,
+even if of a separate color, given how important that detail is within that
+window, compared to e.g. any other arbitrary glyph in there, which would be
+notably larger and often more distinct/visible, aside from blinking.
+
+-----
+
+One interesting part with a set of colors, as usual, is to generate or pick
+these somehow, which can be done on a color wheel arbitrarily, with results
+often blending-in with other colors and each other, more-or-less.
+
+But it's also not hard to remember about `L\*a\*b\* colorspace`_ and pick colors
+that will be almost certainly distinct according to ranges there, as you'd do
+with a palette for dynamic lines on a graph or something more serious like that.
+
+These days I'm using `i want hue`_ generator-page to get a long-ish list of
+colors within specified ranges for Lightness (L component, to stand-out against
+light/dark bg) and Chroma parameters, and then pass css list of these into a
+`color-b64sort script`_, with -b/--bg-color and -c/--avoid-color settings/thresholds.
+
+Output is a filtered list with only colors that are far enough from the
+specified ones, to stand-out against them in the window, but is also sorted
+to have every next color picked to be most visually-distinct against preceding ones
+(with some decay-weight coefficient to make more-recent diff[s] most relevant),
+so that color doesn't blink through similar hues in a row, and you don't
+have to pick/filter/order and test these out manually.
+
+Which is the same idea as with the usual palette-picks for a line on a chart or
+other multi-value visualizations (have high contrast against previous/other values),
+that seem to pop-up like this in surprisingly many places, which is why at some
+point I just had to write that dedicated color-b64sort_ thingie to do it.
+
+Tweaking parameters to only get as many farthest-apart colors as needed for
+blinks until cursor goes static (to avoid wasting CPU cycles blinking in an idle
+window), ended up with a kind of rainbow-cursor, counting bright non-repeating
+color hues in a fixed order, which is really nice for this purpose and also just
+kinda cool and fun to look at.
+
+
+.. _Starsector: https://fractalsoftworks.com/
+.. _aux emacs frame: https://github.com/mk-fg/emacs-setup/blob/afc1477/core/fg_macroz.el#L894-L910
+.. _all chats translate to irc: https://xkcd.com/1782/
+.. _my theme-application func: https://github.com/mk-fg/emacs-setup/blob/afc1477/core/fg_lookz.el#L357-L671
+.. _this reply on Stack Overflow: https://stackoverflow.com/questions/4642835/how-to-change-the-cursor-color-on-emacs/4932922#4932922
+.. _L\*a\*b\* colorspace: https://en.wikipedia.org/wiki/CIELAB_color_space
+.. _i want hue: https://medialab.github.io/iwanthue/
+.. _color-b64sort script: https://github.com/mk-fg/fgtk#color-b64sort
+.. _color-b64sort: https://github.com/mk-fg/fgtk#color-b64sort
