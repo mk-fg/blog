@@ -1,0 +1,123 @@
+Useful git hook - prepare-commit-msg with repo path, branch and last commits
+############################################################################
+
+:date: 2022-10-21 10:02
+:tags: bash, scm, tools
+
+
+.. html::
+
+  <script>
+  'use strict';
+  let n, h2 = document.currentScript.parentNode.querySelector('h2');
+  if ((n = h2.innerHTML.lastIndexOf(' git hook - ')) > 0)
+    h2.innerHTML = h2.innerHTML.substring(0, n) + h2.innerHTML.substring(n)
+      .replace( / hook /, ' h'
+        + `<span style='position: relative'><span style='opacity: 0.5'>o</span>`
+          + `<span style='position: absolute; left: 0'>a</span></span>`
+        + `<span style='position: relative'><span style='opacity: 0.5'>o</span>`
+          + `<span style='position: absolute; left: 0'>c</span></span>k ` );
+  </script>
+
+I've been using this as a prepare-commit-msg hook everywhere for couple years now:
+
+.. code-block:: bash
+
+  #!/bin/bash
+  msg_file=$1 commit_src=$2 hash=$3
+  [[ -z "$msg_file" || "$GIT_EDITOR" = : ]] && exit 0
+  [[ -z "$commit_src" ]] || exit 0 # cherry-picks, merges, etc
+
+  echo >>"$msg_file" '#'
+  echo >>"$msg_file" "# Commit dir: ${GIT_PREFIX%/}"
+  echo >>"$msg_file" "#   Repo dir: $(realpath "$PWD")"
+  echo >>"$msg_file" '#'
+  git log -10 --format='# %s' >>"$msg_file"
+
+Which saves a lot of effort of coming up with commit-messages, helps in
+monorepos/collections and to avoid whole bunch of mistakes.
+
+Idea is that instead of just "what is to be comitted", comment below commit-msg
+in $EDITOR will now include something like this:
+
+.. code-block:: bash
+
+  # On branch master
+  # Changes to be committed:
+  # modified:   PKGBUILD
+  # new file:   9005.do-some-other-thing.patch
+  #
+  # Commit dir: waterfox
+  #   Repo dir: /home/myuser/archlinux-pkgbuilds
+  #
+  # waterfox: +9004.rebind_screenshot_key_to_ctrl_alt_s.patch
+  # waterfox: fix more build/install issues
+  # waterfox: +fix_build_with_newer_cbindgen.patch
+  # waterfox: update to G5.0.1
+  # +re2g-git
+  # waterfox: bump to G4.1.4
+  # +mount-idmapped-git
+  # telegram-tdlib-purple-*: makedepends=telegram-tdlib - static linking
+  # waterfox: update for G4.1.1
+  # +b2tag-git
+
+It helps as a great sanity-check and reminder of the following things:
+
+- Which subdir within the repo you are working in, e.g. "waterfox" pkg above,
+  so that it's easy to identify and/or use that as a part of commit message.
+
+  With a lot of repositories I work with, there are multiple subdirs and
+  components in there, not to mention collection-repos, and it's useful to have
+  that in the commit msg - I always try to add them as a prefix, unless repo
+  uses entirely different commit message style (and has one).
+
+- What is the repository directory that you're running "git commit" in.
+
+  There can be a local dev repo, a submodule of it in a larger project,
+  sshfs-mounted clone of it somewhere, more local clones for diff branches
+  or different `git-worktree`_ dirs, etc.
+
+  This easily tells that you're in the right place (or where you think you are),
+  usually hard to miss by having repo under local simple dev dir, and not some
+  weird submodule path or mountpoint in there.
+
+- List of last commits on this branch - incredibly useful for a ton of reasons.
+
+  For one, it easily keeps commit-msgs consistent - you `don't use different
+  language, mood and capitalization`_ in there by forgetting what is the style
+  used in this particular repo, see any relevant issue/PR numbers, prefixes/suffixes.
+
+  But also it immediately shows if you're on the wrong branch, making a duplicate
+  commit by mistake, forgot to make commit/merge for something else important
+  before this, undo some reset or other recent shenanigans - all at a glance.
+
+  It was a usual practice for me to check git-log before every commit, and this
+  completely eliminated the need for it.
+
+Now when I don't see this info in the commit-msg comment, first thing to do is
+copy the hook script to whatever repo/host/place I'm working with, as it's
+almost as bad as not seeing which files you commit in there without it.
+Can highly recommend this tiny time-saver when working with any git repos from
+the command line.
+
+Implementation has couple caveats, which I've added there over time::
+
+  [[ -z "$msg_file" || "$GIT_EDITOR" = : ]] && exit 0
+  [[ -z "$commit_src" ]] || exit 0 # cherry-picks, merges, etc
+
+These lines are to skip running this hook for various non-interactive git
+operations, where anything you put into commit-msg will get appended to it
+verbatim, without skipping comment-lines, as it is done with interactive
+"git commit" ops.
+
+Canonical version of the hook is in the usual `mk-fg/fgtk`_ dumping ground:
+
+  https://github.com/mk-fg/fgtk#git-prepare-commit-msg-hook
+
+Which might get more caveats like above fixed in the future, should I bump into
+any, so might be better than current version in this post.
+
+
+.. _git-worktree: https://git-scm.com/docs/git-worktree
+.. _don't use different language, mood and capitalization: https://cbea.ms/git-commit/
+.. _mk-fg/fgtk: https://github.com/mk-fg/fgtk
