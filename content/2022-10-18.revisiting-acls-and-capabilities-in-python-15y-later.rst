@@ -87,7 +87,7 @@ them, and capabilities are even simplier, except for ever-growing enum of them:
   class Caps: effective:bool; permitted:CapSet; inheritable:CapSet
 
   def parse_caps(cap):
-    cap, lines = io.BytesIO(cap), list()
+    cap = io.BytesIO(cap)
     ver, eff = ((v := struct.unpack('I', cap.read(4))[0]) >> 3*8) & 0xff, v & 1
     if ver not in [2, 3]: raise ValueError(f'Unsupported capability v{ver}')
     perm1, inh1, perm2, inh2 = struct.unpack('IIII', cap.read(16))

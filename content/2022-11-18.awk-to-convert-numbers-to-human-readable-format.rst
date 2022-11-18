@@ -1,0 +1,71 @@
+AWK script to convert long integers to human-readable number format and back
+############################################################################
+
+:date: 2022-11-18 14:03
+:tags: bash, tools, unix
+
+
+Haven't found anything good for this on the internet before, and it's often useful
+in various shell scripts where metrics or tunable numbers can get rather long::
+
+  3400000000 -> 3_400M
+  500000 -> 500K
+  8123455009 -> 8_123_455_009
+
+That is, to replace long stretches of zeroes with short Kilo/Mega/Giga/etc
+suffixes and separate the usual 3-digit groups by something (underscore being
+programming-language-friendly and hard to mistake for field separator),
+and also convert those back to pure integers from cli arguments and such.
+
+There's numfmt_ in `GNU coreutils`_, but that'd be missing on Alpine_, typical
+network devices, other busybox Linux distros, \*BSD, MacOS, etc, and it doesn't
+have "match/convert all numbers you want" mode anyway.
+
+So alternative is using something that is available everywhere, like generic
+AWK_, with a reasonably short scripts to implement that number-mangling logic.
+
+- Human-format all space-separated long numbers in stdin, like in example above::
+
+    awk '{n=0; while (n++ <= NR) { m=0
+      while (match($n,/^[0-9]+[0-9]{3}$/) && m < 5) {
+        k=length($n)-3
+        if (substr($n,k+1)=="000") { $n=substr($n,1,k); m++ }
+        else while (match($n,/[0-9]{4}(_|$)/))
+          $n = substr($n,1,RSTART) "_" substr($n,RSTART+1) }
+      $n = $n substr("KMGTP", m, m ? 1 : 0) }; print}'
+
+- Find all human-formatted numbers in stdin and convert them back to long integers::
+
+    awk '{while (n++ <= NR) {if (match($n,/^([0-9]+_)*[0-9]+[KMGTP]?$/)) {
+      sub("_","",$n); if (m=index("KMGTP", substr($n,length($n),1))) {
+        $n=substr($n,1,length($n)-1); while (m-- > 0) $n=$n "000" } }}; print}'
+
+  I.e. reverse of the operation above.
+
+Code is somewhat compressed for brevity within scripts where it's not the point.
+It should work with any existing AWK implementations afaik (gawk, nawk, busybox
+awk, etc), and not touch any fields that don't need such conversion (as filtered
+by the first regexp there).
+
+Line-match pattern can be added at the start to limit conversion to lines with
+specific fields (e.g. ``match($1,/(Count|Threshold|Limit|Total):/) {...}``),
+"n" bounds and $n regexps adjusted to filter-out some inline values.
+
+Numbers here will use `SI prefixes`_, not 2^10 binary-ish increments,
+like in `IEC units`_ (kibi-, mebi-, gibi-, etc), as is more useful in general,
+but substr() and "000"-extension can be replaced by /1024 (and extra -iB unit
+suffix) when working with byte values - AWK can do basic arithmetic just fine too.
+
+Took me couple times misreading and mistyping overly long integers from/into
+scripts to realize that this is important enough and should be done better than
+counting zeroes with arrow keys like some tech-barbarian, even in simple bash
+scripts, and hopefully this hack might eventually pop-up in search for someone
+else coming to that conclusion as well.
+
+
+.. _numfmt: https://www.gnu.org/software/coreutils/manual/html_node/numfmt-invocation.html
+.. _GNU coreutils: https://www.gnu.org/software/coreutils/
+.. _Alpine: https://www.alpinelinux.org/
+.. _AWK: https://en.wikipedia.org/wiki/AWK
+.. _SI prefixes: https://en.wikipedia.org/wiki/Metric_prefix#List_of_SI_prefixes
+.. _IEC units: https://en.wikipedia.org/wiki/Byte#Multiple-byte_units
