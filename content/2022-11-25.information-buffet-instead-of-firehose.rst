@@ -1,0 +1,132 @@
+Information as a disaggregated buffet instead of firehose or a trough
+#####################################################################
+
+:date: 2022-11-25 22:37
+:tags: social, syndication, web
+
+
+Following information sources on the internet has long been compared to
+"drinking from a firehose", and trying to "keep up" with that is
+how I think people end up with hundreds of tabs in some kind of backlog,
+overflowing inboxes, feeds, podcast queues, and feeling overwhelmed in general.
+
+Main problem for me with that (I think) was aggregation - I've used
+`web-based feed reader`_ in the past, aggregated feeds from
+slashdot/reddit/hn/lobsters (at different times), and followed
+"influencers" on twitter to get personally-curated feeds from there
+in one bundle - and it never really worked well.
+
+For example, even when following podcast feeds, you end up with a backlog
+(of things to listen to) that is hard to catch-up with - natually -
+but it also adds increasingly more tracking and balancing issues,
+as simply picking things in order will prioritize high-volume stuff,
+and sometimes you'll want to skip the queue and now track "exceptions",
+while "no-brainer" pick pulls increasingly-old and irrelevant items first.
+
+Same thing tends to happen with any bundle of feeds that you try to "follow",
+which always ends up being overcrowded in my experience, and while you can
+"declare bankrupcy" resetting the follow-cursor to "now", skipping backlog,
+that doesn't fix fundamental issue with this "following" model -
+you'll just fall behind again, likely almost immediately - the approach itself
+is wrong/broken/misguided.
+
+Obvious "fix" might be to curate feeds better so that you can catch-up,
+but if your interests are broad enough and changing, that's rarely an option,
+as sources tend to have their own "take it or leave it" flow rate,
+and narrowing scope to only a selection that you can fully follow is silly,
+esp. if some of them are inconsistent or drown out others, even while being
+low-noise.
+
+Easy workable approach, that seem to avoid all issues that I know of, for me,
+seem to go something like this:
+
+- Bookmark all sources you find interesting individually.
+
+- When you want some podcast to listen-to, catch-up on news in some area,
+  or just an interesting thing to read idly - remember it - as in
+  "oh, would be nice to read/know-about/listen-to this right now".
+
+- Then pull-out a bookmark, and pick whatever is interesting and
+  most relevant there, not necessarily latest or "next" item in any way.
+
+This removes the mental burden of tracking and curating these sources,
+balancing high-traffic with more rarefied ones, re-weighting stuff according
+to your current interests, etc - and you don't loose on anything either!
+
+I.e. with something relevant to my current interests I'll remember to go back to
+for every update, but stuff that is getting noisy or falling off from that sphere,
+or just no longer entertaining or memorable, will naturally slip my mind more
+and more often, and eventually bookmark itself can be dropped as unused.
+
+Things that I was kinda afraid-of with such model before -
+and what various rss apps or twitter follows "help" so well to track:
+
+- Will forget where/how to find important info sources.
+- Forget to return to them.
+- Miss out on some stuff there.
+- Work/overhead of re-checking for updates is significant.
+
+None of these seem to be an issue in practice, and most interesting and relevant
+stuff will natually be the first thing I'll remember to check/grab/read,
+you don't really "miss out" on anything when time is more limited than amount of
+interesting goodies (i.e. it's a problem of what to miss-out on, not whether you
+do or don't), and time spent checking couple bookmarks is actually a rounding
+error compared to processing the actual information (there's always a lot of new
+stuff, and for something you check obsessively, you'd know the rate well).
+
+This kind of "disaggregated buffet" way of zero-effort "controlling" information
+intake is surprisingly simple, pretty much automatic (happens on its own),
+very liberating (no backlog anywhere), and can be easily applied to different
+content types:
+
+- Don't get podcast rss-tracking app, bookmark individual sites/feeds instead.
+
+  I store RSS/Atom feed URLs under one bookmarks-dir in Waterfox, and when
+  wanting for something to listen on a walk or while doing something monotonous,
+  remember and pull out an URL via quickbar (bookmarks can be searched via
+  ``* <query>`` there iirc, but I have completion for only these enabled anyway),
+  run rss-get_ script on the link, pick specific items/ranges/links to
+  download via its aria2c_ or yt-dlp_ (with its built-in SponsorBlock_), play that.
+
+- Don't "follow" people/feeds/projects on twitter or fediverse/mastodon
+  and then read through composite timeline, just bookmark all individual feeds
+  (on whatever home instances or via nitter_) instead.
+
+  This has a great added advantage of maintaining context in these platforms
+  which are notoriously bad for that, i.e. you read through things as they're
+  posted in order, not interleaved with all other stuff, or split over time.
+
+  Also this doesn't require an account, running a fediverse instance,
+  giving away your list of follows (aka social graph), or having your [current]
+  interests being tracked anywhere (even if "only" for bamboozling you with ads
+  on the subject to death).
+
+  With many accounts to follow and during some temporary twitter/fediverse
+  duplication, I've also found it useful (so far) to have a simple `ff-cli script`_
+  to "open N bookmarks matching /@", when really bored, and quickly catch-up on
+  something random, yet interesting enough to end up being bookmarked.
+
+- Don't get locked into subscribing or following "news" media that is kinda shit.
+
+  Simply not having that crap bundled with other things in same
+  reader/timeline/stream/etc will quickly make brain filter-out and "forget"
+  sources that become full of ads, <emotion>bait, political propaganda
+  and various other garbage, and brain will do such filtering all in the
+  background on its own, without wasting any time or conscious cycles.
+
+  There's usually nothing of importance to miss with such sources really,
+  as it's more like taking a read on the current weather,
+  only occasionally interesting/useful, and only for current/recent stuff.
+
+It's obviously not a guide, and maybe only works well for me this way, but as
+I've kinda-explained it (poorly) in chats before, might as well write it down
+here - hopefully somewhat more coherently - and just link to later.
+
+
+.. _web-based feed reader: https://github.com/mk-fg/feedjack
+.. _rss-get: https://github.com/mk-fg/fgtk#rss-get
+.. _aria2c: https://aria2.github.io/
+.. _yt-dlp: https://github.com/yt-dlp/yt-dlp
+.. _SponsorBlock: https://sponsor.ajay.app/
+.. _nitter: https://github.com/zedeus/nitter/wiki/Instances
+.. _ff-cli script: https://github.com/mk-fg/fgtk#ff-cli
