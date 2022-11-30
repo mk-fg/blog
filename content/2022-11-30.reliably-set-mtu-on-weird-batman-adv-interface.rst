@@ -1,0 +1,106 @@
+How to reliably set MTU on a weird (batman-adv) interface
+#########################################################
+
+:date: 2022-11-30 11:32
+:tags: linux, sysadmin, systemd, fail
+
+
+I like and use `B.A.T.M.A.N. (batman-adv)`_ mesh-networking protocol on the LAN,
+to not worry about how to connect local linuxy things over NICs and WiFi links
+into one shared network, and been using it for quite a few years now.
+
+Everything sensitive should run over ssh/wg links anyway (or ipsec before wg was
+a thing), so it's not a problem to have any-to-any access in a sane environment.
+
+But due to extra frame headers, batman-adv benefits from either lower MTU on the
+overlay interface or higher MTU on all interfaces which it runs over, to avoid
+fragmentation.
+Instead of remembering to tweak all other interfaces, I think it's easier to
+only bother with one batman-adv iface on each machine, but somehow that proved
+to be a surprising challenge.
+
+MTU on iface like "bat0" jumps on its own when slave interfaces in it change
+state, so obvious places to set it, like networkd .network/.netdev files or
+random oneshot boot scripts don't work - it can/will randomly change later
+(usually immediately after these things set it on boot) and you'll only notice
+when ssh or other tcp conns start to hang mid-session.
+
+One somewhat-reliable and sticky workaround for having issues is to mangle TCP
+MSS by the firewall (e.g. nftables), so that MTU changes are not an issue for
+almost all connections, but that still leaves room for issues and fragmentation
+in a few non-TCP things, and is obviously a hack - wrong MTU value is still there.
+
+After experimenting with various "try to set mtu couple times after delay",
+"wait for iface state and routes then set mtu" and such half-measures - none of
+which worked reliably for that odd interface - here's what I ended up with:
+
+.. code-block:: ini
+
+  [Unit]
+  Wants=network.target
+  After=network.target
+  Before=network-online.target
+
+  StartLimitBurst=4
+  StartLimitIntervalSec=3min
+
+  [Service]
+  Type=exec
+  Environment=IF=bat0 MTU=1440
+  ExecStartPre=/usr/lib/systemd/systemd-networkd-wait-online -qi ${IF}:off --timeout 30
+  ExecStart=bash -c 'rl=0 rl_win=100 rl_max=20 rx=" mtu [0-9]+ "; \
+    while read ev; do [[ "$ev" =~ $rx ]] || continue; \
+      printf -v ts "%%(%%s)T" -1; ((ts-=ts%%rl_win)); ((rld=++rl-ts)); \
+      [[ $rld -gt $rl_max ]] && exit 59 || [[ $rld -lt 0 ]] && rl=ts; \
+      ip link set dev $IF mtu $MTU || break; \
+    done < <(ip -o link show dev $IF; exec stdbuf -oL ip -o monitor link dev $IF)'
+
+  Restart=on-success
+  RestartSec=8
+
+  [Install]
+  WantedBy=multi-user.target
+
+It's an "F this sh\*t" approach of "anytime you see mtu changing, change it back
+immediately", which seem to be the only thing that works reliably so far.
+
+Couple weird things in there on top of "ip monitor" loop are:
+
+- ``systemd-networkd-wait-online -qi ${IF}:off --timeout 30``
+
+  Waits for interface to appear for some time before either restarting the .service,
+  or failing when StartLimitBurst= is reached.
+
+  The :off networkd "operational status" (see `networkctl(1)`_) is the earliest
+  one, and enough for "ip monitor" to latch onto interface, so good enough here.
+
+- ``rl=0 rl_win=100 rl_max=20`` and couple lines with ``exit 59`` on it.
+
+  This is rate-limiting in case something else decides to manage interface' MTU
+  in a similar "persistent" way (at last!), to avoid pulling the thing back-and-forth
+  endlessly in a loop, or (over-)reacting to interface state flapping weirdly.
+
+  I.e. stop service with failure on >20 relevant events within 100s.
+
+- ``Restart=on-success`` to only restart on "break" when "ip link set" fails if
+  interface goes away, limited by StartLimit\*= options to also fail eventually if it
+  does not (re-)appear, or if that operation fails consistently for some other reason.
+
+With various overlay tunnels becoming commonplace lately, MTU seem to be set
+incorrectly by default about 80% of the time, and I almost feel like I'm done
+fighting `various tools with their way of setting it`_ guessed/hidden somewhere
+(if implemented at all), and should just extend this loop into a more generic
+system-wide "mtud.service" that'd match interfaces by wildcard and enforce some
+admin-configured MTU values, regardless of whatever creating them (wrongly)
+thinks might be the right value.
+
+As seem to be common with networking stuff - you either centralize configuration
+like that on a system, or deal with constant never-ending stream of app failures.
+Other good example here are in-app ACLs, connection settings and security
+measures vs system firewalls and wg tunnels, with only latter actually working,
+and former proven to be an utter disaster for decades now.
+
+
+.. _B.A.T.M.A.N. (batman-adv): https://www.open-mesh.org/projects/batman-adv/wiki
+.. _networkctl(1): https://www.freedesktop.org/software/systemd/man/networkctl.html
+.. _various tools with their way of setting it: https://github.com/tonarino/innernet/issues/102
