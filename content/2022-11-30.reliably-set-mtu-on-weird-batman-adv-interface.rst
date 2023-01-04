@@ -61,7 +61,7 @@ which worked reliably for that odd interface - here's what I ended up with:
   [Install]
   WantedBy=multi-user.target
 
-It's an "F this sh\*t" approach of "anytime you see mtu changing, change it back
+It's a "F this sh\*t" approach of "anytime you see mtu changing, change it back
 immediately", which seem to be the only thing that works reliably so far.
 
 Couple weird things in there on top of "ip monitor" loop are:
