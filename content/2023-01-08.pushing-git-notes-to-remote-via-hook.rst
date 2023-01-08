@@ -1,0 +1,81 @@
+Pushing git-notes to one specific remote via pre-push hook
+##########################################################
+
+:date: 2023-01-08 07:58
+:tags: tools, scm
+
+
+I've recently started using `git notes`_ as a good way to track metadata
+associated with the code that's likely of no interest to anyone else,
+and would only litter git-log if was comitted and tracked in the repo
+as some .txt file.
+
+But that doesn't mean that they shouldn't be backed-up, shared and merged
+between different places where you yourself work on and use that code from.
+
+Since I have a `git mirror on my own host`_ (as you do with distributed scm),
+and always clone from there first, adding other "free internet service" remotes
+like github_, codeberg_, etc later, it seems like a natural place to push such
+notes to, as you'd always pull them from there with the repo.
+
+That is not straightforward to configure in git to do on basic "git push"
+however, because "push" operation there works with "[<repository> [<refspec>...]]"
+destination concept.
+I.e. you give it a single remote for where to push, and any number of specific
+things to update as "<src>[:<dst>]" refspecs.
+
+So when "git push" is configured with "origin" having multiple "url =" lines
+under it in .git/config file (like home-url + github + codeberg), you don't get
+to specify "push main+notes to url-A, but only main to url-B" - all repo URLs
+get same refs, as they are under same remote.
+
+Obvious fix conceptually is to run different "git push" commands to different
+remotes, but that's a hassle, and even if stored as an alias, it'd clash with
+muscle memory that'll keep typing "git push" out of habit.
+
+Alternative is to maybe override git-push command itself with some alias, but git
+explicitly does not allow that, probably for good reasons, so that's out as well.
+
+git-push does run hooks however, and those can do the extra pushes depending on
+the URL, so that's an easy solution I found for this:
+
+.. code-block:: sh
+
+  #!/bin/dash
+  set -e
+
+  notes_remote=home
+  notes_url=$(git remote get-url "$notes_remote")
+  notes_ref=$(git notes get-ref)
+
+  push_remote=$1 push_url=$2
+  [ "$push_url" = "$notes_url" ] || exit 0
+
+  master_push= master_oid=$(git rev-parse master)
+  while read local_ref local_oid remote_ref remote_oid; do
+    [ "$local_oid" = "$master_oid" ] && master_push=t && break || continue
+  done
+  [ -n "$master_push" ] || exit 0
+
+  echo "--- notes-push [$notes_remote]: start -> $notes_ref ---"
+  git push --no-verify "$notes_remote" "$notes_ref"
+  echo "--- notes-push [$notes_remote]: success ---"
+
+That's a "pre-push" hook, which pushes notes-branch only to "home" remote,
+when running a normal "git push" command to a "master" branch (to be replaced
+with "main" in some repos).
+
+Idea is to only augment "normal" git-push, and don't bother running this on every
+weirder updates or tweaks, keeping git-notes generally in sync between different
+places where you can use them, with no cognitive overhead in a day-to-day usage.
+
+As a side-note - while these notes are normally attached to commits, for
+something more global like "my todo-list for this project" not tied to specific
+ref that way, it's easy to attach it to some descriptive tag like "todo", and
+use with e.g.  ``git notes edit todo``, and track in the repo as well.
+
+
+.. _git notes: https://git-scm.com/docs/git-notes
+.. _git mirror on my own host: https://fraggod.net/code/git
+.. _github: https://github.com/mk-fg/
+.. _codeberg: https://codeberg.org/mk-fg/
