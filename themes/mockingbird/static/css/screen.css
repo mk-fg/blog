@@ -62,7 +62,7 @@ body {
 	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif !important;
 	font-size: 14px;
 	line-height: 1.5em;
-	color: #444;
+	color: #222;
 	}
 #header, #wrapper, #controls ul {
 	width: 750px;
@@ -88,9 +88,12 @@ div.post tt.literal:after { content:"'"; }
 div.post em { font-style: italic; }
 
 a {
-	text-decoration: none;
+	text-decoration: underline;
 	color: #000;
-	}
+}
+.title a {
+	text-decoration: none;
+}
 p a,
 div.post ul a,
 div.line-block a {
@@ -120,7 +123,7 @@ blockquote {
 	}
 
 .date {
-	color: #DDD;
+	color: #AAA;
 	float: left;
 	clear: both;
 	width: 150px;
