@@ -1,0 +1,388 @@
+More FIDO2 hardware auth/key uses on a linux machine and their quirks
+#####################################################################
+
+:date: 2023-01-26 21:21
+:tags: encryption, nim, linux, systemd
+
+
+As I kinda went on to replace a lot of silly long and insecure passwords with
+FIDO2 USB devices - aka "yubikeys" - in various ways (e.g. `earlier post about
+password/secret management`_), support for my use-cases was mostly good:
+
+.. _earlier post about password/secret management:
+  /2023/01/04/fido2-hardware-passwordsecret-management.html
+
+
+- Webauthn_ - works ok, and been working well for me with U2F/FIDO2 on various
+  important sites/services for quite a few years by now.
+
+  Wish it `worked with NFC reader in Firefox on Linux Desktop`_ too, but oh
+  well, maybe someday, if Mozilla doesn't implode before that.
+
+  .. _Webauthn: https://webauthn.guide/
+  .. _worked with NFC reader in Firefox on Linux Desktop:
+    https://bugzilla.mozilla.org/show_bug.cgi?id=1669870
+
+
+- `pam-u2f`_ to login with the token using much simplier
+  and hw-rate-limited PIN (with pw fallback).
+
+  Module itself worked effortlessly, but had to be added to various pam services
+  properly, so that password fallback is available as well, e.g. system-local-login::
+
+    #%PAM-1.0
+
+    # system-login
+    auth required pam_shells.so
+    auth requisite pam_nologin.so
+
+    # system-auth + pam_u2f
+    auth required pam_faillock.so preauth
+
+    # auth_err=ignore will try same string as password for pam_unix
+    -auth [success=2 authinfo_unavail=ignore auth_err=ignore] pam_u2f.so \
+      origin=pam://my.host.net authfile=/etc/secure/pam-fido2.auth \
+      userpresence=1 pinverification=1 cue
+
+    auth [success=1 default=bad] pam_unix.so try_first_pass nullok
+    auth [default=die] pam_faillock.so authfail
+
+    auth optional pam_permit.so
+    auth required pam_env.so
+    auth required pam_faillock.so authsucc
+
+    # auth    include   system-login
+    account   include   system-login
+    password  include   system-login
+    session   include   system-login
+
+  "auth" section is an exact copy of system-login and system-auth lines from the
+  current Arch Linux, with pam_u2f.so line added in the middle, jumping over
+  pam_unix.so on success, or ignoring failure result to allow for entered string
+  to be tried as password there.
+
+  Using `Enlightenment Desktop Environment`_ here, also needed to make a trivial
+  "include system-local-login" file for its lock screen, which uses
+  "enlightenment" PAM service by default, falling back to basic system-auth or
+  something like that, instead of system-local-login.
+
+  .. _pam-u2f: https://developers.yubico.com/pam-u2f/
+  .. _Enlightenment Desktop Environment: https://www.enlightenment.org/
+
+
+- sk-ssh-ed25519 keys work out of the box with OpenSSH_.
+
+  Part that gets loaded in ssh-agent is much less sensitive than the usual
+  private-key - here it's just a cred-id blob that is useless without FIDO2 token,
+  and even that can be stored on-device with Discoverable/Resident Creds,
+  for some extra security or portability.
+
+  SSH connections can easily be cached using ControlMaster / ControlPath /
+  ControlPersist opts in the client config, so there's no need to repeat touch
+  presence-check too often.
+
+  One somewhat-annoying thing was with signing git commits - this can't be
+  cached like ssh connections, and doing physical ack on every git commit/amend
+  is too burdensome, but fix is easy too - add separate ssh key just for signing.
+  Such key would naturally be less secure, but not as important as an access key anyway.
+
+  Github_ supports adding "signing" ssh keys that don't allow access,
+  but Codeberg_ (and its underlying Gitea_) currently does not - access keys
+  can be marked as "Verified", but can't be used for signing-only on the account,
+  which will probably be fixed, eventually, not a huge deal.
+
+  .. _OpenSSH: https://www.openssh.com/
+  .. _Github: https://github.com/
+  .. _Codeberg: https://codeberg.org/
+  .. _Gitea: https://gitea.io/
+
+
+- Early-boot `LUKS / dm-crypt disk encryption`_ unlock with offline key and a
+  simplier + properly rate-limited "pin", instead of a long and hard-to-type passphrase.
+
+  systemd-cryptenroll_ can work for that, if you have typical "Full Disk Encryption"
+  (FDE) setup, with one LUKS-encrypted SSD, but that's not the case for me.
+
+  I have more flexible LUKS-on-LVM setup instead, where some LVs are encrypted
+  and needed on boot, some aren't, some might have fscrypt_, gocryptfs_, some
+  other distro or separate post-boot unlock, etc etc.
+
+  systemd-cryptenroll does not support such use-case well, as it generates and
+  stores different credentials for each LUKS volume, and then prompts for
+  separate FIDO2 user verification/presence check for each of them, while I need
+  something like 5 unlocks on boot - no way I'm doing same thing 5 times, but
+  it is unavoidable with such implementation.
+
+  So had to make my own key-derivation `fido2-hmac-boot tool`_ for this,
+  described in more detail separately below.
+
+  .. _LUKS / dm-crypt disk encryption:
+    https://gitlab.com/cryptsetup/cryptsetup/-/blob/main/FAQ.md
+  .. _systemd-cryptenroll:
+    https://0pointer.net/blog/unlocking-luks2-volumes-with-tpm2-fido2-pkcs11-security-hardware-on-systemd-248.html
+  .. _fscrypt: https://www.kernel.org/doc/html/latest/filesystems/fscrypt.html
+  .. _gocryptfs: https://nuetzlich.net/gocryptfs/
+  .. _fido2-hmac-boot tool: https://github.com/mk-fg/fgtk#fido2_hmac_bootnim
+
+
+- Management of legacy passwords, passphrases, pins, other secrets and similar
+  sensitive strings of information - described in a lot more detail in an
+  earlier `"FIDO2 hardware password/secret management" post`_.
+
+  This works great, required an (simple) extra binary, and integrating it into
+  emacs for my purposes, but also easy to setup in various other ways, and a lot
+  better than all alternatives (memory + reuse, plaintext somewhere, crappy
+  third-party services, paper, etc).
+
+  .. _"FIDO2 hardware password/secret management" post:
+    /2023/01/04/fido2-hardware-passwordsecret-management.html
+
+
+- One notable problem with FIDO2 devices is that they don't really show what it
+  is you are confirming, so as a user, I can think that it wants to authorize
+  one thing, while whatever compromised code secretly requests something else
+  from the token.
+
+  But that's reasonably easy to mitigate by splitting usage by different
+  security level and rarity, then using multiple separate U2F/FIDO2 tokens for those,
+  given how tiny and affordable they are these days - I ended up having three of
+  them (so far!).
+
+  So using token with "ssh-git" label, you know exactly what it'd authorize.
+
+
+Aside from reasonably-minor quirks mentioned above, it all was pretty common
+sense and straightforward for me, so can easily recommend migrating to workflows
+built around cheap FIDO2 smartcards on modern linux as a basic InfoSec hygiene -
+it doesn't add much inconvenience, and should be vastly superior to outdated
+(but still common) practices/rituals involving passwords or keys-in-files.
+
+
+----------
+
+
+Given how all modern PC hardware has TPM2_ chips in motherboards, and these can
+be used `as a regular smartcard via PKCS#11 wrapper`_, they might also be a
+somewhat nice malware/tamper-proof cryptographic backend for various use-cases above.
+
+From my perspective, they seem to be strictly inferior to using portable FIDO2
+devices however:
+
+- Soldered on the motherboard, so can't be easily used in multiple places.
+
+- Will live/die, and have to be replaced with the motherboard.
+
+- Non-removable and always-accessible, holding persistent keys in there.
+
+  Booting random OS with access to this thing seem to be a really bad idea,
+  as ideally such keys shouldn't even be physically connected most of the time,
+  especially to some random likely-untrustworthy software.
+
+- There is no physical access confirmation mechanism, so no way to actually
+  limit it - anything getting ahold of the PIN is really bad, as secret keys can
+  then be used freely, without any further visibility, rate-limiting or confirmation.
+
+- Motherboard vendor firmware security has a bad track record, and I'd rather
+  avoid trusting crappy code there with anything extra. In fact, part of the
+  point with having separate FIDO2 device is to trust local machine a bit less,
+  if possible, not more.
+
+So given that grabbing FIDO2 device(s) is an easy option, don't think TPM2 is
+even worth considering as an alternative to those, for all the reasons above,
+and probably a bunch more that I'm forgetting at the moment.
+
+Might be best to think of TPM2 to be in the domain and managed by the OS vendor,
+e.g. leave it to Windows 11 and `Microsoft SSO system`_ to do `trusted/measured
+boot`_ and store whatever OS-managed secrets, being entirely uninteresting and
+invisible to the end-user.
+
+.. _TPM2: https://en.wikipedia.org/wiki/TPM2
+.. _as a regular smartcard via PKCS#11 wrapper: https://github.com/tpm2-software/tpm2-pkcs11
+.. _Microsoft SSO system: https://en.wikipedia.org/wiki/Windows_10#System_security
+.. _trusted/measured boot: https://0pointer.net/blog/brave-new-trusted-boot-world.html
+
+
+----------
+
+
+As also mentioned above, least well-supported FIDO2-backed thing for me was
+early-boot dm-crypt / LUKS volume unlocking - systemd-cryptenroll_ requires
+unlocking each encrypted LUKS volume separately, re-entering PIN and re-doing
+the touch thing multiple times in a row, with a somewhat-uncommon LUKS-on-LVM
+setup like mine.
+
+But of course that's easily fixable, having following steps with a typical
+systemd_ init process:
+
+- Starting early on boot or in initramfs, Before=cryptsetup-pre.target, run
+  service to ask for FIDO2 token PIN via systemd-ask-password_, then use that
+  with FIDO2 token and its hmac-secret extension to make it produce secure
+  high-entropy volume unlock key.
+
+  If PIN or FIDO2 interaction won't work, print error and repeat the query,
+  or exit if prompt is cancelled to fallback to passphrase-only vol unlocking.
+
+- Drop that key into ``/run/cryptsetup-keys.d/`` dir for each volume that it
+  needs to unlock, with whatever extra per-volume alterations/hashing.
+
+- Let systemd pass cryptsetup.target, where systemd-cryptsetup_ will
+  automatically lookup volume keys in that dir and use them to unlock all volumes.
+
+  If keys won't work, systemd will do the usual passphrase-prompting and
+  caching, so there's always a well-supported first-class fallback unlock-path.
+
+- Run early-boot service to cleanup after cryptsetup.target,
+  Before=sysinit.target, to remove ``/run/cryptsetup-keys.d/`` directory,
+  as everything should be unlocked by now and these keys no longer needed.
+
+I'm using common `dracut initramfs generator`_ with systemd here, where it's
+easy to add a custom module that'd do all necessary early steps outlined above.
+
+fido2_hmac_boot.nim_ implements all actual asking and FIDO2 operations, and can
+be easily run from an initramfs systemd unit file like this (fhb.service):
+
+.. code-block:: ini
+
+  [Unit]
+  DefaultDependencies=no
+  Wants=cryptsetup-pre.target
+
+  # Should be ordered same as stock systemd-pcrphase-initrd.service
+  Conflicts=shutdown.target initrd-switch-root.target
+  Before=sysinit.target cryptsetup-pre.target cryptsetup.target
+  Before=shutdown.target initrd-switch-root.target systemd-sysext.service
+
+  [Service]
+  Type=oneshot
+  RemainAfterExit=yes
+  StandardError=journal+console
+  UMask=0077
+  ExecStart=/sbin/fhb /run/initramfs/fhb.key
+  ExecStartPost=/bin/sh -c '\
+    mkdir -p /run/cryptsetup-keys.d; while read dev line; \
+    do cat /run/initramfs/fhb.key >/run/cryptsetup-keys.d/"$dev".key; \
+    done < /etc/fhb.devices; rm -f /run/initramfs/fhb.key'
+
+With that ``fhb.service`` file and compiled binary itself installed via
+``module-setup.sh`` in the module dir:
+
+.. code-block:: bash
+
+  #!/bin/bash
+
+  check() {
+    require_binaries /root/fhb || return 1
+    return 255 # only include if asked for
+  }
+
+  depends() {
+    echo 'systemd crypt fido2'
+    return 0
+  }
+
+  install() {
+    # fhb.service starts binary before cryptsetup-pre.target to create key-file
+    inst_binary /root/fhb /sbin/fhb
+    inst_multiple mkdir cat rm
+    inst_simple "$moddir"/fhb.service "$systemdsystemunitdir"/fhb.service
+    $SYSTEMCTL -q --root "$initdir" add-wants initrd.target fhb.service
+
+    # Some custom rules might be relevant for making consistent /dev symlinks
+    local rules_dir=/etc/udev/rules.d
+    for p in $(ls -1 "$rules_dir")
+    do grep -qP '\b(u2f|fido2)\b' "$rules_dir"/"$p" && inst_rules "$rules_dir"/"$p"
+    done
+
+    # List of devices that fhb.service will create unlock-key for in /run/cryptsetup-keys.d/
+    # Should be safe to have all "auto" crypttab devices there, just in case
+    while read luks dev key opts; do
+      [[ "${opts//,/ }" =~ (^| )noauto( |$) ]] && continue
+      echo "$luks"
+    done <"$dracutsysrootdir"/etc/crypttab >"$initdir"/etc/fhb.devices
+    mark_hostonly /etc/fhb.devices
+  }
+
+Module would need to be enabled via e.g. ``add_dracutmodules+=" fhb "``
+in dracut.conf.d, and will include the "fhb" binary, service file to run it,
+list of devices to generate unlock-keys for in ``/etc/fhb.devices`` there,
+and any udev rules mentioning u2f/fido2 from ``/etc/udev/rules.d``, in case
+these might be relevant for consistent device path or whatever other basic
+device-related setup.
+
+fido2_hmac_boot.nim_ "fhb" binary can be built (using C-like Nim_ compiler) with
+all parameters needed for its operation hardcoded via e.g. ``-d:FHB_CID=...``
+compile-time options, to avoid needing to bother with any of those in systemd
+unit file or when running it anytime on its own later.
+
+It runs same operation as fido2-assert_ tool, producing HMAC secret for
+specified Credential ID and Salt values.
+Credential ID should be created/secured prior to that using related fido2-token_
+and fido2-cred_ binaries. All these tools come bundled with libfido2_.
+
+Since systemd doesn't nuke ``/run/cryptsetup-keys.d`` by default
+(``keyfile-erase`` option in crypttab_ can enable that, but has to be used
+consistently for each volume), custom unit file to do that can be added/enabled
+to main systemd as well:
+
+.. code-block:: ini
+
+  [Unit]
+  DefaultDependencies=no
+  Conflicts=shutdown.target
+  After=cryptsetup.target
+
+  [Service]
+  Type=oneshot
+  ExecStart=rm -rf /run/cryptsetup-keys.d
+
+  [Install]
+  WantedBy=sysinit.target
+
+And that should do it for implementing above early-boot unlocking sequence.
+
+To enroll the key produced by "fhb" binary into LUKS headers, simply run it,
+same as early-boot systemd would, and luksAddKey its output.
+
+Couple additional notes on all this stuff:
+
+- HMAC key produced by "fhb" tool is a high-entropy uniformly-random 256-bit
+  (32B) value, so unlike passwords, does not actually need any kind of KDF
+  applied to it - it is the key, bruteforcing it should be about as infeasible
+  as bruteforcing 128/256-bit master symmetric cipher key (and likely even harder).
+
+  Afaik cryptsetup doesn't support disabling KDF for key-slot entirely,
+  but ``--pbkdf pbkdf2 --pbkdf-force-iterations 1000`` can be used to set
+  fastest parameters and get something close to disabling it.
+
+- ``cryptsetup config --key-slot N --priority prefer`` can be used to make
+  systemd-cryptsetup try unlocking volume with this no-KDF keyslot quickly first,
+  before trying other slots with memory/cpu-heavy argon2id and such proper PBKDF,
+  which should be almost always be a good idea to do in this order,
+  as it should take almost no time to try 1K-rounds PBKDF2 slot.
+
+- Ideally each volume should have its own sub-key derived from one that fhb
+  outputs, e.g. via simple HMAC-SHA256(volume-uuid, key=fhb.key) operation,
+  which is omitted here for simplicitly.
+
+  Can be added to avoid any of LUKS keys/keyslots being leaked or broken (for
+  any weird reason) to have any effect on other keys - reversing such HMAC back
+  to fhb.key to use it for other volumes would still be cryptographically infeasible.
+
+Custom fido2_hmac_boot.nim_ binary/code used here is somewhat similar to an
+earlier fido2-hmac-desalinate.c_ that I use for password management (see above),
+but a bit more complex, so is written in an easier and much nicer/safer language
+(Nim_), while still being compiled through C to pretty much same result.
+
+
+.. _systemd-cryptsetup: https://www.freedesktop.org/software/systemd/man/systemd-cryptsetup@.service.html
+.. _systemd: https://systemd.io/
+.. _systemd-ask-password: https://www.freedesktop.org/software/systemd/man/systemd-ask-password.html
+.. _dracut initramfs generator: https://dracut.wiki.kernel.org/index.php/Main_Page
+.. _fido2_hmac_boot.nim: https://github.com/mk-fg/fgtk#fido2_hmac_bootnim
+.. _Nim: https://nim-lang.org/
+.. _fido2-assert: https://developers.yubico.com/libfido2/Manuals/fido2-assert.html
+.. _fido2-token: https://developers.yubico.com/libfido2/Manuals/fido2-cred.html
+.. _fido2-cred: https://developers.yubico.com/libfido2/Manuals/fido2-cred.html
+.. _libfido2: https://developers.yubico.com/libfido2/
+.. _crypttab: https://www.freedesktop.org/software/systemd/man/crypttab.html
+.. _fido2-hmac-desalinate.c: https://github.com/mk-fg/fgtk#fido2-hmac-desalinatec
