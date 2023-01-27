@@ -258,10 +258,11 @@ be easily run from an initramfs systemd unit file like this (fhb.service):
   StandardError=journal+console
   UMask=0077
   ExecStart=/sbin/fhb /run/initramfs/fhb.key
-  ExecStartPost=/bin/sh -c '\
+  ExecStart=/bin/sh -c '\
+    key=/run/initramfs/fhb.key; [ -e "$key" ] || exit 0; \
     mkdir -p /run/cryptsetup-keys.d; while read dev line; \
-    do cat /run/initramfs/fhb.key >/run/cryptsetup-keys.d/"$dev".key; \
-    done < /etc/fhb.devices; rm -f /run/initramfs/fhb.key'
+    do cat "$key" >/run/cryptsetup-keys.d/"$dev".key; \
+    done < /etc/fhb.devices; rm -f "$key"'
 
 With that ``fhb.service`` file and compiled binary itself installed via
 ``module-setup.sh`` in the module dir:
@@ -364,8 +365,12 @@ Couple additional notes on all this stuff:
   outputs, e.g. via simple HMAC-SHA256(volume-uuid, key=fhb.key) operation,
   which is omitted here for simplicitly.
 
+  fhb binary includes --hmac option for that, to use instead of "cat" above::
+
+    fhb --hmac "$key" "$dev" /run/cryptsetup-keys.d/"$dev".key
+
   Can be added to avoid any of LUKS keys/keyslots being leaked or broken (for
-  any weird reason) to have any effect on other keys - reversing such HMAC back
+  some weird reason) to have any effect on other keys - reversing such HMAC back
   to fhb.key to use it for other volumes would still be cryptographically infeasible.
 
 Custom fido2_hmac_boot.nim_ binary/code used here is somewhat similar to an
