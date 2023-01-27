@@ -148,7 +148,7 @@ password/secret management`_), support for my use-cases was mostly good:
   given how tiny and affordable they are these days - I ended up having three of
   them (so far!).
 
-  So using token with "ssh-git" label, you know exactly what it'd authorize.
+  So using token with "ssh-git" label, you have a good idea what it'd authorize.
 
 
 Aside from reasonably-minor quirks mentioned above, it all was pretty common
@@ -206,8 +206,8 @@ invisible to the end-user.
 
 
 As also mentioned above, least well-supported FIDO2-backed thing for me was
-early-boot dm-crypt / LUKS volume unlocking - systemd-cryptenroll_ requires
-unlocking each encrypted LUKS volume separately, re-entering PIN and re-doing
+early-boot dm-crypt / LUKS volume init - systemd-cryptenroll_ requires
+unlocking each encrypted LUKS blkdev separately, re-entering PIN and re-doing
 the touch thing multiple times in a row, with a somewhat-uncommon LUKS-on-LVM
 setup like mine.
 
@@ -216,24 +216,25 @@ systemd_ init process:
 
 - Starting early on boot or in initramfs, Before=cryptsetup-pre.target, run
   service to ask for FIDO2 token PIN via systemd-ask-password_, then use that
-  with FIDO2 token and its hmac-secret extension to make it produce secure
-  high-entropy volume unlock key.
+  with FIDO2 token and its hmac-secret extension to produce secure high-entropy
+  volume unlock key.
 
   If PIN or FIDO2 interaction won't work, print error and repeat the query,
-  or exit if prompt is cancelled to fallback to passphrase-only vol unlocking.
+  or exit if prompt is cancelled to fallback to default systemd passphrase
+  unlocking.
 
 - Drop that key into ``/run/cryptsetup-keys.d/`` dir for each volume that it
-  needs to unlock, with whatever extra per-volume alterations/hashing.
+  needs to open, with whatever extra per-volume alterations/hashing.
 
 - Let systemd pass cryptsetup.target, where systemd-cryptsetup_ will
-  automatically lookup volume keys in that dir and use them to unlock all volumes.
+  automatically lookup volume keys in that dir and use them to unlock devices.
 
-  If keys won't work, systemd will do the usual passphrase-prompting and
-  caching, so there's always a well-supported first-class fallback unlock-path.
+  If any keys won't work or missing, systemd will do the usual passphrase-prompting
+  and caching, so there's always a well-supported first-class fallback unlock-path.
 
 - Run early-boot service to cleanup after cryptsetup.target,
   Before=sysinit.target, to remove ``/run/cryptsetup-keys.d/`` directory,
-  as everything should be unlocked by now and these keys no longer needed.
+  as everything should be unlocked by now and these keys are no longer needed.
 
 I'm using common `dracut initramfs generator`_ with systemd here, where it's
 easy to add a custom module that'd do all necessary early steps outlined above.
@@ -291,7 +292,7 @@ With that ``fhb.service`` file and compiled binary itself installed via
     # Some custom rules might be relevant for making consistent /dev symlinks
     local rules_dir=/etc/udev/rules.d
     for p in $(ls -1 "$rules_dir")
-    do grep -qP '\b(u2f|fido2)\b' "$rules_dir"/"$p" && inst_rules "$rules_dir"/"$p"
+    do grep -qiP '\b(u2f|fido2)\b' "$rules_dir"/"$p" && inst_rules "$rules_dir"/"$p"
     done
 
     # List of devices that fhb.service will create unlock-key for in /run/cryptsetup-keys.d/
@@ -321,9 +322,9 @@ Credential ID should be created/secured prior to that using related fido2-token_
 and fido2-cred_ binaries. All these tools come bundled with libfido2_.
 
 Since systemd doesn't nuke ``/run/cryptsetup-keys.d`` by default
-(``keyfile-erase`` option in crypttab_ can enable that, but has to be used
-consistently for each volume), custom unit file to do that can be added/enabled
-to main systemd as well:
+(``keyfile-erase`` option in crypttab_ can help, but has to be used consistently
+for each volume), custom unit file to do that can be added/enabled to main
+systemd as well:
 
 .. code-block:: ini
 
@@ -352,14 +353,14 @@ Couple additional notes on all this stuff:
   as bruteforcing 128/256-bit master symmetric cipher key (and likely even harder).
 
   Afaik cryptsetup doesn't support disabling KDF for key-slot entirely,
-  but ``--pbkdf pbkdf2 --pbkdf-force-iterations 1000`` can be used to set
-  fastest parameters and get something close to disabling it.
+  but ``--pbkdf pbkdf2 --pbkdf-force-iterations 1000`` options can be used to
+  set fastest parameters and get something close to disabling it.
 
 - ``cryptsetup config --key-slot N --priority prefer`` can be used to make
   systemd-cryptsetup try unlocking volume with this no-KDF keyslot quickly first,
   before trying other slots with memory/cpu-heavy argon2id and such proper PBKDF,
-  which should be almost always be a good idea to do in this order,
-  as it should take almost no time to try 1K-rounds PBKDF2 slot.
+  which should almost always be a good idea to do in this order, as it should
+  take almost no time to try 1K-rounds PBKDF2 slot.
 
 - Ideally each volume should have its own sub-key derived from one that fhb
   outputs, e.g. via simple HMAC-SHA256(volume-uuid, key=fhb.key) operation,
