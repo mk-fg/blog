@@ -290,12 +290,11 @@ With that ``fhb.service`` file and compiled binary itself installed via
     $SYSTEMCTL -q --root "$initdir" add-wants initrd.target fhb.service
 
     # Some custom rules might be relevant for making consistent /dev symlinks
-    local rules_dir=/etc/udev/rules.d
-    for p in $(ls -1 "$rules_dir")
-    do grep -qiP '\b(u2f|fido2)\b' "$rules_dir"/"$p" && inst_rules "$rules_dir"/"$p"
-    done
+    while read p
+    do grep -qiP '\b(u2f|fido2)\b' "$p" && inst_rules "$p"
+    done < <(find /etc/udev/rules.d -maxdepth 1 -type f)
 
-    # List of devices that fhb.service will create unlock-key for in /run/cryptsetup-keys.d/
+    # List of devices that fhb.service will create key for in cryptsetup-keys.d
     # Should be safe to have all "auto" crypttab devices there, just in case
     while read luks dev key opts; do
       [[ "${opts//,/ }" =~ (^| )noauto( |$) ]] && continue
