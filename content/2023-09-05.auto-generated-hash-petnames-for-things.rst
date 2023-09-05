@@ -1,0 +1,78 @@
+Auto-generated hash-petnames for things
+#######################################
+
+:date: 2023-09-05 04:34
+:tags: sysadmin, tools
+
+
+Usually auto-generated names aim for being meaningful instead of distinct,
+e.g. LEAFAL01A-P281, LEAFAN02A-P281, LEAFAL01B-P282, LEAFEL01A-P281,
+LEAFEN01A-P281, etc, where single-letter diffs are common and decode to
+something like different location or purpose.
+
+Sometimes they aren't even that, and are assigned sequentially or by hash,
+like in case of contents hashes, or interfaces/vlans/addresses in a network
+infrastructure.
+
+You always have to squint and spend time mentally decoding such identifiers,
+as one letter/digit there can change whole meaning of the message, so working
+with them is unnecessarily tiring, especially if a system often presents many of
+those without any extra context.
+
+Usual fix is naming things, i.e. assigning hostnames to separate hardware
+platforms/VMs, DNS names to addresses, and such, but that doesn't work well
+with modern devops approaches where components are typically generated with
+"reasonable" but less readable naming schemes as described above.
+
+Manually naming such stuff up-front doesn't work, and even assigning petnames_
+or descriptions by hand gets silly quickly (esp. with some churn in the system),
+and it's not always possible to store/share that extra metadata properly
+(e.g. on rebuilds in entirely different places).
+
+Useful solution I found is hashing to an automatically generated petnames,
+which seem to be kinda overlooked and underused - i.e. to hash the name
+to an easily-distinct, readable and often memorable-enough strings:
+
+- LEAFAL01A-P281 [ Energetic Amethyst Zebra ]
+- LEAFAN02A-P281 [ Furry Linen Eagle ]
+- LEAFAL01B-P282 [ Suave Mulberry Woodpecker ]
+- LEAFEL01A-P281 [ Acidic Black Flamingo ]
+- LEAFEN01A-P281 [ Prehistoric Raspberry Pike ]
+
+Even just different length of these names makes them visually stand apart from
+each other already, and usually you don't really need to memorize them in any way,
+it's enough to be able to tell them apart at a glance in some output.
+
+I've bumped into only one de-facto standard scheme for generating those -
+"Angry Purple Tiger", with a long list of compatible implementations
+(e.g. https://github.com/search?type=repositories&q=Angry+Purple+Tiger ):
+
+.. code:: console
+
+  % angry_purple_tiger LEAFEL01A-P281
+  acidic-black-flamingo
+
+  % angry_purple_tiger LEAFEN01A-P281
+  prehistoric-raspberry-pike
+
+(default output is good for identifiers, but can use proper spaces and
+capitalization to be more easily-readable, without changing the words)
+
+It's not as high-entropy as "human hash" tools that use completely random words
+or babble (see z-tokens_ for that), but imo wins by orders of magnitude in readability
+and ease of memorization instead, and on the scale of names, it matters.
+
+Since those names don't need to be stored anywhere, and can be generated
+anytime, it is often easier to add them in some wrapper around tools and APIs,
+without the need for the underlying system to know or care that they exist,
+while making a world of difference in usability.
+
+Honorable mention here to occasional tools like docker_ that have those already,
+but imo it's more useful to remember about this trick for your own scripts
+and wrappers, as that tends to be the place where you get to pick how to print
+stuff, and can easily add an extra hash for that kind of accessibility.
+
+
+.. _z-tokens: https://github.com/volution/z-tokens/
+.. _petnames: https://en.wikipedia.org/wiki/Petname
+.. _docker: https://en.wikipedia.org/wiki/Docker_(software)
