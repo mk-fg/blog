@@ -27,6 +27,13 @@ this atm (excerpt as of 2022-05-30)::
     Abort downloading of further videos if an error occurs
     (Alias: –no-ignore-errors)
 
+**Update 2023-09-10:** current `feh(1) manpage`_ has another issue - unicode
+hyphens instead of the usual ascii hyphen/minus signs (which look similar,
+but aren't the same thing - even more evil!)::
+
+    OPTIONS
+           ‐A, ‐‐action [flag][[title]]action
+
 If you habitually copy-paste any of the long opts there into a script (or yt-dlp
 config, as it happens), to avoid retyping these things, it won't work, because
 e.g ``–help`` cli option should of course actually be ``--help``, i.e. have two
@@ -69,7 +76,8 @@ this to fix issues in yt-dlp manpage excerpt above:
 
   # \x08 is backspace-overprint syntax that "man" uses for bold chars
   # Bold chars are used in option-headers, while opts in text aren't bold
-  seds='s/–\x08–\(.\x08\)/-\x08--\x08-\1/g;'`
+  seds='s/‐/-/g;'`
+    `'s/–\x08–\(.\x08\)/-\x08--\x08-\1/g;'`
     `' s/\([ [:punct:]]\)–\([a-z0-9]\)/\1--\2/'
   [ "$1" != - ] || exec sed "$seds"
   exec sed "$seds" "$1"
@@ -107,12 +115,36 @@ Such manpage bugs should almost certainly be reported to projects/distros and fi
 instead of using this hack, but thought to post it here anyway, since google
 didn't help me find an exising workaround, and fixing stuff properly is more work.
 
+----------
+
+**Update 2023-09-10:** Current `man(1) from man-db`_ has yet another
+issue to work around - it sanitizes environment before running "less",
+dropping LESSOPEN from there entirely.
+
+Unfortunately, at least current "less" doesn't seem to support config file,
+to avoid relying entirely on apps passing env-vars around (maybe for a good
+reason, given how they like to tinker with its configuration),
+so easy fix is a tiny less.c wrapper for it:
+
+.. code-block:: c
+
+  #include <unistd.h>
+  #include <stdlib.h>
+  int main(int argc, char *argv[]) {
+    if (getenv("MAN_PN")) setenv("LESSOPEN", "|-man-less-filter %s", 1);
+    execv("/usr/bin/less", argv); return 1; }
+
+``gcc -O2 less.c -o less && strip less``, copy it to ~/bin or such, and make
+sure env uses ``PAGER=less`` or a wrapper path, instead of original ``/usr/bin/less``.
+
 
 .. _unicode en-dash: https://en.wikipedia.org/wiki/Dash
 .. _yt-dlp(1) manpage: https://manpages.debian.org/unstable/yt-dlp/yt-dlp.1.en.html
+.. _feh(1) manpage: https://man.archlinux.org/man/feh.1
 .. _man-db: https://gitlab.com/cjwatson/man-db
 .. _less tool: https://www.greenwoodsoftware.com/less/
 .. _Alpine: https://alpinelinux.org/
 .. _/bin/dash: http://gondor.apana.org.au/~herbert/dash/
 .. _bash: https://www.gnu.org/software/bash/bash.html
 .. _GNU sed: https://www.gnu.org/software/sed/
+.. _man(1) from man-db: https://man.archlinux.org/man/man.1
