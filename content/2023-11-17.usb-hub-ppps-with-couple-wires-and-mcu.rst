@@ -1,0 +1,187 @@
+USB hub per-port power switching done right with a couple wires
+###############################################################
+
+:date: 2023-11-17 15:54
+:tags: hardware, python
+
+
+Like probably most folks who are surrounded by tech, I have too many USB
+devices plugged into the usual desktop, to the point that it kinda bothers me.
+
+For one thing, some of those doohickeys always draw current and noticeably
+heat up in the process, which can't be good on the either side of the port.
+Good examples of this are WiFi dongles (with iface left in UP state), a
+cheap NFC reader I have (draws 300mA idling on the table 99.99% of the time),
+or anything with "battery" or "charging" in the description.
+
+Other issue is that I don't want some devices to always be connected.
+Dual-booting into gaming Windows for instance, there's nothing good that
+comes from it poking at and spinning-up USB-HDDs, Yubikeys or various
+connectivity dongles' firmware, as well as jerking power on-and-off on those
+for reboots and whenever random apps/games probe those (yeah, not sure why either).
+
+Unplugging stuff by hand is work, and leads to replacing usb cables/ports/devices
+eventually (more work), so toggling power on/off at USB hubs seems like an easy fix.
+
+USB Hubs sometimes support that in one of two ways - either physical switches
+next to ports, or using USB Per-Port-Power-Switching (PPPS) protocol.
+
+Problem with physical switches is that relying on yourself not to forget to do
+some on/off sequence manually for devices each time doesn't work well,
+and kinda silly when it can be automated - i.e. if you want to run ad-hoc AP,
+let the script running hostapd_ turn the power on-and-off around it as well.
+
+But sadly, at least in my experience with it, USB Hub PPPS is also a bad solution,
+broken by two major issues, which are likely unfixable:
+
+- USB Hubs supporting per-port power toggling are impossible to find or identify.
+
+  Vendors don't seem to care about and don't advertise this feature anywhere,
+  its presence/support changes between hardware revisions (probably as a
+  consequence of "don't care"), and is often half-implemented and dodgy.
+
+  `uhubctl project`_ has a `list of Compatible USB hubs`_ for example, and note
+  how hubs there have remarks like "DUB-H7 rev D,E (black). Rev B,C,F,G not
+  supported" - shops and even product boxes mostly don't specify these revisions
+  anywhere, or even list the wrong one.
+
+  So good luck finding the right revision of one model even when you know it
+  works, within a brief window while it's still in stock.
+  And knowing which one works is pretty much only possible through testing -
+  same list above is full of old devices that are not on the market, and that
+  market seem to be too large and dynamic to track models/revisions accurately.
+
+  On top of that, sometimes hubs toggle data lines and not power (VBUS),
+  making feature marginally less useful for cases above, but further confusing
+  the matter when reading specifications or even relying on reports from users.
+
+  Pretty sure that hubs with support for this are usually higher-end
+  vendors/models too, so it's expensive to buy a bunch of them to see what
+  works, and kinda silly to overpay for even one of them anyway.
+
+- PPPS in USB Hubs has no memory and defaults to ON state.
+
+  This is almost certainly by design - when someone plugs hub without obvious
+  buttons, they might not care about power switching on ports, and just want it
+  to work, so ports have to be turned-on by default.
+
+  But that's also the opposite of what I want for all cases mentioned above -
+  turning on all power-hungry devices on reboot (incl. USB-HDDs that can draw
+  like 1A on spin-up!), all at once, in the "I'm starting up" max-power mode, is
+  like the worst thing such hub can do!
+
+  I.e. you disable these ports for a reason, maybe a power-related reason, which
+  "per-port **power** switching" name might even hint at, and yet here you go,
+  on every reboot or driver/hw/cable hiccup, this use-case gets thrown out of the
+  window completely, in the dumbest and most destructive way possible.
+
+  It also negates the other use-cases for the feature of course - when you
+  simply don't want devices to be exposed, aside from power concerns - hub does
+  the opposite of that and gives them all up whenever it bloody wants to.
+
+In summary - even if controlling hub port power via PPPS USB control requests
+worked, and was easy to find (which it very much is not), it's pretty much
+useless anyway.
+
+My simple solution, which I can emphatically recommend:
+
+- Grab robust USB Hub with switches next to ports, e.g. 4-port USB3 ones like
+  that seem to be under $10 these days.
+
+- Get a couple of <$1 direct-current solid-state relays or mosfets, one per port.
+
+  I use locally-made `К293КП12АП`_ ones, rated for toggling 0-60V 2A DC via
+  1.1-1.5V optocoupler input, just sandwitched together at the end - they don't
+  heat up at all and easy to solder wires to.
+
+- Some $3-5 microcontroller with the usual USB-TTY, like any Arduino or RP2040
+  (e.g. `Waveshare RP2040-Zero`_ from aliexpress).
+
+- Couple copper wires pulled from an ethernet cable for power, and M/F jumper
+  pin wires to easily plug into an MCU board headers.
+
+- An hour or few with a soldering iron, multimeter and a nice podcast.
+
+Open up USB Hub - cheap one probably doesn't even have any screws - probe which
+contacts switches connect in there, solder short thick-ish copper ethernet wires
+from their legs to mosfets/relays, and jumper wires from input pins of the latter
+to plug into a tiny rp2040/arduino control board on the other end.
+
+  I like SSRs instead of mosfets here to not worry about controller and hub
+  being plugged into same power supply that way, and they're cheap and foolproof -
+  pretty much can't connect them disastorously wrong, as they've diodes on both
+  circuits. Optocoupler LED in such relays needs one 360R resistor on shared GND
+  of control pins to drop 5V -> 1.3V input voltage there.
+
+This approach solves both issues above - components are easy to find,
+dirt-common and dirt-cheap, and are wired into default-OFF state, to only be
+toggled into ON via whatever code conditions you put into that controller.
+
+Simpliest way, with an RP2040 running the usual micropython_ firmware,
+would be to upload a ``main.py`` file of literally this:
+
+.. code-block:: python
+
+  import sys, machine
+
+  pins = dict(
+    (str(n), machine.Pin(n, machine.Pin.OUT, value=0))
+    for n in range(4) )
+
+  while True:
+    try: port, state = sys.stdin.readline().strip()
+    except ValueError: continue # not a 2-character line
+    if port_pin := pins.get(port):
+      print(f'Setting port {port} state = {state}')
+      if state == '0': port_pin.off()
+      elif state == '1': port_pin.on()
+      else: print('ERROR: Port state value must be "0" or "1"')
+    else: print(f'ERROR: Port {port} is out of range')
+
+And now sending trivial "<port><0-or-1>" lines to /dev/ttyACM0 will
+toggle the corresponding pins 0-3 on the board to 0 (off) or 1 (on) state,
+along with USB hub ports connected to those, while otherwise leaving ports
+default-disabled.
+
+From a linux machine, serial terminal is easy to talk to by running mpremote_
+used with micropython fw (note - "mpremote run ..." won't connect stdin to tty),
+``screen /dev/ttyACM0`` or `many other tools`_, incl. just "echo" from shell scripts:
+
+.. code-block:: sh
+
+  stty -F /dev/ttyACM0 raw speed 115200 # only needed once for device
+  echo 01 >/dev/ttyACM0 # pin/port-0 enabled
+  echo 30 >/dev/ttyACM0 # pin/port-3 disabled
+  echo 21 >/dev/ttyACM0 # pin/port-2 enabled
+  ...
+
+I've started with finding a D-Link PPPS hub, quickly bumped into above
+limitations, and have been using this kind of solution instead for about
+a year now, migrating from old arduino uno to rp2040 mcu and hooking up
+a second 4-port hub recently, as this kind of control over USB peripherals
+from bash scripts that actually use those devices turns out to be very convenient.
+
+So can highly recommend to not even bother with PPPS hubs from the start,
+and wire your own solution with whatever simple logic for controlling these
+ports that you need, instead of a silly braindead way in that USB PPPS works.
+
+An example of a bit more complicated control firmware that I use, with watchdog
+timeout/pings logic on a controller (to keep device up only while script using
+it is alive) and some other tricks can be found in `mk-fg/hwctl`_ repository
+(`github`_/`codeberg`_ or a `local mirror`_).
+
+
+.. _hostapd: https://w1.fi/hostapd/
+.. _uhubctl project: https://github.com/mvp/uhubctl
+.. _list of Compatible USB hubs: https://github.com/mvp/uhubctl/#compatible-usb-hubs
+.. _К293КП12АП:
+  https://optron.proton-orel.ru/upload/library/information/optoelectronsReleMedium/k293kp12ap.pdf
+.. _Waveshare RP2040-Zero: https://www.waveshare.com/rp2040-zero.htm
+.. _micropython: https://micropython.org/
+.. _mpremote: https://docs.micropython.org/en/latest/reference/mpremote.html
+.. _many other tools:
+  https://wiki.archlinux.org/title/Working_with_the_serial_console#Making_Connections
+.. _mk-fg/hwctl: https://github.com/mk-fg/hwctl
+.. _github: https://github.com/mk-fg/hwctl
+.. _codeberg: https://codeberg.org/mk-fg/hwctl
+.. _local mirror: https://fraggod.net/code/git/hwctl
