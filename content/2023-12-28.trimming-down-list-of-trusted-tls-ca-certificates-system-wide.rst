@@ -1,0 +1,122 @@
+Trimming-down list of trusted TLS ca-certificates system-wide using a whitelist approach
+########################################################################################
+
+:date: 2023-12-28 15:19
+:tags: python, tools, web, sysadmin
+
+
+It's no secret that Web PKI was always a terrible mess.
+
+Idk of anything that can explain it better than `old Moxie Marlinspike's
+"SSL And The Future Of Athenticity" talk`_, which still pretty much holds up
+(and is kinda hilarious), as Web PKI for TLS is still up to >150 certs,
+couple of which get kicked-out after malicious misuse or gross malpractice
+every now and then, and it's actually more worrying when they don't.
+
+And as of 2023, `EU eIDAS proposal`_ stands to make this PKI much worse in the
+near-future, adding whole bunch of random national authorities to everyone's
+list of trusted CAs, which of course have no rational business of being there
+on all levels.
+
+(with all people/orgs on the internet seemingly in agreement on that - see e.g.
+EFF_, Mozilla_, `Ryan Hurst's excellent writeup`_, etc - but it'll probably pass
+anyway, for whatever political reasons)
+
+So in the spirit of at least putting some bandaid on that, I had a long-standing
+idea to write a logger for all CAs that my browser uses over time, then inspect
+it after a while and kick <1% CAs out of the browser at least.
+
+This is totally doable, and not that hard - e.g. `cerdicator extension`_ can be
+tweaked to log to a file instead of displaying CA info - but never got around to
+doing it myself.
+
+Recently, scrolling through `Ryan Hurst's "eIDAS 2.0 Provisional Agreement
+Implications for Web Browsers and Digital Certificate Trust" open letter`_,
+pie chart on page-3 there jumped out to me, as it showed that 99% of certs use
+only 6-7 CAs - so why even bother logging those, there's a simple list of them,
+which should mostly work for me too.
+
+I remember browsers and different apps using their own CA lists being a problem
+in the past, having to tweak mozilla nss database via its own tools, etc,
+but by now, as it turns out, this problem seem to have been long-solved on a
+typical linux, via distro-specific "ca-certificates" package/scripts and p11-kit_.
+
+Gist is that ``/usr/share/ca-certificates/trust-source/`` and it's /etc
+counterpart have \*.p11-kit CA bundles installed there by some package like
+ca-certificates-mozilla_, and then package-manager runs ``update-ca-trust``,
+which exports that to ``/etc/ssl/cert.pem`` and such places, where all other
+tools can pickup and use same CAs.
+Firefox (or at least my Waterfox build) even uses installed p11-kit bundle(s)
+directly and immediately.
+
+So basically those p11-kit bundles need to be altered or restricted somehow to
+affect everything on the system, only needing ``update-ca-trust`` at most - neat!
+
+One problem I bumped into however, is that p11-kit tools only support masking
+specific individual CAs from the bundle via blacklist, and that will not be
+future-proof wrt upstream changes to that bundle, if the goal is to "only use
+these couple CAs and nothing else".
+
+Ended up writing a simple script to go through .p11-kit bundle files and remove
+everything unnecessary from them on a whitelist-bases - ca-certificates-whitelist-filter_ -
+which uses a simple one-per-line format with wildcards to match multiple certs::
+
+  Baltimore CyberTrust Root # CloudFlare
+  ISRG Root X* # Let's Encrypt
+  GlobalSign * # Google
+  DigiCert *
+  Sectigo *
+  Go Daddy *
+  Microsoft *
+  USERTrust *
+
+Picking whitelisted CAs from Ryan's list, found that GlobalSign should be added,
+and that it already signs Google's GTS CA's (so latter are unnecessary), while
+"Baltimore CyberTrust Root" seem to be a strange omission, as it signs CloudFlare's
+CA cert, which should've been a major thing on the pie chart in that eIDAS open letter.
+
+But otherwise, that's pretty much it, leaving a couple of CAs instead of a hundred,
+and couple days into it so far, everything seem to be working fine with just those.
+Occasional "missing root" error can be resolved easily by adding that root to the list,
+or ignoring it for whatever irrelevant one-off pages, though this really doesn't seem
+to be an issue at all.
+
+This is definitely not a solution to Web PKI being a big pile of dung, made as
+an afterthough and then abused relentlessly and intentionally, but I think a
+good low-effort bandaid against clumsy mass-MitM by whatever random crooks on
+the network, in ISPs and idiot governments.
+
+One long-term issue with this approach though, is that if used at any scale, it
+further shifts control over CA trust from e.g. Mozilla's p11-kit bundle to those
+dozen giant CAs above, who will then realistically have to share their CAs with
+other orgs and groups (as they're the only ones on the CA list), ossifies
+them to be in control of Web PKI in the future over time, and makes "trusting"
+them meaningless non-decision (as you can't avoid that, even as/if/when they
+have to sign sub-CAs for whatever shady bad actors in secret).
+
+To be fair, there are proposals and movements to remedy this situation, like
+Certificate Transparency and various cert and TLS policies/parameters' pinning,
+but I'm not hugely optimistic, and just hope that a quick fix like this might be
+enough to be on the right side of "you don't need to outrun the bear, just the
+other guy" metaphor.
+
+Link: `ca-certificates-whitelist-filter script on github`_ (codeberg_, `local git`_)
+
+
+.. _old Moxie Marlinspike's "SSL And The Future Of Athenticity" talk:
+  https://www.youtube.com/watch?v=UawS3_iuHoA
+.. _EU eIDAS proposal: https://www.theregister.com/2023/11/08/europe_eidas_browser/
+.. _EFF: https://www.eff.org/deeplinks/2022/12/eidas-20-sets-dangerous-precedent-web-security
+.. _Mozilla: https://blog.mozilla.org/netpolicy/files/2023/11/eIDAS-Industry-Letter.pdf
+.. _Ryan Hurst's excellent writeup:
+  https://docs.google.com/document/d/1sGzaE9QTs-qorr4BTqKAe0AaGKjt5GagyEevDoavWU0/edit#heading=h.ipo800ypudh3
+.. _cerdicator extension: https://github.com/JamesTheAwesomeDude/cerdicator/
+.. _Ryan Hurst's "eIDAS 2.0 Provisional Agreement Implications for Web Browsers and Digital Certificate Trust" open letter:
+  https://docs.google.com/document/d/1sGzaE9QTs-qorr4BTqKAe0AaGKjt5GagyEevDoavWU0/edit#heading=h.ipo800ypudh3
+.. _p11-kit: https://p11-glue.github.io/p11-glue/
+.. _ca-certificates-mozilla: https://archlinux.org/packages/core/x86_64/ca-certificates-mozilla/
+.. _ca-certificates-whitelist-filter: https://github.com/mk-fg/ca-certificates-whitelist-filter
+.. _ca-certificates-whitelist-filter script on github:
+	https://github.com/mk-fg/ca-certificates-whitelist-filter
+.. _codeberg: https://codeberg.org/mk-fg/ca-certificates-whitelist-filter
+.. _local git: https://fraggod.net/code/git/ca-certificates-whitelist-filter
