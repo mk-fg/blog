@@ -25,12 +25,14 @@ anyway, for whatever political reasons)
 So in the spirit of at least putting some bandaid on that, I had a long-standing
 idea to write a logger for all CAs that my browser uses over time, then inspect
 it after a while and kick <1% CAs out of the browser at least.
-
 This is totally doable, and not that hard - e.g. `cerdicator extension`_ can be
 tweaked to log to a file instead of displaying CA info - but never got around to
 doing it myself.
 
-Recently, scrolling through `Ryan Hurst's "eIDAS 2.0 Provisional Agreement
+**Update 2024-01-03:** there is now also `CertInfo app`_ to scrape local history and
+probe all sites there for certs, building a list of root and intermediate CAs to inspect.
+
+But recently, scrolling through `Ryan Hurst's "eIDAS 2.0 Provisional Agreement
 Implications for Web Browsers and Digital Certificate Trust" open letter`_,
 pie chart on page-3 there jumped out to me, as it showed that 99% of certs use
 only 6-7 CAs - so why even bother logging those, there's a simple list of them,
@@ -39,25 +41,25 @@ which should mostly work for me too.
 I remember browsers and different apps using their own CA lists being a problem
 in the past, having to tweak mozilla nss database via its own tools, etc,
 but by now, as it turns out, this problem seem to have been long-solved on a
-typical linux, via distro-specific "ca-certificates" package/scripts and p11-kit_.
+typical linux, via distro-specific "ca-certificates" package/scripts and p11-kit_
+(or at least it appears to be solved like that on my systems).
 
-Gist is that ``/usr/share/ca-certificates/trust-source/`` and it's /etc
+Gist is that ``/usr/share/ca-certificates/trust-source/`` and its /etc
 counterpart have \*.p11-kit CA bundles installed there by some package like
 ca-certificates-mozilla_, and then package-manager runs ``update-ca-trust``,
 which exports that to ``/etc/ssl/cert.pem`` and such places, where all other
 tools can pickup and use same CAs.
 Firefox (or at least my Waterfox build) even uses installed p11-kit bundle(s)
 directly and immediately.
-
-So basically those p11-kit bundles need to be altered or restricted somehow to
-affect everything on the system, only needing ``update-ca-trust`` at most - neat!
+Those p11-kit bundles need to be altered or restricted somehow to affect
+everything on the system, only needing ``update-ca-trust`` at most - neat!
 
 One problem I bumped into however, is that p11-kit tools only support masking
 specific individual CAs from the bundle via blacklist, and that will not be
 future-proof wrt upstream changes to that bundle, if the goal is to "only use
 these couple CAs and nothing else".
 
-Ended up writing a simple script to go through .p11-kit bundle files and remove
+So ended up writing a simple script to go through .p11-kit bundle files and remove
 everything unnecessary from them on a whitelist-bases - ca-certificates-whitelist-filter_ -
 which uses a simple one-per-line format with wildcards to match multiple certs::
 
@@ -111,6 +113,7 @@ Link: `ca-certificates-whitelist-filter script on github`_ (codeberg_, `local gi
 .. _Ryan Hurst's excellent writeup:
   https://docs.google.com/document/d/1sGzaE9QTs-qorr4BTqKAe0AaGKjt5GagyEevDoavWU0/edit#heading=h.ipo800ypudh3
 .. _cerdicator extension: https://github.com/JamesTheAwesomeDude/cerdicator/
+.. _CertInfo app: https://github.com/RaymiiOrg/CertInfo/
 .. _Ryan Hurst's "eIDAS 2.0 Provisional Agreement Implications for Web Browsers and Digital Certificate Trust" open letter:
   https://docs.google.com/document/d/1sGzaE9QTs-qorr4BTqKAe0AaGKjt5GagyEevDoavWU0/edit#heading=h.ipo800ypudh3
 .. _p11-kit: https://p11-glue.github.io/p11-glue/
