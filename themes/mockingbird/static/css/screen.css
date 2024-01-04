@@ -60,13 +60,12 @@ table {
 
 body {
 	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif !important;
-	font-size: 14px;
 	line-height: 1.5em;
 	color: #222;
 	}
 #header, #wrapper, #controls ul {
-	width: 750px;
-	margin: 0 0 0 185px;
+	width: 70em;
+	margin: 0 auto;
 	padding: 0 20px;
 	}
 
@@ -189,7 +188,6 @@ blockquote {
 
 .post pre, .page pre {
 	padding: .5em;
-	font-size: 12px;
 	font-family: 'DejaVu Sans Mono',monospace;
 	line-height: 1.1em;
 	}
