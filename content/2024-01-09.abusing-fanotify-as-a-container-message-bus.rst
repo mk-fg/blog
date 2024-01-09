@@ -1,0 +1,122 @@
+(Ab-)Using fanotify as a container event/message bus
+####################################################
+
+:date: 2024-01-09 15:43
+:tags: tools, sysadmin, nim
+
+
+Earlier, as I was setting-up `filtering for ca-certificates`_ on a host running
+a bunch of `systemd-nspawn containers`_ (similar to LXC_), simpliest way to handle
+configuration across all those consistently seem to be just rsyncing filtered
+p11-kit bundle into them, and running (distro-specific) ``update-ca-trust`` there,
+to easily have same expected CA roots across them all.
+
+But since these are mutable full-rootfs multi-app containers with init (systemd)
+in them, they update their filesystems separately, and routine package updates
+will overwrite cert bundles in /usr/share/, so they'd have to be rsynced again
+after that happens.
+
+Good mechanism to handle this in linux is `fanotify API`_, which in practice is
+used something like this:
+
+.. code-block:: console
+
+  # fatrace -tf 'WD+<>'
+
+  15:58:09.076427 rsyslogd(1228): W   /var/log/debug.log
+  15:58:10.574325 emacs(2318): W   /home/user/blog/content/2024-01-09.abusing-fanotify.rst
+  15:58:10.574391 emacs(2318): W   /home/user/blog/content/2024-01-09.abusing-fanotify.rst
+  15:58:10.575100 emacs(2318): CW  /home/user/blog/content/2024-01-09.abusing-fanotify.rst
+  15:58:10.576851 git(202726): W   /var/cache/atop.d/atop.acct
+  15:58:10.893904 rsyslogd(1228): W   /var/log/syslog/debug.log
+  15:58:26.139099 waterfox(85689): W   /home/user/.waterfox/general/places.sqlite-wal
+  15:58:26.139347 waterfox(85689): W   /home/user/.waterfox/general/places.sqlite-wal
+  ...
+
+Where fatrace_ in this case is used to report all write, delete, create and
+rename-in/out events for files and directories (that weird "-f WD+<>" mask),
+as it promptly does.
+It's useful to see what apps might abuse SSD/NVME writes, more generally
+to understand what's going on with filesystem under some load, which app
+is to blame for that and where it happens, or as a debugging/monitoring tool.
+
+But also if you want to rsync/update files after they get changed under some
+dirs recursively, it's an awesome tool for that as well.
+With container updates above, can monitor /var/lib/machines fs, and it'll report
+when anything in <some-container>/usr/share/ca-certificates/trust-source/ gets
+changed under it, which is when aforementioned rsync hook should run again for
+that container/path.
+
+To have something more robust and simplier than a hacky bash script around
+fatrace, I've made `run_cmd_pipe.nim`_ tool, that reads ini config file like this,
+with a list of input lines to match:
+
+.. code-block:: ini
+
+  delay = 1_000 # 1s delay for any changes to settle
+  cooldown = 5_000 # 5s min interval between running specific command
+
+  [ca-certs-sync]
+  regexp = : \S*[WD+<>]\S* +/var/lib/machines/(\w+)/usr/share/ca-certificates/trust-source(/.*)?$
+  regexp-env-group = 1
+  run = ./_scripts/ca-certs-sync
+
+And runs commands depending on regexp (PCRE_) matches on whatever input gets
+piped into it, passing regexp-match through into via env, with sane debouncing delays,
+deduplication, config reloads, tiny mem footprint and other proper-daemon stuff.
+Can also setup its pipe without shell, for an easy ``ExecStart=run_cmd_pipe rcp.conf
+-- fatrace -cf WD+<>`` systemd.service configuration.
+
+Having this running for a bit now, and bumping into other container-related
+tasks, realized how it's useful for a lot of things even more generally, when
+one needs to communicate some change to host from a container, or in-between those.
+
+For example, if a bunch of containers should have custom network interface
+bridged between them (in a root netns), which e.g. `systemd.nspawn Zone=`_
+doesn't adequately handle - just add whatever custom
+``VirtualEthernetExtra=vx-br-containerA:vx-br`` into container, have a script
+that sets-up those interfaces in those "touch" or create a file when it's done,
+and then run host-script for that event, to handle bridging on the other side:
+
+.. code-block:: ini
+
+  [vx-bridges]
+  regexp = : \S*W\S* +/var/lib/machines/(\w+)/var/tmp/vx\.\S+\.ready$
+  regexp-env-group = 1
+  run = ./_scripts/vx-bridges
+
+This seem to be incredibly simple (touch/create files to pick-up as events),
+very robust (as filesystems tend to be), and doesn't need to run anything more
+than ~600K of fatrace + run_cmd_pipe, with a very no-brainer configuration
+(which file[s] to handle by which script[s]).
+
+Can be streamlined for any types and paths of containers themselves
+(incl. LXC_ and `OCI app-containers`_ like docker_/podman_) by bind-mounting
+dedicated filesystem/volume into those to pass such event-files around there,
+kinda like it's done in `systemd with its agent plug-ins, e.g. for handling
+password inputs`_, so not really a novel idea either.
+`systemd.path`_ units can also handle simplier non-recursive "this one file changed" events.
+
+Won't work for containers distributed beyond single machine or more self-contained VMs -
+that's where you'd probably want more complicated stuff like AMQP_, MQTT_, K8s_ and such -
+but for managing one host's own service containers, regardless of whatever they run and
+how they're configured, this seem to be a really neat way to do it.
+
+
+.. _filtering for ca-certificates:
+  https://blog.fraggod.net/2023/12/28/trimming-down-list-of-trusted-tls-ca-certificates-system-wide-using-a-whitelist-approach.html
+.. _systemd-nspawn containers: https://wiki.archlinux.org/title/systemd-nspawn
+.. _LXC: https://linuxcontainers.org/
+.. _fanotify API: https://man.archlinux.org/man/fanotify.7
+.. _fatrace: https://github.com/martinpitt/fatrace
+.. _run_cmd_pipe.nim: https://github.com/mk-fg/fgtk#run_cmd_pipenim
+.. _PCRE: https://en.wikipedia.org/wiki/Perl_Compatible_Regular_Expressions
+.. _systemd.nspawn Zone=: https://man.archlinux.org/man/systemd.nspawn.5#[NETWORK]_SECTION_OPTIONS
+.. _OCI app-containers: https://en.wikipedia.org/wiki/Open_Container_Initiative
+.. _docker: https://www.docker.com/
+.. _podman: https://podman.io/
+.. _systemd with its agent plug-ins, e.g. for handling password inputs: https://systemd.io/PASSWORD_AGENTS/
+.. _systemd.path: https://man.archlinux.org/man/systemd.path.5
+.. _AMQP: https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol
+.. _MQTT: https://en.wikipedia.org/wiki/MQTT
+.. _K8s: https://en.wikipedia.org/wiki/Kubernetes

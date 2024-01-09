@@ -7,7 +7,7 @@ Trimming-down list of trusted TLS ca-certificates system-wide using a whitelist 
 
 It's no secret that Web PKI was always a terrible mess.
 
-Idk of anything that can explain it better than `old Moxie Marlinspike's
+Idk of anything that can explain it better than `Moxie Marlinspike's old
 "SSL And The Future Of Athenticity" talk`_, which still pretty much holds up
 (and is kinda hilarious), as Web PKI for TLS is still up to >150 certs,
 couple of which get kicked-out after malicious misuse or gross malpractice
@@ -105,7 +105,7 @@ other guy" metaphor.
 Link: `ca-certificates-whitelist-filter script on github`_ (codeberg_, `local git`_)
 
 
-.. _old Moxie Marlinspike's "SSL And The Future Of Athenticity" talk:
+.. _Moxie Marlinspike's old "SSL And The Future Of Athenticity" talk:
   https://www.youtube.com/watch?v=UawS3_iuHoA
 .. _EU eIDAS proposal: https://www.theregister.com/2023/11/08/europe_eidas_browser/
 .. _EFF: https://www.eff.org/deeplinks/2022/12/eidas-20-sets-dangerous-precedent-web-security
