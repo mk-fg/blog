@@ -68,10 +68,10 @@ Can also setup its pipe without shell, for an easy ``ExecStart=run_cmd_pipe rcp.
 -- fatrace -cf WD+<>`` systemd.service configuration.
 
 Having this running for a bit now, and bumping into other container-related
-tasks, realized how it's useful for a lot of things even more generally, when
-one needs to communicate some change to host from a container, or in-between those.
+tasks, realized how it's useful for a lot of things even more generally,
+especially when multiple containers need to send some changes to host.
 
-For example, if a bunch of containers should have custom network interface
+For example, if a bunch of containers should have custom network interfaces
 bridged between them (in a root netns), which e.g. `systemd.nspawn Zone=`_
 doesn't adequately handle - just add whatever custom
 ``VirtualEthernetExtra=vx-br-containerA:vx-br`` into container, have a script
@@ -96,6 +96,12 @@ dedicated filesystem/volume into those to pass such event-files around there,
 kinda like it's done in `systemd with its agent plug-ins, e.g. for handling
 password inputs`_, so not really a novel idea either.
 `systemd.path`_ units can also handle simplier non-recursive "this one file changed" events.
+
+Alternative with such shared filesystem can be to use any other IPC mechanisms,
+like append/tail file, fcntl locks, fifos or unix sockets, and tbf `run_cmd_pipe.nim`_
+can handle all those too, by running e.g. ``tail -F shared.log`` instead of fatrace,
+but latter is way more convenient on the host side, and can act on incidental or
+out-of-control events (like pkg-mangler doing its thing in the initial ca-certs use-case).
 
 Won't work for containers distributed beyond single machine or more self-contained VMs -
 that's where you'd probably want more complicated stuff like AMQP_, MQTT_, K8s_ and such -
