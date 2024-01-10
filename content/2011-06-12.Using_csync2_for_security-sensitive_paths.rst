@@ -20,7 +20,7 @@ will be valid only when I want them to.
 
 | Idea is to create FIFO socket in place of a key on remote hosts, then just
   pipe a key into each socket while script is running on my dev
-  machine. Simpliest form of such "pipe" I could come up with is an "ssh host
+  machine. Simplest form of such "pipe" I could come up with is an "ssh host
   'cat >remote.key.fifo'", no fancy sockets, queues or protocols.
 | That way, even if one host is compromised changes can't be propagnated to
   other hosts without access to fifo sockets there and knowing the right

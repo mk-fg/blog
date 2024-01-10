@@ -12,7 +12,7 @@ Issue came up when I wanted to make a smart wakeup switch for a local backup
 ARM-board the other day, which would toggle separate 5V power to it and its
 drive in-between weekly backups, so went on to explore the options there.
 
-Simpliest one is actually to wake up an ARM board using Wake-on-LAN_, which can
+Simplest one is actually to wake up an ARM board using Wake-on-LAN_, which can
 then control own and peripherals' power via its GPIO lines, but don't think mine
 has that.
 
@@ -38,7 +38,7 @@ easily exposed and intended for use from userspace, but there are options:
   Even though it's a serial port, they have DTR and RTS pins, which are easy
   to control directly, using ioctl() with TIOCM_DTR and TIOCM_RTS flags on \/dev\/ttyS\*.
 
-  Outside of pure bit-banging, RS-232 can usually be hooked-up to simplier
+  Outside of pure bit-banging, RS-232 can usually be hooked-up to simpler
   hardware's UART pins via RS232-to-TTL chip, instead of just GPIO via optocoupler.
 
 - PC Speaker!

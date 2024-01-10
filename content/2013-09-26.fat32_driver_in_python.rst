@@ -31,7 +31,7 @@ flash ram.
 Second obvious for me was to dig into FAT32 and just reorder entries there,
 which is what `the script`_ does.
 
-It's based off example of a simplier `fat16 parser`_ in `construct module`_ repo
+It's based off example of a simpler `fat16 parser`_ in `construct module`_ repo
 and processes all the necessary metadata structures like PDRs, FATs (cluster
 maps) and directory tables with vfat long-name entries inside.
 

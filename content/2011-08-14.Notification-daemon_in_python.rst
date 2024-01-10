@@ -8,7 +8,7 @@ Notification-daemon in python
 
 | I've delayed update of the whole libnotify / notification-daemon /
   notify-python stack for a while now, because notification-daemon got too
-  GNOME-oriented around 0.7, making it a lot more simplier, but sadly dropping
+  GNOME-oriented around 0.7, making it a lot more simpler, but sadly dropping
   lots of good stuff I've used there.
 | Default nice-looking theme is gone in favor of black blobs (although colors
   are probably subject to gtkrc); it's one-note-at-a-time only, which makes

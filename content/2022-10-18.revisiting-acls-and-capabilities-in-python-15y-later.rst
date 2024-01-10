@@ -69,7 +69,7 @@ in a modern python can be packed into something like this:
     print('Default ACLs:\n' + parse_acl(acl, '  d:'))
 
 Where it's just a bunch of 8B entries with uids/gids and permission bits in
-them, and capabilities are even simplier, except for ever-growing enum of them:
+them, and capabilities are even simpler, except for ever-growing enum of them:
 
 .. code-block:: python
 
@@ -124,7 +124,7 @@ to avoid having extra jank and hassle of dependencies where possible.
 
 Makes me wonder if that's also the dynamic behind relatively new js/rust devs
 dragging in a bunch of crap (like the infamous `left-pad`_) into their apps,
-still thinking that it'd make life simplier or due to some "good practice" dogmas.
+still thinking that it'd make life simpler or due to some "good practice" dogmas.
 
 
 .. _discovered for myself: https://blog.fraggod.net/2010/02/01/posix-capabilities-for-python.html

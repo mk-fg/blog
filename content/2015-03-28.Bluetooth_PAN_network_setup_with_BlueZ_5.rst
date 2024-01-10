@@ -126,7 +126,7 @@ stopped along with bluetoothd (as it doesn't make any sense running without it):
 and enable to start with "bluetooth.target" (see "man systemd.special") by
 running ``systemctl enable net-bnep.service``.
 
-On the client side, it's even simplier - BlueZ will just create a "bnepX" device
+On the client side, it's even simpler - BlueZ will just create a "bnepX" device
 and won't need any bridge, as it is just a single connection:
 
 .. code-block:: ini

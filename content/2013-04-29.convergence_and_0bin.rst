@@ -54,7 +54,7 @@ Plus the links there expire reliably, and it's easy to force this expiration,
 having control over app backend.
 
 `Local fork`_ should have all the not-yet-merged stuff as well as the
-non-upstreamable simplier white-bootstrap theme.
+non-upstreamable simpler white-bootstrap theme.
 
 
 Convergence - better PKI for TLS keys

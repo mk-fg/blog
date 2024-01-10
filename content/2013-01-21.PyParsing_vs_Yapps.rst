@@ -97,7 +97,7 @@ with E configs, btw).
 
 yapps2 actually generates `quite readable code
 <http://fraggod.net/static/code/e_config_sorter.py>`_ from it, and it was just
-simplier (and apparently more bugproof) to write grammar rules in it.
+simpler (and apparently more bugproof) to write grammar rules in it.
 
 ymmv, but it's a bit of a shame that pyparsing seem to be the about the only
 developed parser-generator of such kind for python these days.

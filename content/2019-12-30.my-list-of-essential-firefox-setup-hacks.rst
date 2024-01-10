@@ -329,11 +329,11 @@ so be sure to check whether stuff on it is still relevant first.
     URL), which can be fixed via an external tool - see `mk-fg/waterfox#redirectorml`_
     for more details.
 
-  - `Mouse Gesture Events`_ - simpliest/fastest one for gestures that I could find.
+  - `Mouse Gesture Events`_ - simplest/fastest one for gestures that I could find.
 
     Some other ones are quite appalling wrt bloat they bring in, unlike this one.
 
-  - `HTTPS by default`_ - better version of "HTTPS Everywhere" - much simplier
+  - `HTTPS by default`_ - better version of "HTTPS Everywhere" - much simpler
     and more well-suited for modern web, where defaulting to ``http://`` is just
     wrong, as everyone and their dog are either logging these or putting
     ads/malware into them on-the-fly.
@@ -370,7 +370,7 @@ so be sure to check whether stuff on it is still relevant first.
   Given AppArmor container (see above), using xdg-open for these is quite
   "meh" - opens up a really fat security exception.
 
-  But there is another - simplier (for me at least) - way, to use some trivial
+  But there is another - simpler (for me at least) - way, to use some trivial
   wrapper binary - see all details in `mk-fg/waterfox#url-handler-c`_.
 
 .. _mk-fg/waterfox#url-handler-c: https://github.com/mk-fg/waterfox#url-handler-c

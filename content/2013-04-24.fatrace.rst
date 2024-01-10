@@ -14,7 +14,7 @@ $src >...`` hack, and done same thing in this case as well, but was forgetting
 to run it after small "debug printf" changes waaay too often.
 
 At this point, I sometimes hack some ad-hoc emacs post-save hook to run the
-thing, but this time decided to find some simplier and more generic "run that on
+thing, but this time decided to find some simpler and more generic "run that on
 any changes to path" tool.
 
 Until the last few years, the only way to do that was polling or inotify_, and
@@ -39,7 +39,7 @@ kernel now, and fatrace_ looks like the simliest cli tool based on it.
 | Even better - reports the app that does the changes.
 
 I never got over `auditd's`_ complexity for such simple use-cases, so was damn
-glad that there is a real and simplier alternative now.
+glad that there is a real and simpler alternative now.
 
 Unfortunately, with power of the thing comes the need for root, so one `simple
 bash wrapper`_ later, my "sync changes" issue was finally resolved:

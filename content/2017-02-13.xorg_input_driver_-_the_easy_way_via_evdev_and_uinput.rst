@@ -71,7 +71,7 @@ positions to cursor keys, plus triggers, d-pad and bumper buttons there::
 
 Given how all iterations of X had to work with whatever input they had at the
 time, plus not just on linux, even when evdev was around, hard to blame it for
-having a bit of complexity on top of way simplier input layer underneath.
+having a bit of complexity on top of way simpler input layer underneath.
 
 In linux, aforementioned Xbox 360 gamepad is supported by "xpad" module (so that
 you'd get evdev node for it), and /dev/uinput for simulating arbitrary evdev

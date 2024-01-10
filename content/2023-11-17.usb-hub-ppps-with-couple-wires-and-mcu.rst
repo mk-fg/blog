@@ -117,7 +117,7 @@ This approach solves both issues above - components are easy to find,
 dirt-common and dirt-cheap, and are wired into default-OFF state, to only be
 toggled into ON via whatever code conditions you put into that controller.
 
-Simpliest way, with an RP2040 running the usual micropython_ firmware,
+Simplest way, with an RP2040 running the usual micropython_ firmware,
 would be to upload a ``main.py`` file of literally this:
 
 .. code-block:: python

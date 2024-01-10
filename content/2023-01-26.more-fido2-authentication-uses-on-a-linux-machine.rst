@@ -24,7 +24,7 @@ password/secret management`_), support for my use-cases was mostly good:
     https://bugzilla.mozilla.org/show_bug.cgi?id=1669870
 
 
-- `pam-u2f`_ to login with the token using much simplier
+- `pam-u2f`_ to login with the token using much simpler
   and hw-rate-limited PIN (with pw fallback).
 
   Module itself worked effortlessly, but had to be added to various pam services
@@ -98,7 +98,7 @@ password/secret management`_), support for my use-cases was mostly good:
 
 
 - Early-boot `LUKS / dm-crypt disk encryption`_ unlock with offline key and a
-  simplier + properly rate-limited "pin", instead of a long and hard-to-type passphrase.
+  simpler + properly rate-limited "pin", instead of a long and hard-to-type passphrase.
 
   systemd-cryptenroll_ can work for that, if you have typical "Full Disk Encryption"
   (FDE) setup, with one LUKS-encrypted SSD, but that's not the case for me.

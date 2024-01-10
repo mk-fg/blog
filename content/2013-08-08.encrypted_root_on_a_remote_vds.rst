@@ -62,7 +62,7 @@ passing to dracut on command line) and adding networking to grub.cfg, e.g.:
 		initrd /dracut.xz
 	}
 
-("ip=dhcp" might be simplier way to go, but doesn't yield default route in my case)
+("ip=dhcp" might be simpler way to go, but doesn't yield default route in my case)
 
 And there, you'll have sshd on that IP port 2222 (configurable), with
 pre-generated (during dracut build) keys, which might be a good idea to put into

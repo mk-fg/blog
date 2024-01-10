@@ -28,7 +28,7 @@ here is the last aforementioned point - sshfs would generate as much bandwith as
 possible, caching content only temporarily in volatile RAM.
 
 Persistent caching seem to be quite easy to implement in userspace with either
-fuse layer over network filesystem or something even simplier (and more hacky),
+fuse layer over network filesystem or something even simpler (and more hacky),
 like aufs and inotify, catching IN_OPEN events and pulling files in question to
 intermediate layer of fs-union.
 
@@ -117,7 +117,7 @@ remote. Hallelujah.
   <http://bugs.gentoo.org/show_bug.cgi?id=275014>`_ (now mirrored to my overlay,
   as well).
 
-| Setting it up is even simplier.
+| Setting it up is even simpler.
 | Config is well-documented and consists of five lines only, the only relevant
   of which is the path to fs-backend, oh, and the last one seem to need
   user_xattr support enabled.

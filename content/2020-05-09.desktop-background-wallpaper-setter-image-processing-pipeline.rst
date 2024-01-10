@@ -168,7 +168,7 @@ Tool was doing roughly this:
     colorspace against "averaged" background color (via blur or such).
 
     This produced too wild and still bad results on busy backgrounds, so
-    eventually switched to a simplier and better "light text with dark outline" option.
+    eventually switched to a simpler and better "light text with dark outline" option.
 
     Outline is technically rendered as a "glow" - a soft gradient shadow (solid
     dark color to full trasparency) expanding in all directions from font outline.

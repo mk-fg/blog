@@ -11,7 +11,7 @@ for secure sync over network remote.
 
 Stable-enough btrfs makes --link-dest somewhat anachronistic, and rsync filters
 came a long way since then, but everything else is the same, so why not use this
-opportunity to make things simplier and smoother...
+opportunity to make things simpler and smoother...
 
 In particular, it was always annoying to me that backups either had to be pulled
 from some *open and accessible* port or pushed to same thing on the backup server,
@@ -108,7 +108,7 @@ And --hook-list providing full attached info like::
   Setting --hook-timeout (defaults to no limit)
     can be used to abort when hook-scripts hang.
 
-`Very trivial to implement`_ and then allows to hook much simplier single-purpose
+`Very trivial to implement`_ and then allows to hook much simpler single-purpose
 bash scripts handling specific stuff like passing extra options on per-host basis,
 handling backup rotation/cleanup and --link-dest,
 creating "backup-done-successfully" mark and manifest files, or whatever else,

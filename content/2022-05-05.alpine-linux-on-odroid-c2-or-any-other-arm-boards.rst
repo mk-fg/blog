@@ -316,7 +316,7 @@ Current Alpine is 3.15.4 and Linux is 5.18 (or 5.15 LTS) atm of writing this.
       for s in networking ntpd sshd haveged ; do rc-update add $s; done
 
     Run ``rc-update show -v`` to get a full picture of what is setup to run when
-    with openrc, should be much simplier and more comprehensible than systemd in general.
+    with openrc, should be much simpler and more comprehensible than systemd in general.
 
     sshd and haveged there can probably be installed after network works, or in
     earlier rootfs-setup step (and haveged likely unnecessary with more recent

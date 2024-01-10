@@ -81,7 +81,7 @@ Some of the problems I've noticed with such collectd setup:
    collectd has a damn powerful `tail
    plugin <http://collectd.org/wiki/index.php/Plugin:Tail>`_, I still
    found it to be too limited or just too complicated to use, while
-   simple log-tailing code does the better job and is actually simplier
+   simple log-tailing code does the better job and is actually simpler
    due to more powerful language than collectd configuration. Same
    problem with `table
    plugin <http://collectd.org/wiki/index.php/Plugin:Table>`_ and /proc.

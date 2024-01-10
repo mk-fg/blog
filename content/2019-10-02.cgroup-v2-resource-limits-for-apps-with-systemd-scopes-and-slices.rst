@@ -27,7 +27,7 @@ on cmdline), there are two supported options to manage custom resource limits:
   `via Delegate= in units`_.
 
 Delegation necessitates managing pids within that subtree outside of systemd
-entirely, while first one is simplier of the two, where instead of libcgroup_,
+entirely, while first one is simpler of the two, where instead of libcgroup_,
 cgmanager_ or cgconf_ config file, you'd define all these limits in systemd
 .slice unit-file hierarchy like this::
 

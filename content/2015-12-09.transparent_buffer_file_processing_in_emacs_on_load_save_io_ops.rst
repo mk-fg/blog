@@ -54,7 +54,7 @@ a package there myself.
 [`fg_sec.el code link`_]
 
 
-.. _gpg replacement endeavor: http://blog.fraggod.net/2015/12/08/ghg-simplier-gnupg-gpg-replacement-for-file-encryption.html
+.. _gpg replacement endeavor: http://blog.fraggod.net/2015/12/08/ghg-simpler-gnupg-gpg-replacement-for-file-encryption.html
 .. _*.ghg: https://github.com/mk-fg/ghg/
 .. _git filters: https://git-scm.com/docs/gitattributes#__code_filter_code
 .. _fg_sec.el example: https://github.com/mk-fg/emacs-setup/blob/master/core/fg_sec.el

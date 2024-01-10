@@ -52,7 +52,7 @@ summed-up as a sequence of the following steps:
 - "dd" whole rootfs to the end of the microSD card.
 
   This is safe with read-only rootfs, and dumb "dd" approach to copying it (as
-  opposed to dmsetup + mkfs + cp) seem to be simpliest and least error-prone.
+  opposed to dmsetup + mkfs + cp) seem to be simplest and least error-prone.
 
 - Update partition table to have rootfs in the new location (at the very end of
   the card) and boot partition covering rest of the space.

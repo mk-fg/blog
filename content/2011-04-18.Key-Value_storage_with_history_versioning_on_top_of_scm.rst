@@ -44,7 +44,7 @@ Working with a number of non-synced servers remotely (via `fabric
   hand in case of any conflicts or complications.
 
 | Being most comfortable with `git <http://git-scm.com/>`_, I looked for
-  non-interactive db solutions on top of it, and the simpliest one I've found
+  non-interactive db solutions on top of it, and the simplest one I've found
   was `gitshelve
   <http://newartisans.com/2008/05/using-git-as-a-versioned-data-store-in-python/>`_.
   `GitDB <http://packages.python.org/gitdb/>`_ seem to be more powerful, but
@@ -68,6 +68,6 @@ fabric api to vary keys depending on host).
 
 | Pity I'm far more used to git than pure-py solutions like `mercurial
   <http://mercurial.selenic.com/>`_ or `bazaar <http://bazaar.canonical.com/>`_,
-  since it'd have probably been much cleaner and simplier to implement such
+  since it'd have probably been much cleaner and simpler to implement such
   storage on top of them - they probably expose python interface directly.
 | Guess I'll put rewriting the thing on top of hg on my long todo list.

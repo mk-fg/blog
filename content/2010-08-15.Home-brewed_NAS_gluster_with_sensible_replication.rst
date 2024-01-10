@@ -80,7 +80,7 @@ Scenario 1: fully network-aware client.
 
   <img align="right" src="{static}images/gluster_sc1.png">
 
-That's actually the simpliest scenario - glusterfsd.vol files on "nodes" should
+That's actually the simplest scenario - glusterfsd.vol files on "nodes" should
 just export local disks and client configuration ties it all together.
 
 Pros:

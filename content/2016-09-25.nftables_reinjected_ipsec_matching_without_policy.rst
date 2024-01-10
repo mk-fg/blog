@@ -71,7 +71,7 @@ Note that this assumes that all IPSec connections are properly authenticated and
 trusted, so be sure not to use anything like that if e.g. opportunistic
 encryption is enabled.
 
-Much simplier nft-only solution, though still not a full substitute for what
+Much simpler nft-only solution, though still not a full substitute for what
 xt_policy does, of couse.
 
 .. _nftables: https://wiki.nftables.org/

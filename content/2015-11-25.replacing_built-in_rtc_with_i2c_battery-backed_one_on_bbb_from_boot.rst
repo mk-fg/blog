@@ -7,7 +7,7 @@ Replacing built-in RTC with i2c battery-backed one on BeagleBone Black from boot
 
 **Update 2018-02-16:**
 
-  There is a better and simplier solution for switching default rtc than one
+  There is a better and simpler solution for switching default rtc than one
   described here - to swap rtc0/rtc1 via aliases in dt overlay.
 
   I.e. using something like this in the dts::

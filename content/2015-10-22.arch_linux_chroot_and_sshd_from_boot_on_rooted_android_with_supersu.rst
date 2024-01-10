@@ -277,7 +277,7 @@ Steps I took to have sshd running on boot with such device:
 
   * ``/data/local/chroots.bash`` is an actual init script for whatever chroots,
     with Android logging stuff (accessible via e.g. ``adb logcat``, useful to
-    check if script was ever started) and simplier more reliable (and rotated)
+    check if script was ever started) and simpler more reliable (and rotated)
     log in ``/data/local/chroots.log``.
 
   * ``/data/chroots/droid-chroot.sh`` is a symlink to init script in

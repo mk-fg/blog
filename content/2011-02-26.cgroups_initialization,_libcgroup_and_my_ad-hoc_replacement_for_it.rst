@@ -58,7 +58,7 @@ exist though.
 | libcgroup project has cgconfigparser for that, which is probably the most
   brain-dead tool one can come up with. Configuration is stone-age pain in the
   ass, making you clench your teeth, fuck all the DRY principles and write
-  N*100 line crap for even the simpliest tasks with as much punctuation as
+  N*100 line crap for even the simplest tasks with as much punctuation as
   possible to cram in w/o making eyes water.
 | Then, that cool toy parses the config, giving no indication where you messed
   it up but the dreaded message like "failed to parse file". Maybe it's not

@@ -189,7 +189,7 @@ flipping the "eclectic init" switch:
   smaller) to original system.
 - A script to mount all these and rsync the "original" system to this replica,
   with a few post-sync hooks to make some vm-specific changes - different vg
-  name, no extra devices for media content, simplier passwords.
+  name, no extra devices for media content, simpler passwords.
 
 | `I have this script here <http://fraggod.net/oss/bin_scrz/quasictl.sh>`_, list
   of "exclusions" for rsync is actually taken from backup scripts, since it's

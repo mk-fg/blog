@@ -21,7 +21,7 @@ shortcomings, provided the interpreter itself is up-to-date.
 
 However, I've found that support for capabilities in linux (gentoo in my case,
 but that seem to hold true for other distros) is quite lacking.  While they've
-been around for quite a while, even simpliest ping util still has suid bit
+been around for quite a while, even simplest ping util still has suid bit
 instead of single cap\_net\_\*, daemons get root just to bind a socket on a
 privileged port and service scripts just to send signal some pid.
 

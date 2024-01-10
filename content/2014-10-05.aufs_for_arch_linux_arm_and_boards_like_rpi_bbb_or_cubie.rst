@@ -103,7 +103,7 @@ used like this:
 	# aubrsync move /var/ /aufs/rw/var/ /aufs/ro/var/
 
 As even pulling that from shell history can be a bit tedious, I've made a
-simplier ad-hoc wrapper - `aufs_sync`_ - that can be used (with mountpoints
+simpler ad-hoc wrapper - `aufs_sync`_ - that can be used (with mountpoints
 similar to presented above) like this:
 
 .. code-block:: console
