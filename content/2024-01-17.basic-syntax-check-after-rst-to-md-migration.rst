@@ -1,0 +1,112 @@
+Basic markdown syntax/links checks after rst -> md migration
+############################################################
+
+:date: 2024-01-17 22:48
+:tags: documentation, tools, scm
+
+
+Some days ago, I've randomly noticed that github stopped rendering long
+`rst (as in reStructuredText)`_ README files on its repository pages.
+Happened in a couple repos, with no warning or anything, it just said "document
+takes too long to preview" below the list of files, with a link to view raw .rst file.
+
+Sadly that's not the only issue with rst rendering, as codeberg_ (and pretty
+sure its Gitea_ / Forgejo_ base apps) had issues with some syntax there as well -
+didn't make any repo links correctly, didn't render table of contents, missed
+indented references for links, etc.
+
+So thought to fix all that and convert these few long .rst READMEs to .md (markdown_),
+which does indeed fix all issues above, as it's more popular format nowadays,
+and apparently well-tested and working fine in at least those git-forges.
+
+One nice thing about rst however, is that it has one specification and a
+reference implementation of tools to parse/generate its syntax -
+`python docutils`_ - which can be used to go over .rst file in a strict
+manner and point out all syntax errors in it (``rst2html`` does it nicely).
+
+Good example of such errors that always gets me, is using links in the text with
+a reference-style URLs for those below, to not make plaintext really ugly,
+unreadable and hard to edit due to giant mostly-useless URLs in middle of it.
+And you have to remember to put all those references in, not leave any unused
+ones ideally, and then keep them matched to tags in the text precisely, down to
+every single letter, which of course doesn't really work with typing stuff out
+by hand without some kind of machine-checks.
+
+And then also, for git repo documentation specifically, all these links should
+point to files in the repo properly, and those get renamed, moved and removed
+often enough to be a constant problem as well.
+
+Proper static-HTML doc-site generation tools like mkdocs_ (or its
+popular mkdocs-material_ fork) do some checking for issues like that
+(though confusingly not nearly enough), but those require a bit of setup,
+with configuration and whole venv for them, which doesn't seem very practical
+for a quick README.md syntax check.
+
+MD linters apparently go the other way and check various garbage metrics like
+whether plaintext conforms to some style, while also (confusingly!) often not
+checking basic crap like whether it actually works as a markdown format.
+
+Task itself seems ridiculously trivial - find all ``... [some link] ...`` and
+``[some link]: ...`` bits in the file and report any mismatches between the two.
+
+But looking at md linters a few times now, couldn't find any that do it nicely
+that I can use, so ended up writing my own one - `markdown-checks tool`_ - to
+detect all of the above problems with links in .md files, and some related quirks:
+
+- link-refs - Non-inline links like "[mylink]" have exactly one "[mylink]: URL" line for each.
+- link-refs-unneeded - Inline URLs like "[mylink](URL)" when "[mylink]: URL" is also in the md.
+- link-anchor - Not all headers have "<a name=hdr-...>" line. See also -a/--add-anchors option.
+- link-anchor-match - Mismatch between header-anchors and hashtag-links pointing to them.
+- link-files - Relative links point to an existing file (relative to them).
+- link-files-weird - Relative links that start with non-letter/digit/hashmark.
+- link-files-git - If .md file is in a git repo, warn if linked files are not under git control.
+- link-dups - Multiple same-title links with URLs.
+- rx-in-code - Command-line-specified regexp (if any) detected inside code block(s).
+- tabs - Make sure md file contains no tab characters.
+- syntax - Any kind of incorrect syntax, e.g. blocks opened and not closed and such.
+
+ReST has a nice ``.. contents::`` feature that `automatically renders Table of Contents`_
+from all document headers, quite like mkdocs does for its sidebars, but afaik basic
+markdown_ does not have such feature, and maintaining that thing with all-working
+links manually, without any kind of validation, is pretty much impossible in particular,
+and yet absolutely required for large enough documents.
+
+So one interesting extra thing that I found needing to implement there was for script
+to automatically (with ``-a/--add-anchors`` option) insert/update
+``<a name=hdr-some-section-header></a>`` anchor-tags before every header,
+because otherwise internal links within document are impossible to maintain either -
+github makes hashtag-links from headers according to its own inscrutable logic,
+gitlab/codeberg do their own thing, and there's no standard for any of that
+(which is a historical problem with .md in general - poor ad-hoc standards on
+various features, while .rst has internal links in its spec).
+
+Making/maintaining a table-of-contents requires stable internal links,
+validating that they're all still there, and ideally that all headers have such
+internal link as well, i.e. new stuff isn't missing in the ToC section at the top.
+
+Having such assigned/updated anchors in the .md file itself side-steps the issue
+of potentially-crappy, uncontrollable, inconsistent or plain missing TOC-section
+rendering (incl. control over what you want to maybe include/omit, or how to
+name/split stuff there), and also creates stable anchor names for any external
+links to such doc sections, as auto-generated ones tend to change, especially
+for complicated headers, with e.g. links and symbols in them.
+
+With checks for tricky syntax bits in place though, markdown READMEs seem to
+be as tidy, strict and manageable as rst ones. Both formats have rough feature
+parity for such simple purposes, but .md is definitely only one with good-enough
+support on public code-forge sites, so a better option for public docs going forward.
+
+
+.. _rst (as in reStructuredText): https://docutils.sourceforge.io/rst.html
+.. _codeberg: https://codeberg.org
+.. _Gitea: https://about.gitea.com/
+.. _Forgejo: https://forgejo.org/
+.. _markdown: https://spec.commonmark.org/current/
+.. _python docutils: https://docutils.sourceforge.io/
+.. _mkdocs: https://www.mkdocs.org/
+.. _mkdocs-material: https://squidfunk.github.io/mkdocs-material/
+.. _markdown-checks tool: https://github.com/mk-fg/fgtk#hdr-markdown-checks
+.. _automatically renders Table of Contents:
+	https://docutils.sourceforge.io/docs/ref/rst/directives.html#table-of-contents
+.. _on codeberg: https://codeberg.org/mk-fg/fgtk#hdr-markdown-checks
+.. _local cgit: https://fraggod.net/code/git/fgtk/about/#hdr-markdown-checks
