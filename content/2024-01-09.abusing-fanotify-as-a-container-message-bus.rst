@@ -54,11 +54,12 @@ with a list of input lines to match:
 .. code-block:: ini
 
   delay = 1_000 # 1s delay for any changes to settle
-  cooldown = 5_000 # 5s min interval between running specific command
+  cooldown = 5_000 # min 5s interval between running same rule+run-group command
 
   [ca-certs-sync]
   regexp = : \S*[WD+<>]\S* +/var/lib/machines/(\w+)/usr/share/ca-certificates/trust-source(/.*)?$
   regexp-env-group = 1
+  regexp-run-group = 1
   run = ./_scripts/ca-certs-sync
 
 And runs commands depending on regexp (PCRE_) matches on whatever input gets
