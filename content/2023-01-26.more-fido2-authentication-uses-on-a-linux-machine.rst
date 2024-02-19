@@ -122,7 +122,7 @@ password/secret management`_), support for my use-cases was mostly good:
     https://0pointer.net/blog/unlocking-luks2-volumes-with-tpm2-fido2-pkcs11-security-hardware-on-systemd-248.html
   .. _fscrypt: https://www.kernel.org/doc/html/latest/filesystems/fscrypt.html
   .. _gocryptfs: https://nuetzlich.net/gocryptfs/
-  .. _fido2-hmac-boot tool: https://github.com/mk-fg/fgtk#fido2_hmac_bootnim
+  .. _fido2-hmac-boot tool: https://github.com/mk-fg/fgtk#hdr-fido2_hmac_boot.nim
 
 
 - Management of legacy passwords, passphrases, pins, other secrets and similar
@@ -390,4 +390,4 @@ but a bit more complex, so is written in an easier and much nicer/safer language
 .. _fido2-cred: https://developers.yubico.com/libfido2/Manuals/fido2-cred.html
 .. _libfido2: https://developers.yubico.com/libfido2/
 .. _crypttab: https://www.freedesktop.org/software/systemd/man/crypttab.html
-.. _fido2-hmac-desalinate.c: https://github.com/mk-fg/fgtk#fido2-hmac-desalinatec
+.. _fido2-hmac-desalinate.c: https://github.com/mk-fg/fgtk#hdr-fido2-hmac-desalinate.c
