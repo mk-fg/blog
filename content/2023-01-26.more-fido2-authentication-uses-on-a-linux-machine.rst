@@ -19,9 +19,13 @@ password/secret management`_), support for my use-cases was mostly good:
   Wish it `worked with NFC reader in Firefox on Linux Desktop`_ too, but oh
   well, maybe someday, if Mozilla doesn't implode before that.
 
+  **Update 2024-02-21:** `fido2-hid-bridge`_ seem to be an ok workaround for
+  this shortcoming, and other apps not using libfido2 with its pcscd support.
+
   .. _Webauthn: https://webauthn.guide/
   .. _worked with NFC reader in Firefox on Linux Desktop:
     https://bugzilla.mozilla.org/show_bug.cgi?id=1669870
+  .. _fido2-hid-bridge: https://github.com/BryanJacobs/fido2-hid-bridge
 
 
 - `pam-u2f`_ to login with the token using much simpler
