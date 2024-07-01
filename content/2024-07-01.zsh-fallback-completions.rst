@@ -1,0 +1,97 @@
+zsh fallback completions on empty results
+#########################################
+
+:date: 2024-07-01 07:35
+:tags: tools
+
+
+Usually zsh_ does fine wrt tab-completion, but sometimes you just get nothing
+when pressing tab, either due to somewhat-broken completer or it working as
+intended but there's seemingly being "nothing" to complete.
+
+Recently latter started happening after redirection characters,
+e.g. on ``cat myfile > <TAB>``, and that finally prompted me to re-examine
+why I even put up with this crap.
+
+Because in vast majority of cases, completion should use files, except for
+commands as the first thing on the line, and maybe some other stuff way more rarely,
+almost as an exception.
+But completing nothing at all seems like an obvious bug to me,
+as if I wanted nothing, wouldn't have pressed the damn tab key in the first place.
+
+One common way to work around the lack of file-completions when needed,
+is to define special key for just those, like shift-tab::
+
+  zstyle ':completion:complete-files:*' completer _files
+  bindkey "\e[Z" complete-files
+
+If using that becomes a habit everytime one needs files, that'd be a good solution,
+but I still use generic "tab" by default, and expect file-completion from it in most cases,
+so why not have it fallback to file-completion if whatever special thing zsh has
+otherwise fails - i.e. suggest files/paths instead of nothing.
+
+Looking at ``_complete_debug`` output (can be bound/used instead of tab-completion),
+it's easy to find where ``_main_complete`` dispatcher picks completer script,
+and that there is apparently no way to define fallback of any kind there, but easy
+enough to patch one in, at least.
+
+Here's the hack I ended up with for /etc/zsh/zshrc::
+
+  ## Make completion always fallback to next completer if current returns 0 results
+  # This allows to fallback to _file completion properly when fancy _complete fails
+  # Patch requires running zsh as root at least once, to apply it (or warn/err about it)
+
+  _patch_completion_fallbacks() {
+    local patch= p=/usr/share/zsh/functions/Completion/Base/_main_complete
+    if [[ "$p".orig -nt "$p" ]]; then return; fi
+    read -r -d '' patch <<'EOF'
+  --- _main_complete      2024-06-09 01:10:28.352215256 +0500
+  +++ _main_complete.new  2024-06-09 01:10:51.087404762 +0500
+  @@ -210,18 +210,19 @@
+       fi
+
+       _comp_mesg=
+       if [[ -n "$call" ]]; then
+         if "${(@)argv[3,-1]}"; then
+           ret=0
+           break 2
+         fi
+       elif "$tmp"; then
+  +      [[ $compstate[nmatches] -gt 0 ]] || continue
+         ret=0
+         break 2
+       fi
+       (( _matcher_num++ ))
+     done
+     [[ -n "$_comp_mesg" ]] && break
+
+     (( _completer_num++ ))
+   done
+  EOF
+    patch --dry-run -stN "$p" <<< "$patch" &>/dev/null \
+      || { echo >&2 "zshrc :: WARNING: zsh fallback-completions patch fails to apply"; return; }
+    cp -a "$p" "$p".orig && patch -stN "$p" <<< "$patch" && touch "$p".orig \
+      || { echo >&2 "zshrc :: ERROR: failed to apply zsh fallback-completions patch"; return; }
+    echo >&2 'zshrc :: NOTE: patched zsh _main_complete routine to allow fallback-completions'
+  }
+  [[ "$UID" -ne 0 ]] || _patch_completion_fallbacks
+  unset _patch_completion_fallbacks
+
+This would work with multiple completers defined like this::
+
+  zstyle ':completion:*' completer _complete _ignored _files
+
+Where ``_complete _ignored`` is the default completer-chain, and will try
+whatever zsh has for the command first, and then if those return nothing,
+instead of being satisfied with that, patched-in ``continue`` will keep going
+and run next completer, which is ``_files`` in this case.
+
+A patch with generous context is to find the right place and bail if upstream
+code changes, but otherwise, whenever first running the shell as root,
+fix the issue until next zsh package update (and then patch will run/fix it again).
+
+Doubt it'd make sense upstream in this form, as presumably current behavior is
+locked-in over years, but an option for something like this would've been nice.
+I'm content with a hack for now though, it works too.
+
+.. _zsh: https://zsh.org/
