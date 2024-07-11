@@ -88,6 +88,11 @@ an afterthough and then abused relentlessly and intentionally, but I think a
 good low-effort bandaid against clumsy mass-MitM by whatever random crooks on
 the network, in ISPs and idiot governments.
 
+(also to be clear - afaik it's still an unfortunate list of terrible mismanaged
+mess, with e.g. Sectigo there being a renamed Comodo CA, after a series of
+incredible fuckups in all aspects of their "business", and I'm sure rest of them
+are just as bad, but at least it's not a 100+ of those to multiply the risks)
+
 One long-term issue with this approach though, is that if used at any scale, it
 further shifts control over CA trust from e.g. Mozilla's p11-kit bundle to those
 dozen giant CAs above, who will then realistically have to share their CAs with
