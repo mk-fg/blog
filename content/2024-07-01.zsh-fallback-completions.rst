@@ -43,11 +43,12 @@ Here's the hack I ended up with for /etc/zsh/zshrc::
 
   _patch_completion_fallbacks() {
     local patch= p=/usr/share/zsh/functions/Completion/Base/_main_complete
-    if [[ "$p".orig -nt "$p" ]]; then return; fi
+    [[ "$p".orig -nt "$p" ]] && return || {
+      grep -Fq '## fallback-complete patch v1 ##' "$p" && touch "$p".orig && return ||:; }
     read -r -d '' patch <<'EOF'
   --- _main_complete      2024-06-09 01:10:28.352215256 +0500
   +++ _main_complete.new  2024-06-09 01:10:51.087404762 +0500
-  @@ -210,18 +210,19 @@
+  @@ -210,18 +210,20 @@
        fi
 
        _comp_mesg=
@@ -57,6 +58,7 @@ Here's the hack I ended up with for /etc/zsh/zshrc::
            break 2
          fi
        elif "$tmp"; then
+  +      ## fallback-complete patch v1 ##
   +      [[ $compstate[nmatches] -gt 0 ]] || continue
          ret=0
          break 2
