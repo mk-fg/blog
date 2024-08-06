@@ -1,0 +1,113 @@
+List connected processes for unix sockets on linux
+##################################################
+
+:date: 2024-08-06 13:56
+:tags: tools, linux, sysadmin
+
+For TCP connections, it seems pretty trivial - old netstat_ (from `net-tools project`_)
+and modern ss_ (iproute2_) tools do it fine, where you can easily grep both listening
+or connected end by IP:port they're using.
+
+But ``ss -xp`` for unix sockets (AF_UNIX, aka "named pipes") doesn't work like
+that - only prints socket path for listening end of the connection, which makes
+lookups by socket path not helpful, at least with the current iproute-6.10.
+
+"at least with the current iproute" because manpage actually suggests this::
+
+  ss -x src /tmp/.X11-unix/*
+    Find all local processes connected to X server.
+
+Where socket is wrong for modern X - easy to fix - and ``-p`` option seem to be
+omitted (to show actual processes), but the result is also not at all "local
+processes connected to X server" anyway::
+
+  # ss -xp src @/tmp/.X11-unix/X1
+
+  Netid State  Recv-Q Send-Q      Local Address:Port   Peer Address:Port  Process
+  u_str ESTAB  0      0      @/tmp/.X11-unix/X1 26800             * 25948  users:(("Xorg",pid=1519,fd=51))
+  u_str ESTAB  0      0      @/tmp/.X11-unix/X1 331064            * 332076 users:(("Xorg",pid=1519,fd=40))
+  u_str ESTAB  0      0      @/tmp/.X11-unix/X1 155940            * 149392 users:(("Xorg",pid=1519,fd=46))
+  ...
+  u_str ESTAB  0      0      @/tmp/.X11-unix/X1 16326             * 20803  users:(("Xorg",pid=1519,fd=44))
+  u_str ESTAB  0      0      @/tmp/.X11-unix/X1 11106             * 27720  users:(("Xorg",pid=1519,fd=50))
+  u_str LISTEN 0      4096   @/tmp/.X11-unix/X1 12782             * 0      users:(("Xorg",pid=1519,fd=7))
+
+It's just a long table listing same "Xorg" process on every line,
+which obviously isn't what example claims to fetch, or useful in any way.
+So maybe it worked fine earlier, but some changes to the tool or whatever
+data it grabs made this example obsolete and not work anymore.
+
+But there are "ports" listed for unix sockets, which I think correspond to
+"inodes" in \/proc\/net\/unix, and are global across host (or at least same netns),
+so two sides of connection - that socket-path + Xorg process info - and other
+end with connected process info - can be joined together by those port/inode numbers.
+
+I haven't been able to find a tool to do that for me easily atm, so went ahead to
+write my own script, mostly focused on listing per-socket pids on either end, e.g.::
+
+  # unix-socket-links
+  ...
+  /run/dbus/system_bus_socket :: dbus-broker[1190] :: Xorg[1519] bluetoothd[1193]
+    claws-mail[2203] dbus-broker-lau[1183] efreetd[1542] emacs[2160] enlightenment[1520]
+    pulseaudio[1523] systemd-logind[1201] systemd-network[1363] systemd-timesyn[966]
+    systemd[1366] systemd[1405] systemd[1] waterfox[2173]
+  ...
+  /run/user/1000/bus :: dbus-broker[1526] :: dbus-broker-lau[1518] emacs[2160] enlightenment[1520]
+    notification-th[1530] pulseaudio[1523] python3[1531] python3[5397] systemd[1405] waterfox[2173]
+
+  /run/user/1000/pulse/native :: pulseaudio[1523] :: claws-mail[2203] emacs[2160]
+    enlightenment[1520] mpv[9115] notification-th[1530] python3[2063] waterfox[2173]
+
+  @/tmp/.X11-unix/X1 :: Xorg[1519] :: claws-mail[2203] conky[1666] conky[1671] emacs[2160]
+    enlightenment[1520] notification-th[1530] python3[5397] redshift[1669] waterfox[2173]
+    xdpms[7800] xterm[1843] xterm[2049] yeahconsole[2047]
+  ...
+
+Output format is ``<socket-path> :: <listening-pid> :: <clients...>``, where it's
+trivial to see exactly what is connected to which socket (and what's listening there).
+
+``unix-socket-links @/tmp/.X11-unix/X1`` can list only conns/pids for that
+socket, and adding ``-c/--conns`` can be used to disaggregate that list of
+processes back into specific connections (which can be shared between pids too),
+to get more like a regular netstat/ss output, but with procs on both ends,
+not weirdly broken one like ``ss -xp`` gives you.
+
+Script is in the usual `mk-fg/fgtk`_ repo (also `on codeberg`_ and `local git`_),
+with code link and a small doc here:
+
+  https://github.com/mk-fg/fgtk?tab=readme-ov-file#hdr-unix-socket-links
+
+Was half-suspecting that I might need to parse \/proc\/net\/unix or load eBPF
+for this, but nope, ss has all the info needed, just presents it in a silly way.
+
+Also, unlike some other iproute2 tools where that was added (or lsfd below), it
+doesn't have ``--json`` output flag, but should be stable enough to parse
+anyway, I think, and easy enough to sanity-check by the header.
+
+----------
+
+Oh, and also, one might be tempted to use lsof_ or lsfd_ for this, like I did,
+but it's more complicated and can be janky to get the right output out of these,
+and pretty sure lsof even has side-effects, where it connects to socket with ``+E``
+(good luck figuring out what's that supposed to do btw), causing all sorts of
+unintended mayhem, but here are snippets that I've used for those in some past
+(checking where stalled ssh-agent socket connections are from in this example)::
+
+  lsof -wt +E "$SSH_AUTH_SOCK" | awk '{print "\\<" $1 "\\>"}' | g -3f- <(ps axlf)
+  lsfd -no PID -Q "UNIX.PATH == '$SSH_AUTH_SOCK'" | grep -f- <(ps axlf)
+
+Don't think either of those work anymore, maybe for same reason as with ``ss``
+not listing unix socket path for egress unix connections, and lsof in particular
+straight-up hangs without even ``kill -9`` getting it, if socket on the other
+end doesn't process its (silly and pointless) connection, so maybe don't use
+that one at least - lsfd seem to be easier to use in general.
+
+.. _netstat: https://man.archlinux.org/man/netstat.8
+.. _net-tools project: http://net-tools.sf.net/
+.. _ss: https://man.archlinux.org/man/ss.8
+.. _iproute2: https://wiki.linuxfoundation.org/networking/iproute2
+.. _mk-fg/fgtk: https://github.com/mk-fg/fgtk
+.. _on codeberg: https://codeberg.org/mk-fg/fgtk#hdr-unix-socket-links
+.. _local git: https://fraggod.net/code/git/fgtk/about/#hdr-unix-socket-links
+.. _lsof: https://man.archlinux.org/man/lsof.8
+.. _lsfd: https://man.archlinux.org/man/lsfd.1
