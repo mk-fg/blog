@@ -77,29 +77,47 @@ and that it already signs Google's GTS CA's (so latter are unnecessary), while
 "Baltimore CyberTrust Root" seem to be a strange omission, as it signs CloudFlare's
 CA cert, which should've been a major thing on the pie chart in that eIDAS open letter.
 
-But otherwise, that's pretty much it, leaving a couple of CAs instead of a hundred,
-and couple days into it so far, everything seem to be working fine with just those.
+But otherwise, that's pretty much it, leaving a couple of top-level CAs instead
+of a hundred, and couple days into it so far, everything seem to be working fine
+with just those.
 Occasional "missing root" error can be resolved easily by adding that root to the list,
 or ignoring it for whatever irrelevant one-off pages, though this really doesn't seem
 to be an issue at all.
 
 This is definitely not a solution to Web PKI being a big pile of dung, made as
-an afterthough and then abused relentlessly and intentionally, but I think a
-good low-effort bandaid against clumsy mass-MitM by whatever random crooks on
-the network, in ISPs and idiot governments.
+an afterthough and then abused relentlessly and intentionally, with no apparent
+incentive or hope for fixes, but I think a good low-effort bandaid against clumsy
+mass-MitM by whatever random crooks on the network, in ISPs and idiot governments.
 
-(also to be clear - afaik it's still an unfortunate list of terrible mismanaged
-mess, with e.g. Sectigo there being a renamed Comodo CA, after a series of
-incredible fuckups in all aspects of their "business", and I'm sure rest of them
-are just as bad, but at least it's not a 100+ of those to multiply the risks)
+It still unfortunately leaves out two large issues in particular:
 
-One long-term issue with this approach though, is that if used at any scale, it
+- CAs on the list are still terrible mismanaged orgs.
+
+  For example, Sectigo there is a renamed Comodo CA, after a series of incredible
+  fuckups in all aspects of their "business", and I'm sure the rest of them are
+  just as bad, but at least it's not a 100+ of those to multiply the risks.
+
+- Majority of signing CAs are so-called "intermediate" CAs (600+ vs 100+ roots),
+  which have valid signing cert itself signed by one of the roots, and these are even
+  more shady, operating with even less responsibility/transparency and no oversight.
+
+  Hopefully this is a smaller list with less root as well, though ideally all
+  those should be whitelist-pruned exactly same as roots, which I think easiest
+  to do via cert chain/usage logs (from e.g. `CertInfo app`_ mentioned above),
+  where actual first signing cert in the chain can be seen, not just top-level ones.
+
+  But then such whitelist probably can't be enforced, as you'd need to say
+  "trust CAs on this list, but NOT any CAs that they signed",
+  which is not how most (all?) TLS implementations work ¯\\\_(ツ)\_/¯
+
+And a long-term problem with this approach, is that if used at any scale, it
 further shifts control over CA trust from e.g. Mozilla's p11-kit bundle to those
-dozen giant CAs above, who will then realistically have to share their CAs with
-other orgs and groups (as they're the only ones on the CA list), ossifies
-them to be in control of Web PKI in the future over time, and makes "trusting"
-them meaningless non-decision (as you can't avoid that, even as/if/when they
-have to sign sub-CAs for whatever shady bad actors in secret).
+dozen giant root CAs above, who will then realistically have to sign even more
+and more powerful intermediate CAs for other orgs and groups (as they're the
+only ones on the CA list), ossifying them to be in control of Web PKI in the
+future over time, and makes "trusting" them meaningless non-decision (as you
+can't avoid that, even as/if/when they have to sign sub-CAs for whatever shady
+bad actors in secret).
 
 To be fair, there are proposals and movements to remedy this situation, like
 Certificate Transparency and various cert and TLS policies/parameters' pinning,
@@ -125,6 +143,6 @@ Link: `ca-certificates-whitelist-filter script on github`_ (codeberg_, `local gi
 .. _ca-certificates-mozilla: https://archlinux.org/packages/core/x86_64/ca-certificates-mozilla/
 .. _ca-certificates-whitelist-filter: https://github.com/mk-fg/ca-certificates-whitelist-filter
 .. _ca-certificates-whitelist-filter script on github:
-	https://github.com/mk-fg/ca-certificates-whitelist-filter
+  https://github.com/mk-fg/ca-certificates-whitelist-filter
 .. _codeberg: https://codeberg.org/mk-fg/ca-certificates-whitelist-filter
 .. _local git: https://fraggod.net/code/git/ca-certificates-whitelist-filter
