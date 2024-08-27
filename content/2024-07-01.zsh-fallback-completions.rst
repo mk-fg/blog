@@ -45,6 +45,8 @@ Here's the hack I ended up with for /etc/zsh/zshrc::
     local patch= p=/usr/share/zsh/functions/Completion/Base/_main_complete
     [[ "$p".orig -nt "$p" ]] && return || {
       grep -Fq '## fallback-complete patch v1 ##' "$p" && touch "$p".orig && return ||:; }
+    [[ -n "$(whence -p patch)" ]] || {
+      echo >&2 'zshrc :: NOTE: missing "patch" tool to update completions-script'; return; }
     read -r -d '' patch <<'EOF'
   --- _main_complete      2024-06-09 01:10:28.352215256 +0500
   +++ _main_complete.new  2024-06-09 01:10:51.087404762 +0500
