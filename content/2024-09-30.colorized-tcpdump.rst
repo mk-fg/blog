@@ -1,0 +1,73 @@
+Adding color to tcpdump makes a ton of difference
+#################################################
+
+:date: 2024-09-30 04:09
+:tags: tools, sysadmin
+
+
+Debugging the usual censorshit issues, finally got sick of looking at normal
+tcpdump output, and decided to pipe it through a simple translator/colorizer script.
+
+I think it's one of these cases where a picture is worth a thousand words:
+
+.. html::
+
+  <a href="{static}images/tcpdump-console-normal.png">
+  <img
+    style="width: 771px;"
+    src="{static}images/tcpdump-console-normal.png"
+    title="tcpdump console with IPv6 traffic"
+    alt="tcpdump console with IPv6 traffic">
+  </a>
+
+This is very hard to read, especially when it's scrolling,
+with long generated IPv6'es in there.
+
+While this IMO is quite readable:
+
+.. html::
+
+  <a href="{static}images/tcpdump-console-color.png">
+  <img
+    style="width: 460px;"
+    src="{static}images/tcpdump-console-color.png"
+    title="tcpdump console with colorized traffic"
+    alt="tcpdump console with colorized traffic">
+  </a>
+
+Immediately obvious who's talking to whom and when, where it's especially
+trivial to focus on packets from specific hosts by their name shape/color.
+
+Difference between the two is this trivial config file::
+
+  2a01:4f8:c17:37c1: local.net: !gray
+  2a01:4f8:c17:37c1:8341:8768:e26:83ff [Container] !bo-ye
+
+  2a02:17d0:201:8b0 remote.net !gr
+  2a02:17d0:201:8b01::1 [Remote-A] !br-gn
+
+  2a02:17d0:201:8b00:2a10:6e67:1a0:60ae [Peer] !bold-cyan
+  2a02:17d0:201:8b00:f60:f2c3:5c:7702 [Desktop] !blue
+  2a02:17d0:201:8b00:de9a:11c8:e285:235e [Laptop] !wh
+
+...which sets host/network/prefix labels to replace unreadable address parts
+with (hosts in brackets as a convention) and colors/highlighting for those
+(using either full or two-letter `DIN 47100`_-like names for brevity).
+
+Plus the script to pipe that boring tcpdump output through - tcpdump-translate_.
+
+Another useful feature of such script turns out to be filtering -
+tcpdump command-line quickly gets unwieldy with "host ... && ..." specs,
+while in the config above it's trivial to comment/uncomment lines and filter
+by whatever network prefixes, instead of cramming it all into shell prompt.
+
+tcpdump has some of this functionality via DNS reverse-lookups too,
+but I really don't want it resolving any addrs that I don't care to track specifically,
+which often makes output even more confusing, with long and misleading internal names
+assigned by someone else for their own purposes popping up in wrong places, while still
+remaining indistinct and lacking colors.
+
+
+.. _DIN 47100: https://en.wikipedia.org/wiki/DIN_47100
+.. _tcpdump-translate:
+  https://github.com/mk-fg/fgtk?tab=readme-ov-file#hdr-tcpdump-translate

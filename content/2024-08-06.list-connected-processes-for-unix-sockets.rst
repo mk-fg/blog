@@ -4,6 +4,7 @@ List connected processes for unix sockets on linux
 :date: 2024-08-06 13:56
 :tags: tools, linux, sysadmin
 
+
 For TCP connections, it seems pretty trivial - old netstat_ (from `net-tools project`_)
 and modern ss_ (iproute2_) tools do it fine, where you can easily grep both listening
 or connected end by IP:port they're using.
