@@ -101,7 +101,7 @@ It still unfortunately leaves out two large issues in particular:
   which have valid signing cert itself signed by one of the roots, and these are even
   more shady, operating with even less responsibility/transparency and no oversight.
 
-  Hopefully this is a smaller list with less root as well, though ideally all
+  Hopefully this is a smaller list with less roots as well, though ideally all
   those should be whitelist-pruned exactly same as roots, which I think easiest
   to do via cert chain/usage logs (from e.g. `CertInfo app`_ mentioned above),
   where actual first signing cert in the chain can be seen, not just top-level ones.

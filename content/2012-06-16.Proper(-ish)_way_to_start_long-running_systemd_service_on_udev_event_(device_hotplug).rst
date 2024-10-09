@@ -55,10 +55,12 @@ hw, of course, but for the sake of clarity...):
     SUBSYSTEM!="usb", GOTO="openct_rules_end"
     ACTION!="add", GOTO="openct_rules_end"
     PROGRAM="/bin/sleep 0.1"
+    ...
     SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device",\
       ENV{ID_VENDOR_ID}=="0529", ENV{ID_MODEL_ID}=="0600",\
       GROUP="usb",\
       RUN+="/usr/sbin/openct-control attach usb:$env{PRODUCT} usb $env{DEVNAME}"
+    ...
     LABEL="openct_rules_end"
 
 Instead of RUN here, ENV{SYSTEMD_WANTS} can be used to start a properly-handled
@@ -108,15 +110,12 @@ Finally, udev rules file for the device:
 
 ::
 
-    SUBSYSTEM!="usb", GOTO="openct_rules_end"
-    ACTION!="add", GOTO="openct_rules_end"
-    SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device",\
-      ENV{ID_VENDOR_ID}=="0529", ENV{ID_MODEL_ID}=="0600",\
-      GROUP="usb", TAG+="systemd",\
+    SUBSYSTEM=="usb", ACTION="add", ENV{DEVTYPE}=="usb_device", \
+      ENV{ID_VENDOR_ID}=="0529", ENV{ID_MODEL_ID}=="0600", \
+      GROUP="usb", TAG+="systemd", \
       ENV{SYSTEMD_WANTS}="openct-handler@\
-      usb:$env{ID_VENDOR_ID}-$env{ID_MODEL_ID}-$env{ID_REVISION}\
-      \x20usb\x20-dev-bus-usb-$env{BUSNUM}-$env{DEVNUM}.service"
-    LABEL="openct_rules_end"
+        usb:$env{ID_VENDOR_ID}-$env{ID_MODEL_ID}-$env{ID_REVISION}\
+        \x20usb\x20-dev-bus-usb-$env{BUSNUM}-$env{DEVNUM}.service"
 
 (I highly doubt newline escaping in ENV{SYSTEMD\_WANTS} above will work
 - added them just for readability, so pls strip these in your mind to a single
