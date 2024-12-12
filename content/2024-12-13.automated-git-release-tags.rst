@@ -1,0 +1,139 @@
+Automated git release tags
+##########################
+
+:date: 2024-12-13 00:28
+:tags: scm, tools
+
+
+For projects tracked in some package repositories, apparently it's worth tagging
+releases in git repos (as in ``git tag 24.12.1 HEAD && git push --tags``),
+for distro packagers/maintainers to check/link/use/compare new release from git,
+which seems easy enough to automate if pkg versions are stored in a repo file already.
+
+One modern way of doing that in larger projects can be CI/CD pipelines, but they
+imply a lot more than just release tagging, so for some tiny python module like
+pyaml_, don't see a reason to bother with them atm, and I know how git hooks work.
+
+For release to be pushed to a repository like PyPI_ in the first place,
+project repo almost certainly has a version stored in a file somewhere,
+e.g. pyproject.toml_ for PyPI:
+
+.. code-block:: toml
+
+  [project]
+  name = "pyaml"
+  version = "24.12.1"
+  ...
+
+Updates to this version string can be automated on their own (I use simple
+git-version-bump-filter_ script for that in some projects), or done manually
+when pushing a new release to package repo, and git tags can easily follow that.
+
+E.g. when pyproject.toml changes in git commit, and that change includes
+version= line - that's a commit that should have that updated version tag on it.
+
+Best place to add/update that tag in git after commit is `post-commit hook`_:
+
+.. code-block:: bash
+
+  #!/bin/bash
+  set -eo pipefail
+
+  die() {
+    echo >&2 $'\ngit-post-commit :: ----------------------------------------'
+    echo >&2 "git-post-commit :: ERROR: $@"
+    echo >&2 $'git-post-commit :: ----------------------------------------\n'; exit 1; }
+
+  ver=$( git show --no-color --diff-filter=M -aU0 pyproject.toml |
+      gawk '/^\+version\s*=/ {
+        split(substr($NF,2,length($NF)-2),v,".")
+        print v[1]+0 "." v[2]+0 "." v[3]+0}' )
+
+  [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    ver=$( gawk '/^version\s*=/ {
+      split(substr($NF,2,length($NF)-2),v,".")
+      print v[1]+0 "." v[2]+0 "." v[3]+0}' pyproject.toml )
+    [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+      die 'Failed to get version from git-show and pyproject.toml file'
+    ver_tag=$(git tag --sort=v:refname | tail -1)
+    [[ -n "$ver" && "$ver" = "$ver_tag" ]] || die 'No new release to tag,'`
+      `" and last git-tag [ $ver_tag ] does not match pyproject.toml version [ $ver ]"
+    echo $'\ngit-post-commit :: no new tag, last one matches pyproject.toml\n'; exit 0; }
+
+  git tag -f "$ver" HEAD # can be reassigning tag after --amend
+  echo -e "\ngit-post-commit :: tagged new release [ $ver ]\n"
+
+git-show there picks version update line from just-created commit,
+which is then checked against existing tag and assigned or updated as necessary.
+
+"Updated" part tends to be important too, as at least for me it's common to
+remember something that needs to be fixed/updated only when writing commit msg
+or even after git-push, so ``git commit --amend`` is common, and should update
+that same tag to a new commit hash.
+
+Messages printed in this hook are nicely prepended to git's usual commit info
+output in the terminal, so that you remember when/where this stuff is happening,
+and any potential errors are fairly obvious.
+
+Having tags assigned is not enough to actually have those on github/gitlab/codeberg
+and such, as git doesn't push those automatically.
+
+There's ``--follow-tags`` option to push "annotated" tags only, but I don't see
+any reason why trivial version tags should have a message attached to them,
+so of course there's another way too - `pre-push hook`_:
+
+.. code-block:: sh
+
+  #!/bin/sh
+  set -e
+
+  # Push tags on any pushes to "master" branch, with stdout logging
+  # Re-assigns tags, but does not delete them, use "git push --delete remote tag" for that
+
+  push_remote=$1 push_url=$2
+
+  master_push= master_oid=$(git rev-parse master)
+  while read local_ref local_oid remote_ref remote_oid
+  do [ "$local_oid" != "$master_oid" ] || master_push=t; done
+  [ -n "$master_push" ] || exit 0
+
+  prefix=$(printf 'git-pre-push [ %s %s ] ::' "$push_remote" "$push_url")
+  printf '\n%s --- tags-push ---\n' "$prefix"
+  git push --no-verify --tags -f "$push_url" # specific URL in case remote has multiple of those
+  printf '%s --- tags-push success ---\n\n' "$prefix"
+
+It has an extra check for whether it's a push for a master branch, where release
+tags presumably are, and auto-runs ``git push --tags -f`` to the same URL.
+
+Again ``-f`` here is to be able to follow any tag reassignments after --amend's,
+although it doesn't delete tags that were removed locally, but don't think that
+should happen often enough to bother (if ever).
+
+pre-push position of the hook should abort the push if there're any issues
+pushing tags, and pushing to specific URLs allows to use multiple repo URLs in
+e.g. default "origin" remote (used with no-args ``git push``), like in github +
+codeberg + self-hosted URL-combo that I typically use for redundancy and to
+avoid depending on silly policies of "free" third-party services (which is also
+why maintaining service-specific CI/CD stuff on those seems like a wasted effort).
+
+With both hooks in place (under ``.git/hooks/``), there should be no manual work
+involved in managing/maintaining git tags anymore, to forget that they exist again
+for all practical purposes.
+
+Made both hooks for pyaml_ project repo (apparently packaged in some distro),
+where maybe more recent versions of those can be found:
+
+  | https://github.com/mk-fg/pretty-yaml/blob/master/.githook.post-commit
+  | https://github.com/mk-fg/pretty-yaml/blob/master/.githook.pre-push
+
+Don't think git or sh/bash/gawk used in those ever change to bother updating them,
+but maybe there'll be some new corner-case or useful git workflow to handle,
+which I haven't bumped into yet.
+
+.. _pyaml: https://github.com/mk-fg/pretty-yaml
+.. _PyPI: https://en.wikipedia.org/wiki/Python_Package_Index
+.. _pyproject.toml: https://github.com/mk-fg/pretty-yaml/blob/master/pyproject.toml
+.. _git-version-bump-filter:
+  https://github.com/mk-fg/fgtk?tab=readme-ov-file#hdr-git-version-bump-filter
+.. _post-commit hook: https://man.archlinux.org/man/githooks.5#post-commit
+.. _pre-push hook: https://man.archlinux.org/man/githooks.5#pre-push
