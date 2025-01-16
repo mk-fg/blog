@@ -1,0 +1,177 @@
+nftables rate-limiting against low-effort DDoS attacks
+######################################################
+
+:date: 2025-01-16 10:17
+:tags: linux, rate-limiting
+
+
+Dunno what random weirdo found me this time around, but have noticed 'net
+connection on home-server getting clogged by 100mbps of incoming traffic yesterday,
+which seemed to be just junk sent to every open protocol which accepts it from some
+5-10K IPs around the globe, with bulk being pipelined requests over open nginx connections.
+
+Seems very low-effort, and easily worked around by not responding to TCP SYN
+packets, as volume of those is relatively negligible (not a syn/icmp flood
+or any kind of amplification backscatter), and just nftables_ can deal with that,
+if configured to block the right IPs.
+
+Actually, first of all, as nginx was a prime target here, and allows single
+connection to dump a lot of request traffic into it (what was happening),
+two things can be easily done there:
+
+- Tighten keepalive and request limits in general, e.g.::
+
+    limit_req_zone $binary_remote_addr zone=perip:10m rate=20r/m;
+    limit_req zone=perip burst=30 nodelay;
+    keepalive_requests 3;
+    keepalive_time 1m;
+    keepalive_timeout 75 60;
+    client_max_body_size 10k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 2 1k;
+
+  Idea is to at least force bots to reconnect, which will work nicely with
+  nftables rate-limiting below too.
+
+- If bots are simple and dumb, sending same 3-4 types of requests, grep those::
+
+    tail -F access.log | stdbuf -oL awk '/.../ {print $1}' |
+      while read addr; do nft add element inet filter set.inet-bots4 "{$addr}"; done
+
+  Yeah, there's fail2ban_ and such for that as well, but why
+  overcomplicate things when a trivial tail to grep/awk will do.
+
+Tbf that takes care of bulk of the traffic in such simple scenario already,
+but nftables can add more generalized "block bots connecting to anything way
+more than is sane" limits, like these::
+
+  add set inet filter set.inet-bots4.rate \
+    { type ipv4_addr; flags dynamic, timeout; timeout 10m; }
+  add set inet filter set.inet-bots4 \
+    { type ipv4_addr; flags dynamic, timeout; counter; timeout 240m; }
+
+  add counter inet filter cnt.inet-bots.pass
+  add counter inet filter cnt.inet-bots.blackhole
+
+  add rule inet filter tc.pre \
+    iifname $iface.wan ip daddr $ip.wan tcp flags syn jump tc.pre.ddos
+
+  add rule inet filter tc.pre.ddos \
+    ip saddr @set.inet-bots4 counter name cnt.inet-bots.blackhole drop
+  add rule inet filter tc.pre.ddos \
+    update @set.inet-bots4.rate { ip saddr limit rate over 3/minute burst 20 packets } \
+    add @set.inet-bots4 { ip saddr } drop
+  add rule inet filter tc.pre.ddos counter name cnt.inet-bots.pass
+
+(this is similar to an example under `SET STATEMENT from "man nft"`_)
+
+Where ``$iface.wan`` and such vars should be ``define``'d separately,
+as well as ``tc.pre`` hooks (somewhere like prerouting -350, before anything else).
+ip/ip6 addr selectors can also be used with separate IPv4/IPv6 sets.
+
+But the important things there IMO are:
+
+- To define persistent sets, like ``set.inet-bots4`` blackhole one,
+  and not flush/remove those on any configuration fine-tuning afterwards,
+  only build it up until non-blocked botnet traffic is negligible.
+
+  Rate limits like ``ip saddr limit rate over 3/minute burst 20 packets``
+  are stored in the dynamic set itself, so can be adjusted on the fly anytime,
+  without needing to replace it.
+
+- Always use separate chain like ``tc.pre.ddos`` for complicated rate-limiting
+  and set-matching rules, so that those can be atomically flushed-replaced via
+  e.g. a simple .sh script to change or tighten/relax the limits as-needed later::
+
+    nft -f- <<EOF
+    flush chain inet filter tc.pre.ddos
+    add rule inet filter tc.pre.ddos \
+      ip saddr @set.inet-bots4 counter name cnt.inet-bots.blackhole drop
+    # ... more rate-limiting rule replacements here
+    EOF
+
+  These atomic updates is one of the greatest things about nftables - no need to
+  nuke whole ruleset, just edit/replace and apply relevant chain(s) via script.
+
+  It's also not hard to add such chains after the fact, but a bit fiddly -
+  see e.g. `"Managing tables, chains, and rules using nft commands" in RHEL docs`_
+  for how to list all rules with their handles (use ``nft -at list ...`` with
+  ``-t`` in there to avoid dumping large sets), insert/replace rules, etc.
+
+  But the point is - it's a lot easier when pre-filtered traffic is already
+  passing through dedicated chain to focus on, and edit it separately from the rest.
+
+- Counters are very useful to understand whether any of this helps, for example::
+
+    # nft list counters table inet filter
+    table inet filter {
+      counter cnt.inet-bots.pass {
+        packets 671 bytes 39772
+      }
+      counter cnt.inet-bots.blackhole {
+        packets 368198 bytes 21603012
+      }
+    }
+
+  So it's easy to see that rules are working, and blocking is applied correctly.
+
+  And even better - ``nft reset counters ... && sleep 100 && nft list counters ...``
+  command will effectively give the rate of how many bots get passed or blocked per second.
+
+  nginx also has similar metrics btw, without needing to remember any status-page
+  URLs or monitoring APIs - ``tail -F access.log | pv -ralb >/dev/null``
+  (pv_ is a common unix "pipe viewer" tool, and can count line rates too).
+
+- Sets can have counters as well, like ``set.inet-bots4``,
+  defined with ``counter;`` in the example above.
+
+  ``nft get element inet filter set.inet-bots4 '{ 103.115.243.145 }'``
+  will get info on blocked packets/bytes for specific bot, when it was added, etc.
+
+  One missing "counter" on sets is the number of elements in those, which piping
+  it through ``wc -l`` won't get, as nft dumps multiple elements on the same line,
+  but jq_ or a trivial python script can get from ``-j/--json`` output::
+
+    nft -j list set inet filter set.inet-bots4 | python /dev/fd/3 3<<'EOF'
+    import sys, json
+    for block in json.loads(sys.stdin.read())['nftables']:
+      if not (nft_set := block.get('set')): continue
+      print(f'{len(nft_set.get("elem", list())):,d}'); break
+    EOF
+
+  (jq syntax is harder to remember when using it rarely than python)
+
+- nftables sets can have tuples of multiple things too, e.g. ip + port, or even
+  a verdict stored in there, but it hardly matters with such temporary bot blocks.
+
+- Feed any number of other easy-to-spot bot-patterns into same "blackhole" nftables sets.
+
+  E.g. that ``tail -F access.log | awk`` is enough to match obviously-phony
+  requests to same bogus host/URL, and same for malformed junk in error.log,
+  auth.log, mail.log, etc - stream all those IPs into ``nft add element ...``
+  too, the more the merrier :)
+
+It used to be more difficult to maintain such limits efficiently in userspace to
+sync into iptables, but nftables has this basic stuff built-in and very accessible.
+
+Though probably won't help against commercial DDoS that's expected to get results
+instead of just a minor nuisance, against something more valuable than a static
+homepage on a $6/mo internet connection - bots might be a bit more sophisticated there,
+and numerous enough to clog the pipe by syn-flood or whatever icmp/udp junk,
+without distributed network like CloudFlare filtering it at multiple points.
+
+This time I've finally decided to bother putting it all in the script too
+(as well as this blog post while at it), which can be found in the usual repo
+for scraps - `mk-fg/fgtk/scraps/nft-ddos`_ (or `on codeberg`_ and `in local cgit`_).
+
+
+.. _nftables: https://wiki.nftables.org/
+.. _fail2ban: http://www.fail2ban.org/
+.. _SET STATEMENT from "man nft": https://man.archlinux.org/man/nft.8#SET_STATEMENT
+.. _"Managing tables, chains, and rules using nft commands" in RHEL docs:
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/8/html/securing_networks/getting-started-with-nftables_securing-networks#proc_managing-tables-chains-and-rules-using-nft-commands_assembly_creating-and-managing-nftables-tables-chains-and-rules
+.. _pv: https://www.ivarch.com/programs/pv.shtml
+.. _jq: https://jqlang.github.io/jq/
+.. _mk-fg/fgtk/scraps/nft-ddos: https://github.com/mk-fg/fgtk/blob/master/scraps/nft-ddos
+.. _on codeberg: https://codeberg.org/mk-fg/fgtk/src/branch/master/scraps/nft-ddos
+.. _in local cgit: https://fraggod.net/code/git/fgtk/tree/scraps/nft-ddos
