@@ -79,6 +79,15 @@ But the important things there IMO are:
   are stored in the dynamic set itself, so can be adjusted on the fly anytime,
   without needing to replace it.
 
+  Sets are easy to export/import in isolation as well::
+
+    # nft list set inet filter set.inet-bots4 > bots4.nft
+    # nft -f bots4.nft
+
+  Last command adds set elements from bots4.nft, as there's no "flush" in there,
+  effectively merging old set with the new, does not replace it.
+  ``-j/--json`` input/output can be useful there to filter sets via scripts.
+
 - Always use separate chain like ``tc.pre.ddos`` for complicated rate-limiting
   and set-matching rules, so that those can be atomically flushed-replaced via
   e.g. a simple .sh script to change or tighten/relax the limits as-needed later::
