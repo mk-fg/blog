@@ -215,6 +215,10 @@ unlocking each encrypted LUKS blkdev separately, re-entering PIN and re-doing
 the touch thing multiple times in a row, with a somewhat-uncommon LUKS-on-LVM
 setup like mine.
 
+**Update 2025-02-02:** systemd-257 added password-cache= in crypttab,
+and more fido2 options for cryptenroll, which I think should cover this
+use-case pretty well - try using those first instead of a custom binary here.
+
 But of course that's easily fixable, having following steps with a typical
 systemd_ init process:
 
