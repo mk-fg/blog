@@ -1,0 +1,316 @@
+Migrating from GNU screen to tmux with same workflow
+####################################################
+
+:date: 2025-05-14 17:57
+:tags: unix, tools, sysadmin, ssh
+
+
+My pattern for using these shell wrappers / terminal multiplexers
+for many years have been something like this:
+
+- Run a single terminal window, usually old XTerm_, sometimes Terminology_.
+
+- Always run tmux_ inside that window, with a C-x (ctrl-x) prefix-key.
+
+- Open a couple local tmux windows (used as "terminal tabs") there.
+
+  Usually a root console (via su_), and one or two local user consoles.
+
+  Run "screen" (as in `GNU screen`_) in all these "tabs", with its default C-a
+  prefix-key, and opening more screen windows whenever I need to run something new,
+  and current console/prompt is either busy, has some relevant history, or e.g.
+  being used persistently for something specific in some project dir.
+  This is for effectively infinite number of local shells within a single "tmux tab",
+  easy to switch between via C-a n/p, a (current/last) or number keys.
+
+- Whenever I need to ssh into something, which is quite often - remote hosts
+  or local VMs - always open a new local-tmux tab, ssh into the thing, and always
+  run "screen" on the other end as the first and only "raw" command.
+
+  Same as with local shells, this allows for any number of ad-hoc shells on that
+  remote host, grouped under one host-specific tmux tab, with an important feature
+  of being persistent across any network hiccups/disconnects or any local
+  desktop/laptop issues.
+
+  If remote host doesn't have "screen" - install and run it, and if that's not possible
+  (e.g. network switch device), then still at least run "screen" locally and have
+  (multipexed_) ssh sessions open to there in each screen-window within that tmux tab.
+
+- Shell running on most local/remote hosts (zsh in my case typically) has a hook
+  to detect whether it's running under screen and shows red "tty" warning in prompt
+  when it's not protected/multiplexed like that, so almost impossible to forget to
+  use those in "screen", even without a habit of doing so.
+
+So it's a kind of two-dimensional screen-in-tmux setup, with per-host tmux tabs,
+in which any number of "screen" windows are contained for that local user or remote host.
+
+I tend to say "tmux tabs" above, simply to tell those apart from "screen windows",
+even though same concept is also called "windows" in tmux, but here they are used
+kinda like tabs in a GUI terminal.
+
+Unlike GUI terminal tabs however, "tmux tabs" survive GUI terminal app crashing
+or being accidentally closed just fine, or a whole window manager / compositor /
+Xorg crashing or hanging due to whatever complicated graphical issues
+(which tend to be far more common than base kernel panics and such).
+
+(worst-case can usually either switch to a linux VT via e.g. ctrl-alt-F2,
+or ssh into desktop from a laptop, re-attach to that tmux with all consoles,
+finish or make a note of whatever I was doing there, etc)
+
+Somewhat notably, I've never used "window splitting" (panes/layouts) features of screen/tmux,
+kinda same as I tend to use only full-screen or half-screen windows on graphical desktop,
+with fixed places at app-specific virtual desktop, and not bother with any other
+"window management" stuff.
+
+Most of the work in this setup is done by GNU screen, which is actually hosting all
+the shells on all hosts and interacts with those directly, with tmux being relegated
+to a much simpler "keep tabs for local terminal window" role (and can be killed/replaced
+with no disruption).
+
+----------
+
+I've been thinking to migrate to using one tool instead of two for a while, but:
+
+- Using screen/tmux in different roles like this allows to avoid conflicts between the two.
+
+  I.e. reconnecting to a tmux session on a local machine always restores a full
+  "top-level terminal" window, as there's never anything else in there.
+  And it's easier to configure each tool for its own role this way in their
+  separate screenrc/tmux.conf files.
+
+- "screen" is an older and more common tool, available on any systems/distros (to ssh into).
+
+- "screen" is generally more lightweight than tmux.
+
+- I'm more used to "screen" as my own use of it predates tmux,
+  but tbf they aren't that different.
+
+So was mostly OK using "screen" for now, despite a couple misgivings:
+
+- It seem to bundle a bunch more legacy functionality and modes which I don't
+  want or need - multiuser login/password and access-control stuff for that,
+  serial terminal protocols (e.g. ``screen /dev/ttyUSB0``), utmp user-management.
+
+- Installs one of a few remaining suid binaries, with **many** potential issues this implies.
+
+  See e.g. su-sudo-from-root-tty-hijacking_, arguments for using run0_ or ssh_
+  to localhost instead of sudo_, or endless special-case hacks implemented in
+  sudo and linux over decades, for stuff like LD_PRELOAD to not default-leak
+  accross suid change.
+
+- Old code there tends to have more issues that tmux doesn't have (e.g. `this
+  recent terminal title overflow`_), but mostly easy to ignore or work around.
+
+- Long-running screen sessions use that suid root binary instead of systemd
+  mechanisms to persist across e.g. ssh disconnects.
+
+----------
+
+More recently, with a major GNU screen 5.0.0 update, a bunch of random stuff broke
+for me there, which I've mostly worked around by sticking with last 4.9 release,
+but that can't last, and after `most recent batch of security issues in screen`_,
+finally decided to fully jump to tmux, to at least deal with only one set of issues there.
+
+By now, tmux seem to be common enough to easily install on any remote hosts,
+but it works slightly differently than "screen", and has couple other problems
+with my workflow above:
+
+- "session" concept there has only one "active window", so having to sometimes
+  check same "screen" on the same remote from different terminals, it'd force
+  both "clients" to look at the same window, instead of having more independent
+  state, like with "screen".
+
+- Starting tmux-in-tmux needs a separate configuration and resolving a couple
+  conflicts between the two.
+
+- Some different hotkeys and such minor quirks.
+
+Habits can be changed of course, but since tmux is quite flexible and easily
+configurable, they actually don't have to change, and tmux can work pretty much
+like "screen" does, with just shell aliases and a config file.
+
+With "screen", I've always used following aliases in zshrc::
+
+  alias s='exec screen'
+  alias sr='screen -r'
+  alias sx='screen -x'
+
+"s" here replaces shell with "shell in screen", "sr" reconnects to that "screen"
+normally, sometimes temporarily (hence no "exec"), and "sx" is same as "sr" but
+to share "screen" that's already connected-to (e.g. when something went wrong,
+and old "client" is still technically hanging around, or just from a diff device).
+
+Plus tend to always replace /etc/screenrc with one that disables welcome-screen,
+sets larger scrollback and has couple other tweaks enabled, so it's actually
+roughly same amount of tweaks as tmux needs to be like "screen" on a new system.
+
+----------
+
+Differences between the two that I've found so far, to alias/configure around:
+
+- To run tmux within tmux for local "nested" sessions, like "screen in tmux"
+  case above, with two being entirely independent, following things are needed:
+
+  - Clear TMUX= env var, e.g. in that "s" alias.
+
+  - Use different configuration files, i.e. with different prefix, status line,
+    and any potential "screen-like" tweaks.
+
+  - Have different session socket name set either via ``-L screen``
+    or ``-S`` option with full path.
+
+  These tweaks fit nicely with using just aliases + separate config file,
+  which are already a given.
+
+- To facilitate shared "windows" between "sessions", but independent "active window"
+  in each, tmux has "session groups" feature - running "new-session -t <groupname>"
+  will share all "windows" between the two, adding/removing them in both, but not
+  other state like "active windows".
+
+  Again, shell alias can handle that by passing additional parameter, no problem.
+
+- tmux needs to use different "session group" names to create multiple "sessions"
+  on the same host with different windows, for e.g. running multiple separate local
+  "screen" sessions, nested in different tmux "tabs" of a local terminal, and not sharing
+  "windows" between those (as per setup described at the beginning).
+
+  Not a big deal for a shell alias either - just use new group names with "s" alias.
+
+- Reconnecting like "screen -r" with "sr" alias ideally needs to auto-pick "detached"
+  session or group, but unlike "screen", tmux doesn't care about whether session is
+  already attached when using its "attach" command.
+
+  This can be checked, sessions printed/picked in "sr" alias, like it was with "screen -r".
+
+- Sharing session via "screen -x" or "sx" alias is a tmux default already.
+
+  But detaching from a "shared screen session" actually maps to a "kill-session"
+  action in tmux, because it's a "session group" that is shared between two "sessions"
+  there, and one of those "sessions" should just be closed, group will stay around.
+
+  Given that "shared screen sessions" aren't that common to use for me, and
+  leaving behind detached tmux "session" isn't a big deal, easiest fix seem to
+  be adding "C-a shift-d" key for "kill-session" command, next to "C-a d" for
+  regular "detach-client".
+
+- Any extra tmux key bindings spread across keyboard like landmines to fatfinger
+  at the worst moment possible, and then have no idea how to undo whatever it did!
+
+  Easy to fix in the config - run ``tmux list-keys`` to dump them all,
+  pick only ones you care about there for config file, and put e.g.
+  ``unbind-key -T prefix -a`` + ``unbind-key -T root -a`` before those bindings
+  to reliably wipe out the rest.
+
+- Status-line needs to be configured in that separate tmux-screen config to be
+  different from the one in the wrapper tmux, to avoid confusion.
+
+None of these actually change the simple "install tmux + config + zshrc aliases"
+setup that I've had with "screen", so it's a pretty straightforward migration.
+
+zshrc aliases got a bit more complicated than 3 lines above however, but eh, no big deal:
+
+.. code-block:: zsh
+
+  # === tmux session-management aliases
+  # These are intended to mimic how "screen" and its -r/-x options work
+  # I.e. sessions are started with groups, and itended to be connected to those
+
+  s_tmux() {
+    local e; [[ "$1" != exec ]] || { e=$1; shift; }
+    TMUX= $e tmux -f /etc/tmux.screen.conf -L screen "$@"; }
+
+  s() {
+    [[ "$1" != sg=? ]] || s_tmux exec new-session -t "$1"
+    [[ "$#" -eq 0 ]] || { echo >&2 "tmux: errror - s `
+      ` alias/func only accepts one optional sg=N arg"; return 1; }
+    local ss=$(tmux 2>/dev/null -L screen ls -F '#{session_group}'); ss=${ss:(-4)}
+    [[ -z "$ss" || "$ss" != sg=* ]] && ss=sg=1 || {
+      [[ "${ss:(-1)}" -lt 9 ]] || { echo >&2 'tmux: not opening >9 groups'; return 1; }
+      ss=sg=$(( ${ss:(-1)} + 1 )); }
+    s_tmux exec new-session -t "$ss"; }
+
+  sr() {
+    [[ "$#" -ne 1 ]] || {
+      [[ "$1" != ? ]] || { s_tmux new-session -t "sg=$1"; return; }
+      [[ "$1" != sg=? ]] || { s_tmux new-session -t "$1"; return; }
+      [[ "$1" = sg=?-* || "$1" = \$* ]] || {
+        echo >&2 "tmux: error - invalid session-match [ $1 ]"; return 1; }
+      s_tmux -N attach -Et "$1"; return; }
+    [[ "$#" -eq 0 ]] || { echo >&2 "tmux: errror - sr alias/func`
+      ` only accepts one optional session id/name arg"; return 1; }
+    local n line ss=() sl=( "${(@f)$( tmux 2>/dev/null -L screen ls -F \
+      '#{session_id} #S#{?session_attached,, [detached]} :: #{session_windows}'`
+      `' window(s) :: group #{session_group} :: #{session_group_attached} attached' )}" )
+    for line in "${sl[@]}"; do
+      n=${line% attached}; n=${n##* }
+      [[ "$n" != 0 ]] || ss+=( "${line%% *}" )
+    done
+    [[ ${#ss[@]} -ne 1 ]] || { s_tmux -N attach -Et "$ss"; return; }
+    [[ ${#sl[@]} -gt 1 || ${sl[1]} != "" ]] || {
+      echo >&2 'tmux: no screen-like sessions detected'; return 1; }
+    echo >&2 "tmux: no unique unused session-group`
+      ` (${#sl[@]} total), use N or sg=N group, or session \$N id / sg=N-M name"
+    for line in "${sl[@]}"; do echo >&2 "  $line"; done; return 1; }
+
+They work pretty much same as ``screen`` and ``screen -r`` used to do, even
+easier for "sr" with simple group numbers, and "sx" for ``screen -x`` isn't needed
+("sr" will attach to any explicitly picked group just fine).
+
+And as for a screen-like tmux config - ``/etc/tmux.screen.conf``::
+
+  TMUX_SG=t # env var to inform shell prompt
+
+  set -g default-terminal 'screen-256color'
+  set -g terminal-overrides 'xterm*:smcup@:rmcup@'
+  set -g xterm-keys on
+
+  set -g history-limit 30000
+  set -g set-titles on
+  set -g set-titles-string '#T'
+  set -g automatic-rename off
+  set -g status-bg 'color22'
+  set -g status-fg 'color11'
+  set -g status-right '[###I %H:%M]'
+  set -g status-left '#{client_user}@#h #{session_group} '
+  set -g status-left-length 40
+  set -g window-status-current-style 'bg=color17 bold'
+  set -g window-status-format '#I#F'
+  set -g window-status-current-format '#{?client_prefix,#[fg=colour0]#[bg=colour180],}#I#F'
+  set -g mode-keys emacs
+
+  unbind-key -T prefix -a
+  unbind-key -T root -a
+  unbind-key -T copy-mode-vi -a # don't use those anyways
+
+  set -g prefix C-a
+  bind-key a send-prefix
+  bind-key C-a last-window
+
+  # ... and all useful prefix bind-key lines from "tmux list-keys" output here.
+
+As I don't use layouts/panes and bunch of other features of screen/tmux multiplexers,
+it's only like 20 keys at the end for me, but to be fair, tmux keys are pretty much
+same as screen after you change prefix to C-a, so probably don't need to be
+unbound/replaced at all for someone who uses more of those features.
+
+So in the end, it's a good overdue upgrade to a more purpose-built/constrained
+and at the same time more feature-rich and more modern tool, without loosing
+ease of setup or needing to change any habits - a great thing, can recommend to
+anyone still using "screen" in roughly this role.
+
+
+.. _XTerm: https://invisible-island.net/xterm/
+.. _Terminology: https://www.enlightenment.org/about-terminology
+.. _tmux: https://github.com/tmux/tmux/wiki
+.. _su: https://en.wikipedia.org/wiki/Su_(Unix)
+.. _GNU screen: https://www.gnu.org/software/screen/
+.. _multipexed: https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
+.. _su-sudo-from-root-tty-hijacking:
+  https://ruderich.org/simon/notes/su-sudo-from-root-tty-hijacking.
+.. _run0: https://mastodon.social/@pid_eins/112353324518585654
+.. _ssh: https://en.wikipedia.org/wiki/Secure_Shell
+.. _sudo: https://en.wikipedia.org/wiki/Sudo
+.. _this recent terminal title overflow:
+  https://github.com/systemd/systemd/issues/35104
+.. _most recent batch of security issues in screen:
+  https://www.openwall.com/lists/oss-security/2025/05/12/1
