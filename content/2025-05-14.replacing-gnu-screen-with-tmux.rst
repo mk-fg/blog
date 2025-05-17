@@ -1,4 +1,4 @@
-Migrating from GNU screen to tmux with same workflow
+Migrating from GNU Screen to tmux with same workflow
 ####################################################
 
 :date: 2025-05-14 17:57
@@ -16,8 +16,8 @@ for many years have been something like this:
 
   Usually a root console (via su_), and one or two local user consoles.
 
-  Run "screen" (as in `GNU screen`_) in all these "tabs", with its default C-a
-  prefix-key, and opening more screen windows whenever I need to run something new,
+  Run "screen" (as in `GNU Screen`_) in all these "tabs", with its default C-a
+  prefix-key, and opening more screen-windows whenever I need to run something new,
   and current console/prompt is either busy, has some relevant history, or e.g.
   being used persistently for something specific in some project dir.
   This is for effectively infinite number of local shells within a single "tmux tab",
@@ -62,7 +62,7 @@ kinda same as I tend to use only full-screen or half-screen windows on graphical
 with fixed places at app-specific virtual desktop, and not bother with any other
 "window management" stuff.
 
-Most of the work in this setup is done by GNU screen, which is actually hosting all
+Most of the work in this setup is done by GNU Screen, which is actually hosting all
 the shells on all hosts and interacts with those directly, with tmux being relegated
 to a much simpler "keep tabs for local terminal window" role (and can be killed/replaced
 with no disruption).
@@ -106,7 +106,7 @@ So was mostly OK using "screen" for now, despite a couple misgivings:
 
 ----------
 
-More recently, with a major GNU screen 5.0.0 update, a bunch of random stuff broke
+More recently, with a major GNU Screen 5.0.0 update, a bunch of random stuff broke
 for me there, which I've mostly worked around by sticking with last 4.9 release,
 but that can't last, and after `most recent batch of security issues in screen`_,
 finally decided to fully jump to tmux, to at least deal with only one set of issues there.
@@ -294,9 +294,9 @@ same as screen after you change prefix to C-a, so probably don't need to be
 unbound/replaced at all for someone who uses more of those features.
 
 So in the end, it's a good overdue upgrade to a more purpose-built/constrained
-and at the same time more feature-rich and more modern tool, without loosing
-ease of setup or needing to change any habits - a great thing, can recommend to
-anyone still using "screen" in roughly this role.
+and at the same time more feature-rich and more modern tool within its scope,
+without loosing ease of setup or needing to change any habits - a great thing,
+can recommend to anyone still using "screen" in roughly this role.
 
 
 .. _XTerm: https://invisible-island.net/xterm/
