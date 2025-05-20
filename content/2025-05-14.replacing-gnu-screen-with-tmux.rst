@@ -238,7 +238,7 @@ zshrc aliases got a bit more complicated than 3 lines above however, but eh, no 
       s_tmux -N attach -Et "$1"; return; }
     [[ "$#" -eq 0 ]] || { echo >&2 "tmux: errror - sr alias/func`
       ` only accepts one optional session id/name arg"; return 1; }
-    local n line ss=() sl=( "${(@f)$( tmux 2>/dev/null -L screen ls -F \
+    local n line ss=() sl=( "${(@f)$( s_tmux 2>/dev/null ls -F \
       '#{session_id} #S#{?session_attached,, [detached]} :: #{session_windows}'`
       `' window(s) :: group #{session_group} :: #{session_group_attached} attached' )}" )
     for line in "${sl[@]}"; do
@@ -249,7 +249,7 @@ zshrc aliases got a bit more complicated than 3 lines above however, but eh, no 
     [[ ${#sl[@]} -gt 1 || ${sl[1]} != "" ]] || {
       echo >&2 'tmux: no screen-like sessions detected'; return 1; }
     echo >&2 "tmux: no unique unused session-group`
-      ` (${#sl[@]} total), use N or sg=N group, or session \$N id / sg=N-M name"
+      ` (${#sl[@]} total), use N or sg=N group, or session \$M id / sg=N-M name"
     for line in "${sl[@]}"; do echo >&2 "  $line"; done; return 1; }
 
 They work pretty much same as ``screen`` and ``screen -r`` used to do, even
