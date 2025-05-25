@@ -223,7 +223,7 @@ zshrc aliases got a bit more complicated than 3 lines above however, but eh, no 
     [[ "$1" != sg=? ]] || s_tmux exec new-session -t "$1"
     [[ "$#" -eq 0 ]] || { echo >&2 "tmux: errror - s `
       ` alias/func only accepts one optional sg=N arg"; return 1; }
-    local ss=$(tmux 2>/dev/null -L screen ls -F '#{session_group}'); ss=${ss:(-4)}
+    local ss=$(s_tmux 2>/dev/null ls -F '#{session_group}'); ss=${ss:(-4)}
     [[ -z "$ss" || "$ss" != sg=* ]] && ss=sg=1 || {
       [[ "${ss:(-1)}" -lt 9 ]] || { echo >&2 'tmux: not opening >9 groups'; return 1; }
       ss=sg=$(( ${ss:(-1)} + 1 )); }
