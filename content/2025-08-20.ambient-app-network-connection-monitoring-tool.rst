@@ -5,18 +5,18 @@ Modern conky-like ambient network connection monitoring tool
 :tags: desktop, monitoring, tools, linux, c, nim, python
 
 
-As a long-time 20y+ conky_ user, always liked "system status at a glance"
-visibility it provides, so you're pretty much always aware of what's normal
-resource usage pattern for various apps and system as a whole.
+As a long-time conky_ user, always liked "system status at a glance" visibility
+it provides, so you're pretty much always aware of what's normal resource usage
+pattern for various apps and system as a whole, and easily notice anything odd there.
 
 (though mostly kept conky config same since `last post here about sensors data in 2014`_,
 only updating it to work for new lua syntax and to use lm-sensors cli tool json
 output for data from those instead of an extra binary)
 
-One piece that's been missing there is visibility into apps' network usage,
-which always bothered me - it's kinda important to know which apps have any kind
-of "unexpected" connectivity, like telemetry tracking, "cloud" functionality,
-or maybe some more sinister security/privacy issues and leaks even.
+One piece that's been missing for me however, is visibility into apps' network usage -
+it's kinda important to know which apps have any kind of "unexpected" connectivity,
+like telemetry tracking, "cloud" functionality, or maybe some more sinister
+security/privacy issues and leaks even.
 
 .. _conky: https://conky.cc/
 .. _last post here about sensors data in 2014:
@@ -26,9 +26,9 @@ or maybe some more sinister security/privacy issues and leaks even.
 
 This use-case requires a bunch of filtering/grouping and configurability in general,
 as well as getting more useful information about processes initiating connections,
-than what common netstat_ or ss_ tools provide.
+than what common netstat_ / ss_ tools or conky's /proc/net/tcp lines provide.
 
-I.e. usual linux 16-byte ``/proc/<pid>/comm`` is not good enough, as it just says
+I.e. usual linux 16-byte /proc/<pid>/comm is not good enough, as it just says
 "python3", "ssh", "curl" or some kind of "socket thread" most of the time in practice,
 while I'd want to know which systemd service/scope/unit and uid/user it was started from.
 
@@ -181,6 +181,10 @@ Couple things I found interesting about these components, in no particular order
 - Was thinking to add fancier effects for the tool, but then realized that the
   more plain and non-distracting it looks the better, as it's supposed to be in the
   background, not something eye-catching, and smooth easing-in/out is already good for that.
+
+- Nice text outline/shadow doesn't actually require blur or any extra pixel-processing,
+  can just stamp same glyphs in black with -1,-1 then 1,1 and 2,2 offsets plus some
+  transparency, and it's good enough, esp. for readability over colorful backgrounds.
 
 - Always-on-top semi-transparent non-interactable vertical overlay window fits quite
   well on the second screen, where most stuff is read-only and unimportant anyway.
