@@ -1,0 +1,230 @@
+Modern conky-like ambient network connection monitoring tool
+############################################################
+
+:date: 2025-08-20 04:06
+:tags: desktop, monitoring, tools, linux, c, nim, python
+
+
+As a long-time 20y+ conky_ user, always liked "system status at a glance"
+visibility it provides, so you're pretty much always aware of what's normal
+resource usage pattern for various apps and system as a whole.
+
+(though mostly kept conky config same since `last post here about sensors data in 2014`_,
+only updating it to work for new lua syntax and to use lm-sensors cli tool json
+output for data from those instead of an extra binary)
+
+One piece that's been missing there is visibility into apps' network usage,
+which always bothered me - it's kinda important to know which apps have any kind
+of "unexpected" connectivity, like telemetry tracking, "cloud" functionality,
+or maybe some more sinister security/privacy issues and leaks even.
+
+.. _conky: https://conky.cc/
+.. _last post here about sensors data in 2014:
+  /2014/05/19/displaying-any-lm_sensors-data-temperature-fan-speeds-voltage-etc-in-conky.html
+
+----------
+
+This use-case requires a bunch of filtering/grouping and configurability in general,
+as well as getting more useful information about processes initiating connections,
+than what common netstat_ or ss_ tools provide.
+
+I.e. usual linux 16-byte ``/proc/<pid>/comm`` is not good enough, as it just says
+"python3", "ssh", "curl" or some kind of "socket thread" most of the time in practice,
+while I'd want to know which systemd service/scope/unit and uid/user it was started from.
+
+So that "curl" ran by some game launcher, started from a dedicated gaming-uid
+in a game-specific flatpak scope isn't displayed same as "curl" that I run from
+terminal or that some system service runs, having all that user/cgroup/etc info
+with it front-and-center.
+
+And wrt configurability - over time there's a lot of normal-usage stuff that
+doesn't need to draw much attention, like regular ssh sessions, messengers,
+imap, ntp or web browser traffic, which can be noisy while also being least
+interesting and important (beyond "it's all there as usual"), but is entirely
+user-specific, same as most useful data to display in a conky window for your system.
+
+Main idea is to have a good mental image of what's "normal" wrt network usage
+for local apps, and when e.g. running something new, like a game or a flatpak,
+to be able to instantly tell whether it's connecting somewhere and when
+(and `might need a firewall rule`_ or `net-blocking bpf loaded in its cgroup`_),
+or is completely offline.
+
+Haven't found any existing application that does something like this well,
+and especially in this kind of "background desktop widget" way as conky does,
+but most notable ones for such use-case are systemd-cgtop (comes with systemd),
+atop_'s network monitoring tab (usable with an extra netatop-bpf_ component)
+and OpenSnitch_ interactive-firewall app.
+
+All of course are still for quite different uses, although atop can display a lot
+of relevant process information nowadays, like cgroups and full process command.
+But its network tab is still a TUI for process traffic counters, which I don't
+actually care much about - focus should be on new connections made from new places
+and filtering/tailoring.
+
+.. _atop: https://atoptool.nl/
+.. _netatop-bpf: https://github.com/bytedance/netatop-bpf
+.. _OpenSnitch: https://github.com/evilsocket/opensnitch
+.. _netstat: https://en.wikipedia.org/wiki/Netstat
+.. _ss: https://man.archlinux.org/man/ss.8
+.. _might need a firewall rule:
+  https://github.com/mk-fg/systemd-cgroup-nftables-policy-manager
+.. _net-blocking bpf loaded in its cgroup:
+  https://github.com/mk-fg/fgtk/blob/master/bpf/cgroup-skb.nonet.c
+
+----------
+
+Eventually got around to look into this missing piece and writing an app/widget
+covering this maybe odd and unorthodox use-case, named in my usual "relevant words
+that make an acronym" way - linux-ebpf-connection-overseer_ or "leco".
+
+Same as netatop-bpf and OpenSnitch, it uses eBPF for network connection monitoring,
+which is surprisingly simple tool for that - all TCP/UDP connections pass through
+same two send/recv tracepoints (that netatop-bpf also uses), with kernel "struct sock"
+having almost all needed network-level info, and hooks can identify process/cgroup
+running the operation, so it's all just there.
+
+But eBPF is of course quite limited by design:
+
+- Runs in kernel, while app rendering stuff on-screen has to be in userspace.
+
+- Should be very fast and not do anything itself, to not affect networking in any way.
+
+- Has to be loaded into kernel by root.
+
+- Needs to export/stream data from kernel to userspace, passing its
+  root-only file descriptors of data maps to an unprivileged application.
+
+- Terse data collected in-kernel, like process and cgroup id numbers has to be
+  expanded into human-readable names from /proc, /sys/fs/cgroup and such sources.
+
+- Must be written in a subset of C or similar low-level language, unsuitable for other purposes.
+
+So basically can't do anything but grab all relevant id/traffic numbers
+and put into table/queue for userspace to process and display later.
+
+Solution to most of these issues is to have a system-level service that
+loads eBPF hooks and pulls data from there, resolves/annotates all numbers
+and id's into/with userful names/paths, formats in a nice way,
+manages any useful caches, etc.
+
+Problem is that this has to be a **system** service, like a typical daemon,
+where some initial things are even done as root, and under some kind of system
+uid beyond that, while any kind of desktop widget would run in a particular
+user session/container, ideally with no access to most of that system-level stuff,
+and with a typical GUI eventloop to worry about instead.
+
+Which is how this app ended up with 3 separate main components:
+
+- eBPF code linked into one "loader" binary.
+- "pipe" script that reads from eBPF maps and outputs nicely-formatted event info.
+- Desktop widget that reads event info lines and displays those in a configurable way.
+
+`README in the project repository`_ should have a demo video, a better overview
+of how it all works together, and how to build/configure and run those.
+
+.. _linux-ebpf-connection-overseer:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer
+.. _README in the project repository:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer
+
+----------
+
+Couple things I found interesting about these components, in no particular order:
+
+- Nice thing about such breakdown is that first two components (eBPF + pipe)
+  can run anywhere and produce an efficient overview for some remote system,
+  VM or container - e.g. can have multiple widgets to look at things happening
+  in home network for example, not just local machine, though I haven't used that yet.
+
+- Another nice thing is that each component can use a language suitable for it,
+  i.e. for kernel hooks old C is perfectly fine, but it's hard to beat python
+  as a systems-level language for an eventloop doing data mangling/formatting,
+  and for a graphics widget doing custom liteweight font/effects rendering,
+  a modern low-level language like Nim with fast graphics abstraction lib like SDL_
+  is the best option, to avoid using significant cpu/memory for a background/overlay
+  widget (drawing 60+ frames per second when visible and not idle).
+
+- Separate components also make is easier to tweak or debug those separately,
+  like for changing eBPF hooks or data formatting, it's easy to run loader or python
+  script and look at its stdout, or read maps via bpftool_ in case of odd output.
+
+- systemd makes it quite easy to do ``ExecStart=+...`` to run eBPF loader as root
+  and then only pass map file descriptors from that to an unprivileged data-pipe script
+  (with ``DynamicUser=yes`` and full sandboxing even), `all defined and configured
+  within one .service ini-file`_.
+
+- Not having to use large GUI framework like GTK/QT for graphical widget was quite nice
+  and refreshing, as those are hellishly complicated, and seem poorly suitable for a
+  custom things like semi-transparent constantly-updating information overlays anyway
+  (while adding a ton of unnecessary complexity and maintenance burden).
+
+- Most surprising thing was probably that pretty much whole configuration language
+  for all that filtering and grouping `ended up mapping nicely onto a list of regexps`_,
+  as displayed network info is just text lines, so regexp-replacing specific string-parts
+  in those to look nicer or to pick/match things to group by is what regexps do best.
+
+  widget.ini_ config in project repo has ones that I use and some description,
+  in addition to README sections there.
+
+- Making it configurable how visual effects behave over time is quite easy by using
+  a list of e.g. "time,transparency ..." values, with some smooth curve auto-connecting
+  those dots, to only need to specify points where direction changes.
+
+  A `simple HTML file`_ to open in browser allows to edit such curves easily,
+  like for example making info for new connections quickly fade-in and the
+  fade-out in a few smooth steps, to easily spot which ones are recent or older.
+
+  I think in gamedev this way of specifying effect magnitude over time is often
+  `referred to as "tweening" or "tweens"`_ (as in what happens in-between specific
+  states/sprites).
+
+- Was thinking to add fancier effects for the tool, but then realized that the
+  more plain and non-distracting it looks the better, as it's supposed to be in the
+  background, not something eye-catching, and smooth easing-in/out is already good for that.
+
+- Always-on-top semi-transparent non-interactable vertical overlay window fits quite
+  well on the second screen, where most stuff is read-only and unimportant anyway.
+  Works fine as a typical desktop-background window like conky as well.
+
+- C dependencies that are statically-linked-in during build seem to work fairly
+  well as `git submodules`_, being very obvious and explicit, pinned to a specific
+  supported version, and are easy enough to manage via command line.
+
+- Network accounting is quite complicated as usual, `hard to even describe in the
+  README`_ precisely but succinctly, with all the quirks and caveats there.
+
+- Nice DNS names are surprisingly not that important for such overview, as it's
+  usually fairly obvious where each app connects, especially with the timing of it
+  (e.g. when clicking some "connect" button or running git-push in a terminal),
+  and most of the usual connections are easy to regexp-replace with better-than-DNS
+  names anyway (like say "IRC" instead of whatever longer name).
+
+  Should still be easy enough to fill those in by e.g. adding a python resolver
+  module to a local unbound_ cache, which would cache queries passing through it
+  by-IP, and then resolve some special queries with encoded IPs back to names,
+  which should be way simpler and accurate than getting those from traffic inspection
+  (esp. with apps using DNS-over-TLS/HTTPS protocols).
+
+Links above all point to `project repository on github`_ but it can be also be
+found on codeberg_ or self-hosted_, as who knows how long github will still
+be around and not enshittified into the ground.
+
+.. _SDL: https://libsdl.org/
+.. _bpftool: https://bpftool.dev/
+.. _all defined and configured within one .service ini-file:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer/blob/master/leco%40.service
+.. _ended up mapping nicely onto a list of regexps:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer#hdr-regular_expressions_in_rx-_sections
+.. _widget.ini:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer/blob/master/widget.ini
+.. _simple HTML file:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer/blob/master/spline-editor.html
+.. _referred to as "tweening" or "tweens":
+  https://www.gamedeveloper.com/programming/jugglers-and-tweens
+.. _git submodules: https://git-scm.com/book/en/v2/Git-Tools-Submodules
+.. _hard to even describe in the README:
+  https://github.com/mk-fg/linux-ebpf-connection-overseer#hdr-which_traffic_gets_detected_counted
+.. _unbound: https://www.nlnetlabs.nl/projects/unbound/
+.. _project repository on github: https://github.com/mk-fg/linux-ebpf-connection-overseer
+.. _codeberg: https://codeberg.org/mk-fg/linux-ebpf-connection-overseer
+.. _self-hosted: https://fraggod.net/code/git/linux-ebpf-connection-overseer
