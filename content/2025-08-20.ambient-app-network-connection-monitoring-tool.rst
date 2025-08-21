@@ -25,7 +25,7 @@ security/privacy issues and leaks even.
 ----------
 
 This use-case requires a bunch of filtering/grouping and configurability in general,
-as well as getting more useful information about processes initiating connections,
+as well as getting more useful information about processes initiating connections
 than what common netstat_ / ss_ tools or conky's /proc/net/tcp lines provide.
 
 I.e. usual linux 16-byte /proc/<pid>/comm is not good enough, as it just says
@@ -138,14 +138,14 @@ Couple things I found interesting about these components, in no particular order
 
 - Another nice thing is that each component can use a language suitable for it,
   i.e. for kernel hooks old C is perfectly fine, but it's hard to beat python
-  as a systems-level language for an eventloop doing data mangling/formatting,
-  and for a graphics widget doing custom liteweight font/effects rendering,
+  as a systems language for an eventloop doing data mangling/formatting,
+  and for a graphical widget doing custom liteweight font/effects rendering,
   a modern low-level language like Nim with fast graphics abstraction lib like SDL_
   is the best option, to avoid using significant cpu/memory for a background/overlay
-  widget (drawing 60+ frames per second when visible and not idle).
+  window drawing 60+ frames per second (when visible and updating at least).
 
-- Separate components also make is easier to tweak or debug those separately,
-  like for changing eBPF hooks or data formatting, it's easy to run loader or python
+- Separate components also make is easier to tweak or debug those separately, like
+  for changing eBPF hooks or data formatting, it's easy to run loader and/or python
   script and look at its stdout, or read maps via bpftool_ in case of odd output.
 
 - systemd makes it quite easy to do ``ExecStart=+...`` to run eBPF loader as root
@@ -159,7 +159,7 @@ Couple things I found interesting about these components, in no particular order
   (while adding a ton of unnecessary complexity and maintenance burden).
 
 - Most surprising thing was probably that pretty much whole configuration language
-  for all that filtering and grouping `ended up mapping nicely onto a list of regexps`_,
+  for all filtering and grouping `ended up fitting nicely into a list of regexps`_,
   as displayed network info is just text lines, so regexp-replacing specific string-parts
   in those to look nicer or to pick/match things to group by is what regexps do best.
 
@@ -209,6 +209,17 @@ Couple things I found interesting about these components, in no particular order
   which should be way simpler and accurate than getting those from traffic inspection
   (esp. with apps using DNS-over-TLS/HTTPS protocols).
 
+- Kernel "sock" structs have a nice unique monotonic skc_cookie id number, but it's
+  basically unusable in tracepoints because it's lazily generated at the worst time,
+  and bpf_get_socket_cookie helper isn't available there, damnit.
+
+- Somewhat surprisingly never bumped into info about eBPF code licensing -
+  is it linking against kernel's GPL code, interpreted code on top of it,
+  maybe counts as part of the kernel in some other way?
+
+  Don't particularly care, using GPL is fine and presumably avoids any issues there,
+  but it just seems like a hairy subject that should've been covered to death somewhere.
+
 Links above all point to `project repository on github`_ but it can be also be
 found on codeberg_ or self-hosted_, as who knows how long github will still
 be around and not enshittified into the ground.
@@ -217,7 +228,7 @@ be around and not enshittified into the ground.
 .. _bpftool: https://bpftool.dev/
 .. _all defined and configured within one .service ini-file:
   https://github.com/mk-fg/linux-ebpf-connection-overseer/blob/master/leco%40.service
-.. _ended up mapping nicely onto a list of regexps:
+.. _ended up fitting nicely into a list of regexps:
   https://github.com/mk-fg/linux-ebpf-connection-overseer#hdr-regular_expressions_in_rx-_sections
 .. _widget.ini:
   https://github.com/mk-fg/linux-ebpf-connection-overseer/blob/master/widget.ini
