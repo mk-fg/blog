@@ -51,14 +51,14 @@ And above algortithms don't work too well under this constraint:
 
 Long-time solution I had for this rate-limiting use-case is to not pick
 exponential function effectively "at random" or "by intuition" (which again seems
-difficult and non-intuitive), but instead use a simple chunk of code to calculate it.
+difficult to get right), but instead use a simple chunk of code to calculate it.
 
-To be able to say "I want 20 more-and-more delayed retries within next hour"
-or "100 attempts in 1h" and not worry about further details, where backoff
-function constants will be auto-picked to space them nicely within that interval.
+Idea is to be able to say "I want 20 more-and-more delayed retries within 15m"
+or "make 100 attempts in 1h" and not worry about further details, where backoff
+function constants will be auto-picked to space them out nicely within that interval.
 
 Specific function I've used in dozens of scripts where such "time-capped retries"
-are needed is something like this:
+are needed goes something like this:
 
 .. code-block:: python
 
@@ -77,7 +77,7 @@ Sometimes with adjusted backoff_func or slack value, depending on specific use.
 
 For e.g. "10 retries within 60s timeout" it'd return a list with delays like this::
 
-  0.0 0.3 0.8 1.5 2.5 4.0 6.2 9.4 14.2 21.1
+  0.0, 0.3, 0.8, 1.5, 2.5, 4.0, 6.2, 9.4, 14.2, 21.1
 
 I.e. retry immediately, then wait 0.3s, then 0.8s, and up to 14s or 21s towards
 the end, when it's more obviously not a thing that's fixable by a quick retry.
@@ -101,7 +101,8 @@ one when it's trivial to find "close enough" values algorithmically via bisectio
 like that function does.
 
 Also usually there's no need to calculate such delays often, as they're either
-static or pre-configured, or used on uncommon error-handling code-paths.
+static or pre-configured, or used on uncommon error-handling code-paths, so having
+a heavier solution-bruteforcing algorithm isn't an issue.
 
 Not sure why, but don't think I've bumped into this kind of "attempts within timeout"
 configuration/abstractions anywhere, so might be a quirk of how I think of rate-limits
@@ -111,7 +112,7 @@ Still, seem to make much more intuitive sense to me than other common limits abo
 
 ----------
 
-Recently I've also wanted to introduce a min-delay constraing there, which ideally
+Recently I've also wanted to introduce a min-delay constraint there, which ideally
 will discard those initial short-delay values in the example list above, and pick ones
 more to the right, i.e. won't just start with delay_min + 0.0, 0.3, 0.8, ... values.
 
@@ -143,17 +144,22 @@ values that all sum up to specified timeout, so had to make algo a bit more comp
     return list( (delay_min+td) for td in
       retries_within_timeout(tries, timeout - delay_min*(tries-1), slack=slack, e=e) )
 
-As per comment in there, delay_calc is more rigid to produce predictable output
-range for known "attempt number N" inputs, and a couple pathological-case checks
+(all this is a lot less confusing when graphed, either as values from delay_calc
+or sum-of-delays-up-to-N, which can be easy to do with `a bit of HTML/JS`_)
+
+As per comment in the code, delay_calc is hardcoded to produce predictable output
+range for known "attempt number" inputs, and a couple pathological-case checks
 are needed to avoid asking for impossible values (like "fit 10 retries in 10s
 with min 3s intervals" so 10*3 = 30s within 10s) or impossible quadratic curve shapes
 (for which there're couple fallbacks at the end).
 
-Default ``e=10`` exponent base value makes values more evenly-spaced, which get more
-samey with lower e-values or ramp-up faster when higher, e.g. ``e=1000`` will change
-result like this::
+Default ``e=10`` exponent base value makes delays more evenly-spaced,
+which get more samey with lower e-values or rise more sharply with higher ones,
+e.g. ``e=1000`` will change result like this::
 
-  retries_within_timeout(10, 60, e=10)  : 0.0 0.6 1.4 2.4 3.6 5.2 7.2 9.6 12.8 16.7
-  retries_within_timeout(10, 60, e=1000): 0.0 0.1 0.2 0.4 0.9 1.9 3.8 7.6 15.2 30.4
+  retries_within_timeout(10, 60, e=10)  : 0.0, 0.6, 1.4, 2.4, 3.6, 5.2, 7.2, 9.6, 12.8, 16.7
+  retries_within_timeout(10, 60, e=1000): 0.0, 0.1, 0.2, 0.4, 0.9, 1.9, 3.8, 7.6, 15.2, 30.4
 
 So seem to be good enough for occasional tweaks instead of replacing whole delay_calc formula.
+
+.. _a bit of HTML/JS: https://github.com/mk-fg/fgtk/blob/master/metrics/d3-line-chart-boilerplate.html
