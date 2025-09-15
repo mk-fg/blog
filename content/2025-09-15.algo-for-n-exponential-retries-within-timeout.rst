@@ -1,0 +1,159 @@
+Algorithm for N exponentially-spaced retries within timeout T
+#############################################################
+
+:date: 2025-09-15 14:14
+:tags: python, rate-limiting
+
+
+When retrying some failed check or operation, common ways to algorithmically
+wait for next attempt seem to be:
+
+- Make N retries with a static interval in-between, e.g. "retry every 10s".
+
+  Works well when it's not a problem to retry too often, or need to know when
+  stuff starts working again ASAP (like within 10s), and when expected downtime
+  is predictable (something like minutes with 10s retries, not <1s or days/months).
+
+- Use exponential backoff to avoid having to predict availability/downtime.
+
+  Idea is to multiply interval each time, so it can start with 1s and rises up
+  quickly as exponential curve does, reacting well to both quick outages and
+  at the same time not still retrying needlessly every 10s after days.
+
+- Exponential backoff can quickly get out of hand, so cap its max interval.
+
+  Good tweak to set how-late-at-most working state will be detected again.
+
+But vast majority of use-cases for retries I have seem to also need "give up
+after some time" limit, so for example a tool fetching a file, will fail with
+an error in a few minutes, which I can detect and see if it can be fixed in some
+other way than just retrying endlessly (as in give router a kick or something).
+
+That timeout usually seems like the most important part to set for me - i.e.
+"I expect this to finish within 20m, so keep checking and process results when
+available".
+
+And above algortithms don't work too well under this constraint:
+
+- Fixed-interval attempts can be spaced evenly within timeout, but that's
+  usually suboptimal for same reasons as already mentioned - couple quick
+  initial attempts/retries are often more useful, and there's no point trying
+  too often after a while.
+
+- People - me included - are notoriously bad at understanding exponentials,
+  so it's nigh-impossible to tell with any exponential delay how many attempts
+  it'd imply within known timeout.
+
+  That is, depending on exact formula, could be that intervals will go up past
+  half of the timeout span fast and become effectively useless, not trying enough,
+  or otherwise make too many needless attempts throughout when timeout is known
+  to be quite long.
+
+Long-time solution I had for this rate-limiting use-case is to not pick
+exponential function effectively "at random" or "by intuition" (which again seems
+difficult and non-intuitive), but instead use a simple chunk of code to calculate it.
+
+To be able to say "I want 20 more-and-more delayed retries within next hour"
+or "100 attempts in 1h" and not worry about further details, where backoff
+function constants will be auto-picked to space them nicely within that interval.
+
+Specific function I've used in dozens of scripts where such "time-capped retries"
+are needed is something like this:
+
+.. code-block:: python
+
+  def retries_within_timeout( tries, timeout,
+      backoff_func=lambda e,n: ((e**n-1)/e), slack=0.01 ):
+    'Return list of delays to make exactly n retries within timeout'
+    a, b = 1, timeout
+    while True:
+      m = (a + b) / 2
+      delays = list(backoff_func(m, n) for n in range(tries))
+      if abs(error := sum(delays) - timeout) < slack: return delays
+      elif error > 0: b = m
+      else: a = m
+
+Sometimes with adjusted backoff_func or slack value, depending on specific use.
+
+For e.g. "10 retries within 60s timeout" it'd return a list with delays like this::
+
+  0.0 0.3 0.8 1.5 2.5 4.0 6.2 9.4 14.2 21.1
+
+I.e. retry immediately, then wait 0.3s, then 0.8s, and up to 14s or 21s towards
+the end, when it's more obviously not a thing that's fixable by a quick retry.
+
+As all these will sum up to 60s (with just ±0.01s slack), they can be easily
+plugged into a for-loop like this:
+
+.. code-block:: python
+
+  for delay in retries_within_timeout(10, 60):
+    time.sleep(delay)
+    if everything_works(): break
+
+Without then needing any extra timeout checks or a wrapper to stop the loop after,
+hence also quite convenient and expressive language abstraction imo.
+
+There's probably an analytic solution for this, to have exact formulas for
+calculating coefficients for backoff_func, that'd produce a set of N delays to
+fit precisely within timeout, but I've never been interested enough to find
+one when it's trivial to find "close enough" values algorithmically via bisection,
+like that function does.
+
+Also usually there's no need to calculate such delays often, as they're either
+static or pre-configured, or used on uncommon error-handling code-paths.
+
+Not sure why, but don't think I've bumped into this kind of "attempts within timeout"
+configuration/abstractions anywhere, so might be a quirk of how I think of rate-limits
+in my head, or maybe it's just rarely considered to be worth adding 10 lines of code over.
+
+Still, seem to make much more intuitive sense to me than other common limits above.
+
+----------
+
+Recently I've also wanted to introduce a min-delay constraing there, which ideally
+will discard those initial short-delay values in the example list above, and pick ones
+more to the right, i.e. won't just start with delay_min + 0.0, 0.3, 0.8, ... values.
+
+This proved somewhat error-prone for such bruteforce algorithm, because often
+there's simply no curve that fits neatly within narrow-enough min-max range of
+values that all sum up to specified timeout, so had to make algo a bit more complicated:
+
+.. code-block:: python
+
+  def retries_within_timeout(tries, timeout, delay_min=0, slack=None, e=10):
+    'Return list of delays to make exactly n retries within timeout'
+    if tries * delay_min * 1.1 > timeout: raise ValueError('tries * delay_min ~> timeout')
+    if tries == 1: return [max(delay_min, timeout / 2)]
+    # delay_calc is picked to produce roughly [0, m] range with n=[1, tries] inputs
+    delay_calc = lambda m,n,_d=e**(1/tries-1): m * (e ** (n / tries - 1) - _d)
+    a, b = 0, delay_min + timeout * 1.1
+    if not slack: slack = max(0.5 * delay_min, 0.1 * (timeout / tries))
+    try:
+      for bisect_step in range(50):
+        n, m, delays = 0, (a + b) / 2, list()
+        while len(delays) < tries:
+          if (td := delay_calc(m, n := n + 1)) < delay_min: continue
+          delays.append(td)
+        if a == b or abs(error := sum(delays) - timeout) < slack: return delays
+        elif error > 0: b = m
+        else: a = m
+    except OverflowError: pass # [tries*delay_min, timeout] range can be too narrow
+    if not delay_min: slack *= 2
+    return list( (delay_min+td) for td in
+      retries_within_timeout(tries, timeout - delay_min*(tries-1), slack=slack, e=e) )
+
+As per comment in there, delay_calc is more rigid to produce predictable output
+range for known "attempt number N" inputs, and a couple pathological-case checks
+are needed to avoid asking for impossible values (like "fit 10 retries in 10s
+with min 3s intervals" so 10*3 = 30s within 10s) or impossible quadratic curve shapes
+(for which there're couple fallbacks at the end).
+
+Default ``e=10`` exponent base value makes values more evenly-spaced, which get more
+samey with lower e-values or ramp-up faster when higher, e.g. ``e=1000`` will change
+result like this::
+
+  retries_within_timeout(10, 60, e=10)  : 0.0 0.6 1.4 2.4 3.6 5.2 7.2 9.6 12.8 16.7
+  retries_within_timeout(10, 60, e=1000): 0.0 0.1 0.2 0.4 0.9 1.9 3.8 7.6 15.2 30.4
+
+So seem to be good enough for occasional tweaks instead of replacing whole delay_calc formula.
