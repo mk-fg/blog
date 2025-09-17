@@ -90,6 +90,7 @@ plugged into a for-loop like this:
   for delay in retries_within_timeout(10, 60):
     time.sleep(delay)
     if everything_works(): break
+  else: raise TimeoutError('Stuff failed to work within 60s')
 
 Without then needing any extra timeout checks or a wrapper to stop the loop after,
 hence also quite convenient and expressive language abstraction imo.
