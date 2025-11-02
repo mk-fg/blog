@@ -1,0 +1,107 @@
+Safe rm to restrict file removals to be under specified dir
+###########################################################
+
+:date: 2025-11-02 17:38
+:tags: c, linux, tools, sysadmin, fs
+
+
+Using standard `rm(1)`_ tool in something like a file-backup script,
+with any "untrusted" list of paths OR an untrusted dir is wildly unsafe,
+but it's kinda frustrating to me that it doesn't have to be.
+
+On modern linux, "rm" can fairly easily have some ``--restrict-to-dir``
+option, which guarantees that all removed files will be under that dir,
+making it much safer to use in a script which needs to e.g. run `comm(1)`_
+on some file-lists and remove a bunch of unneded ones from some storage-dir.
+
+Without such tool, using old "rm" has many semantical and `TOCTOU`_ issues:
+
+- Paths can be plain-bad like ``/etc/passwd``.
+
+- Sneakier version of that can be ``/mnt/storage/../../etc/passwd``.
+
+- Or what if ``/mnt/storage/somedir`` is a symlink to ``/etc``,
+  even if path on the list is nominally ``/mnt/storage/somedir/passwd``.
+
+- And even if ``/mnt/storage/somedir`` checks out to be a real dir to stat()
+  or such, if you run straight-up "rm" or unlink() on that path, it might be
+  quickly replaced to be a symlink under that.
+
+- Relative paths add another layer of mess into this.
+
+- In addition to symlinks there are also mountpoints, which do same thing
+  too, although in less potential scenarios.
+
+To fix all of these issues, `linux has openat2() syscall since 5.6`_,
+which supports using following simple pattern to avoid everything listed above:
+
+- Given some ``path``, run ``p = realpath(path)`` on it.
+
+  So it either resolves to a canonical absolute form, with no-symlink
+  components separated by single slashes in there, or immediately returns errno
+  code if it's missing or inaccessible.
+
+- Check all restrictions on that canonical path ``p``, e.g. whether it's under
+  realpath of the dir you want it to be ("realpaths" are nicely string-comparable).
+
+- Run ``fd = openat2(p, RESOLVE_NO_SYMLINKS)`` to open that path (with optional
+  ``RESOLVE_NO_XDEV`` also in there to prevent racy mountpoints), and only use that
+  ``fd`` for the file/dir/etc from now on.
+
+  Error here will indicate that something changed since realpath() was used,
+  and you either have to run it again (where realpath() will likely fail too),
+  or treat that as an special "file vanished" error.
+
+Afaik this should shutdown any symlink-related race-conditions, as openat2()
+ensures that realpath you check is the one you'll end up opening, with nothing
+redirecting it in-between these calls.
+
+For removing files in "rm" tool, you don't really "open" files themselves,
+instead open their dirs - e.g. produced by realpath(dirname(file)) -
+with same exact check-sequence, and unlinkat() the name there.
+
+So using openat2() + unlinkat() combo instead of direct unlink(file) allows
+to introduce "make sure you only remove stuff under <this-dir>" safety restriction,
+which can be nice even to just protect against typos and accidental spaces in
+human-input paths (see many examples like ``rm -rf /usr /lib/nvidia-current/xorg/xorg``
+`in bumblebee years ago`_), but especially useful in a script or tool working
+with some specific storage dir, which is very common.
+
+Given proliferation of "rewrite in rust" tools and learning projects, tried
+looking up some version of "rm" already doing something like that,
+but failed to find one - seems hard enough to even find anyone using openat2(),
+despite it being in the kernel for 5+ years by now.
+Most "safe rm" tools are for moving files into some kind of "trash" dir,
+with somewhat different user-interactive use-case (regret after removal) and priorities.
+
+As usual, ended up writing it for myself - `rmx.c in fgtk repo`_.
+
+It's intended to be used with ``-d <dir>`` option, does realpath on that dir and
+checks all files' parent dir realpaths against that prefix before removing anything,
+uses RESOLVE_NO_SYMLINKS by default, but also has ``-x`` option for cross-mount checks.
+
+For example: ``rmx -f -d /mnt/storage -- "${file_list[@]}"``
+
+Doesn't have recursive mode, as I don't really need it atm, and that one
+probably has its own bunch of caveats.
+
+----------
+
+Other general ways to fix similar issues is chroot(), using mount namespaces,
+LSM profiles (SELinux/AppArmor/etc), idmapping + special uid/gid for that,
+and other sandboxing-adjacent techniques.
+
+That seems excessively complicated for a humble "rm <files>" command,
+but can be useful to wrap anything more complex that deals with paths a lot into
+(e.g. a `passthrough fuse-filesystem layer like acfs`_, where fixing every access
+to be sanitized like this is a lot more work).
+
+.. _rm(1): https://man.archlinux.org/man/rm.1
+.. _comm(1): https://man.archlinux.org/man/comm.1
+.. _TOCTOU: https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use
+.. _linux has openat2() syscall since 5.6: https://lwn.net/Articles/796868/
+.. _in bumblebee years ago:
+  https://github.com/MrMEEE/bumblebee-Old-and-abbandoned/issues/123
+.. _rmx.c in fgtk repo: https://github.com/mk-fg/fgtk#hdr-rmx.c
+.. _passthrough fuse-filesystem layer like acfs:
+  https://codeberg.org/mk-fg/fuse-auto-cleanup-fs
