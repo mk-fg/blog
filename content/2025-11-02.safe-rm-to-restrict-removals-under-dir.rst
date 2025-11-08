@@ -88,13 +88,14 @@ probably has its own bunch of caveats.
 ----------
 
 Other general ways to fix similar issues is chroot(), using mount namespaces,
-LSM profiles (SELinux/AppArmor/etc), idmapping + special uid/gid for that,
+LSM profiles (SELinux/AppArmor/LandLock/etc), idmapping + special uid/gid for that,
 and other sandboxing-adjacent techniques.
 
 That seems excessively complicated for a humble "rm <files>" command,
+and they're often lacking in different ways (e.g. chroot is leaky and requires root),
 but can be useful to wrap anything more complex that deals with paths a lot into
-(e.g. a `passthrough fuse-filesystem layer like acfs`_, where fixing every access
-to be sanitized like this is a lot more work).
+(like for a `fuse-filesystem overlay like acfs`_, where fixing every access to be
+sanitized like this is a bit more work).
 
 .. _rm(1): https://man.archlinux.org/man/rm.1
 .. _comm(1): https://man.archlinux.org/man/comm.1
@@ -103,5 +104,5 @@ to be sanitized like this is a lot more work).
 .. _in bumblebee years ago:
   https://github.com/MrMEEE/bumblebee-Old-and-abbandoned/issues/123
 .. _rmx.c in fgtk repo: https://github.com/mk-fg/fgtk#hdr-rmx.c
-.. _passthrough fuse-filesystem layer like acfs:
+.. _fuse-filesystem overlay like acfs:
   https://codeberg.org/mk-fg/fuse-auto-cleanup-fs
