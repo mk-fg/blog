@@ -15,24 +15,27 @@ Particular pad that I have is a relatively cheap `7.5" WaveShare NFC-powered e-P
 from AliExpress_, which is thin and light, as it doesn't have a battery, and is updated by
 NFC from a phone (quick demo like `this 30s youtube video`_ might help to get the idea).
 
-  As an aside, full pipeline for updating that pad is:
+  As an aside, full process of updating such pad goes something like this:
 
   - Cook up whatever thing in GIMP, Ctrl-E there to save 1-bit PNG.
   - Grab phone, tap BT and NFC tiles to enable those on it.
   - Run ``bt-obex -p <phone-addr> image.png`` from shell history (bluez-tools_).
-  - Click "Accept" on the phone, run nfc-epaper-writer_ app and "Load Image" there.
-  - Put phone on the tablet, wait some 10-20s to upload/refresh epaper display image.
-  - Disable BT/NFC, put phone away, grab tablet and be off to do whatever with it.
+  - Tap "Accept" on the phone, run nfc-epaper-writer_ app and "Load Image" there.
+  - Put phone on the tablet, wait some 5-10s to upload/refresh epaper display image.
+  - Disable BT/NFC, put phone away, grab the pad and be off to do something with it.
 
-Big upside of using eink pad for this is that whatever info/reminder always stays
-there to check anytime (incl. hours, days or months later), without needing
-free/clean hands to drop everything and tinker with small phone screen,
-which has to be clumsily tapped/scrolled, goes to sleep, discharges and dies,
-wash hands afterwards, etc.
+  Phone works as a cache for images, which can later be put onto pad in one step,
+  but other than that, eink pad with updates via USB cable would've had less steps.
+  So NFC power+updates there sounds neat, but not actually that useful.
+
+Upside of eink for this is that whatever info/reminder always stays there to check
+anytime (incl. hours, days or months later), without needing free/clean hands to drop
+everything and tinker with small phone screen, which has to be clumsily tapped/scrolled,
+goes to sleep, discharges and dies, wash hands afterwards, etc.
 
 But downside of this particular pad at least, is that it's purely 1-bit monochrome,
 i.e. not even grayscale, has only black-or-white pixels.
-Which tbh has its own charm with dithering_ for images (see didder_ wrapper at the end),
+Which tbf has its own charm with dithering_ for images (see didder_ wrapper at the end),
 icons/schematics there just don't need color, and large/bold text is perfectly fine
 with it too.
 
