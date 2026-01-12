@@ -1,0 +1,188 @@
+Using sharp bitmap fonts in modern GIMP
+#######################################
+
+:date: 2026-01-12 16:08
+:tags: tools
+
+
+When tinkering with something outside PC/laptop screen, I often need a reminder
+pad for a wiring schematic or recipe, or even some hotkeys, maps and other quickref-data
+when playing games on main display, and I'm using e-ink pad for that,
+combining any kind of text/icons/diagrams/images/etc into one reference card
+via common GIMP_ image editor.
+
+Particular pad that I have is a relatively cheap `7.5" WaveShare NFC-powered e-Paper one`_
+from AliExpress_, which is thin and light, as it doesn't have a battery, and is updated by
+NFC from a phone (quick demo like `this 30s youtube video`_ might help to get the idea).
+
+  As an aside, full pipeline for updating that pad is:
+
+  - Cook up whatever thing in GIMP, Ctrl-E there to save 1-bit PNG.
+  - Grab phone, tap BT and NFC tiles to enable those on it.
+  - Run ``bt-obex -p <phone-addr> image.png`` from shell history (bluez-tools_).
+  - Click "Accept" on the phone, run nfc-epaper-writer_ app and "Load Image" there.
+  - Put phone on the tablet, wait some 10-20s to upload/refresh epaper display image.
+  - Disable BT/NFC, put phone away, grab tablet and be off to do whatever with it.
+
+Big upside of using eink pad for this is that whatever info/reminder always stays
+there to check anytime (incl. hours, days or months later), without needing
+free/clean hands to drop everything and tinker with small phone screen,
+which has to be clumsily tapped/scrolled, goes to sleep, discharges and dies,
+wash hands afterwards, etc.
+
+But downside of this particular pad at least, is that it's purely 1-bit monochrome,
+i.e. not even grayscale, has only black-or-white pixels.
+Which tbh has its own charm with dithering_ for images (see didder_ wrapper at the end),
+icons/schematics there just don't need color, and large/bold text is perfectly fine
+with it too.
+
+For a long bunch of text or md data tables however (csvmd_ can align those nicely),
+fonts tend to be small and can look a bit grating when line thickness in them flips
+between 1-2px within same glyphs/letters somewhat arbitrarily after scaling.
+
+.. _GIMP: https://www.gimp.org/
+.. _7.5" WaveShare NFC-powered e-Paper one:
+  https://www.waveshare.com/wiki/7.5inch_NFC-Powered_e-Paper
+.. _AliExpress: https://aliexpress.com/
+.. _this 30s youtube video: https://www.youtube.com/watch?v=nEP4WfomskQ
+.. _bluez-tools: https://github.com/khvzak/bluez-tools
+.. _nfc-epaper-writer: https://github.com/mk-fg/nfc-epaper-writer
+.. _dithering:
+  https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html
+.. _didder: https://github.com/makew0rld/didder
+.. _csvmd: https://csvmd.com/
+
+
+`Monochrome bitmap fonts`_ don't have that issue, and work great in this
+particular use-case, as they were made for similar low pixel density monochrome
+displays, where every dot was placed manually for best human-eye legibility
+at that exact size.
+
+Only problem is that they're kinda out of fashion nowadays, as modern
+displays don't need them, and tend to be only supported in `terminal emulator apps`_
+(likely because unix people are used to them), embedded programming with 1-bit LED
+panels or similar e-paper displays, and retro-styled pixel-art game engines.
+
+  I still use XTerm_ as a day-to-day terminal emulator myself (fast -
+  compatible - familiar), which still uses bitmap fonts by default,
+  `misc-fixed 9x18 font`_ in particular. It still looks great for me on up
+  to 1080p displays, with incredibly crisp and distinctive letters,
+  but HiDPI displays probably have that with any vector fonts too.
+
+GIMP and all apps based on `GTK toolkit`_ have `dropped support for PCF/BDF
+bitmap fonts`_ some years ago in particular (around 2019-ish), which seem to be
+most common formats for these, so I was using worse-looking scaled-down
+TTFs/OTFs for smaller monochrome text, until finally bothered to lookup
+how to fix the issue.
+
+One obvious fix can be to grab some old GIMP AppImage_ - e.g.
+`aferrero2707/gimp-appimage releases`_ date back to 2018, so should work -
+but modern GIMP has nice features too, and jumping back-and-forth between
+the two or only sticking to an ancient version seems kinda silly.
+
+Another (better) fix can be to edit whatever text in emacs, render it out and
+paste into GIMP - monobit-banner tool from `monobit project`_ can do that.
+
+.. _Monochrome bitmap fonts:
+  https://en.wikipedia.org/wiki/Computer_font#Bitmap_fonts
+.. _terminal emulator apps: https://en.wikipedia.org/wiki/Terminal_emulator
+.. _XTerm: https://invisible-island.net/xterm/
+.. _misc-fixed 9x18 font: https://en.wikipedia.org/wiki/Fixed_(typeface)
+.. _GTK toolkit: https://gtk.org/
+.. _dropped support for PCF/BDF bitmap fonts:
+  https://gitlab.gnome.org/GNOME/gimp/-/issues/4411
+.. _AppImage: https://appimage.org/
+.. _aferrero2707/gimp-appimage releases:
+  https://github.com/aferrero2707/gimp-appimage/releases/
+.. _monobit project: https://github.com/robhagemans/monobit
+
+
+For all its oddities, interactive text editing in GIMP - using multiple boxes,
+reflowing, condensing, etc - is still way nicer than that paste-and-see method,
+and looking up options, I've stumbled upon a great (and surprisingly recent)
+2025 Libre Graphics Meeting (LGM) `"Let's All Go Back To Bitmap Fonts!" talk`_
+by Nathan Willis, which presents a working solution for this particular problem
+as a part of it (and covers other issues related to bitmap fonts too) - convert
+font to OpenType Bitmap format (OTB, .otb), which is still widely supported.
+
+So it looks like support for bitmap fonts isn't completely gone yet,
+just need to use that specific format instead of more common old PCF files.
+
+Same monobit_ toolkit works great for converting to OTB as well::
+
+  monobit-convert /usr/share/fonts/misc/9x18.pcf.gz \
+    set-property family Fixed set-property subfamily 9x18 \
+    to fixed-9x18.otb --overwrite
+
+Resulting .otb file can be dropped into ~/.fonts/ and GIMP will pick it up there
+(or from any dir under Edit - Preferences - Folders - Fonts), displaying with
+"<family> <subfamily>" name in the font selection dialogs, hence overriding
+those to "Fixed 9x18" above, to know specific matching height to pick for it.
+
+GIMP or its underlying font rendering libs also seem smart about scaling these
+OTB fonts only in some discrete steps to avoid loosing their distinctive sharp edges,
+but there's probably little practical reason to do that - they're already tiny
+(e.g. misc-fixed has 4x6 variant), and vector fonts work fine for larger sizes.
+
+It's a niche use-case for sure, but still nice that all those hand-crafted
+pixel-perfect fonts from past decades of computer history seem to still be usable
+with modern tools without too much hassle.
+
+.. _monobit: https://github.com/robhagemans/monobit
+.. _"Let's All Go Back To Bitmap Fonts!" talk:
+  https://media.ccc.de/v/lgm25-upstream-2025-83649-let-s-all-go-back-to-bitmap-fonts-
+
+----------
+
+Side-note on dithering - there's a nice non-interactive didder_ tool for that,
+but usually it's even nicer to interactively tweak strength/brightness
+parameters for each specific image, depending on its overall contents and what
+it will be used for.
+
+(e.g. background image can probably have less black pixels, although contrast
+text halo/outline usually takes care of any foreground-font legibility issues,
+but inherent contrast with subdued outlines looks better)
+
+My basic ad-hoc solution to turning that non-interactive tool into an interactive
+one, is to wrap it into a bash script, using zenity_ to display a couple sliders
+for those parameters:
+
+.. code-block:: bash
+
+  #!/bin/bash
+
+  src=$1 dst=$2
+  [[ -n "$src" && -n "$dst" ]] || { echo >&2 "Usage: $0 image.src.png image.png"; exit 1; }
+
+  didder=./didder_1.3.0_linux_64-bit didder_args=(
+    # Added to --strength N% --brightness M% from zenity
+    -x 800 -y 480 -p '0 255' -i "$src" -o "$dst" bayer 32x32 )
+
+  feh=feh feh_args=( # used to display and auto-reload image on the second screen
+    -ZNxsrd. -g=1920x1080+1920 -B checks --info 'echo -e " [ %t %wx%h %Ppx %SB %z%% ]\n"' )
+
+  declare -A last; render= open=t
+  fdlinecombine \
+    <(zenity --title='dither strength' --scale --text='' --print-partial \
+      --step=1 --min-value 0 --max-value 100 | stdbuf -oL sed 's/^/str /') \
+    <(zenity --title='dither brightness' --scale --text='' --print-partial \
+      --step=1 --min-value 0 --max-value 100 | stdbuf -oL sed 's/^/br /') |
+  while read -rt 0.5 t val ||:; do
+    [[ -z "$val" ]] || { last[$t]=$val; render=t; continue; }
+    [[ -z "$render" ]] && continue || render=
+    [[ -n "${last[str]}" && -n "${last[br]}" ]] || continue
+    opts=( --strength "${last[str]}"% --brightness "${last[br]}"% )
+    echo "[ $(printf '%(%F %T)T' -1) ] Render: ${opts[@]}"
+    "$didder" "${opts[@]}" "${didder_args[@]}" && sleep 0.5
+    [[ -z "$open" ]] || { "$feh" "${feh_args[@]}" "$(realpath "$dst")" & open=; }
+  done
+
+It puts feh_ image-viewer on the second screen and auto-reloads images after every tweak,
+with bash running didder_ in an event-loop after some debouncing.
+Small non-posix fdlinecombine_ tool is used there to merge parameter updates from
+any number of sliders, but can probably be replaced by tail, subshell or something
+more generic, I just tend to use it in a pinch for such dynamic-concatenation needs.
+
+.. _zenity: https://gitlab.gnome.org/GNOME/zenity
+.. _feh: https://feh.finalrewind.org/
+.. _fdlinecombine: https://github.com/vi/fdlinecombine
