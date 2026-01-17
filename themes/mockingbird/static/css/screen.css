@@ -50,16 +50,16 @@ table {
 /* Mockingbird Theme by Nevan Scott nevanscott.com */
 
 @font-face {
-  font-family: 'Luxi Sans'; font-style: normal; font-weight: normal;
-  src: local('Luxi Sans'), local('LuxiSans'), url('luxisr.ttf') format('truetype');
+	font-family: 'Liberation Sans'; font-style: normal; font-weight: normal;
+	src: local('Liberation Sans'), local('LiberationSans'), url('LiberationSans-Regular.ttf') format('truetype');
 }
 @font-face {
-  font-family: 'DejaVu Sans Mono'; font-style: normal; font-weight: normal;
-  src: local('DejaVu Sans Mono'), local('DejaVuSansMono'), url('DejaVuSansMono.ttf') format('truetype');
+	font-family: 'Liberation Mono'; font-style: normal; font-weight: normal;
+	src: local('Liberation Mono'), local('LiberationMono'), url('LiberationMono-Regular.ttf') format('truetype');
 }
 
 body {
-	font-family: 'Luxi Sans',arial,helvetica,verdana,sans-serif !important;
+	font-family: 'Liberation Sans',arial,helvetica,verdana,sans-serif !important;
 	line-height: 1.5em;
 	color: #222;
 	}
@@ -80,7 +80,7 @@ div.post img {
 	margin: 1em;
 }
 
-div.post tt.literal { font-family: 'DejaVu Sans Mono',monospace; font-size: 12px; }
+div.post tt.literal { font-family: 'Liberation Mono',monospace; }
 div.post tt.literal:before { content:"`"; }
 div.post tt.literal:after { content:"'"; }
 
@@ -188,7 +188,7 @@ blockquote {
 
 .post pre, .page pre {
 	padding: .5em;
-	font-family: 'DejaVu Sans Mono',monospace;
+	font-family: 'Liberation Mono',monospace;
 	line-height: 1.1em;
 	}
 
