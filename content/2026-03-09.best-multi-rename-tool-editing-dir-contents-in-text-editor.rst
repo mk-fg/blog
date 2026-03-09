@@ -1,0 +1,72 @@
+Best multi-rename tool - editing file-list in text $EDITOR
+##########################################################
+
+:date: 2026-03-09 09:39
+:tags: tools, python, fs
+
+
+Tools like rnm_ and regex-rename_, or one-liner shell loop like::
+
+  for p in *.mkv; do n=${p##*/}; n=<string-manipulations>...; echo mv "$p" "$n"; done
+
+\.\.\.is how I usually rename stuff, as a typical shell-for-file-management
+terminal-user.
+
+It's non-interactive and not "visual", as in you kinda have to imagine results,
+then think of all regex-replace manipulations you need to get there, type all
+those down, run it, check result, adjust regexps, repeat, ...
+
+This reminds me a lot of how paper-teletype-era "line editors" like ed_ worked,
+and there's a good reason why most people use interactive editors for text
+manipulation tasks like that by now instead.
+
+So in that spirit, as the need to organize some files arose again, decided to write
+a small script to easily delegate mass file/dir renames to an $EDITOR (`emacs in my
+case`_) - dir-edit_.
+
+You give it files/paths to use, or just run in whatever dir, and plaintext
+filename-per-line list opens, to do any number of search-replaces, multi-cursor edits,
+minor specific tweaks, etc. Any text editor is great for that.
+
+Tool either waits for $EDITOR to exit, or until file is modified (dir-inotify
+triggers for file and contents don't match), then prints a diff of old-to-new
+file-list contents, with a prompt to confirm all renames there::
+
+  QUERY: [A]pply changes, [R]eload, call [E]ditor again, [W]ait for more edits, [Q]uit/e[X]it
+
+Unlike with non-interactive tools, you've already seen the results, and done
+any number of tweaks/corrections by then, so this is mostly a confirmation step,
+in case of any unnoticed editing mishaps.
+
+Files are still checked for name conflicts afterwards (aborting unless
+``--replace`` is used), as well as other sanity-checks for recursive renaming
+(like missing dst dirs, cross-device renames, etc).
+
+File-list is simply matched line-by-line by default, i.e. new filename is
+expected to be on the same line, but other plaintext option is to tag lines with
+a small case-insensitive file-id on the right (e.g. ``my file name.txt  #xwz3``,
+which allows to reorder or add/remove lines when editing, only picking up names
+with those tags intact at the end, which shouldn't be easy to mess-up.
+
+This works great for complicated names of torrented files, which often include
+all sorts of information, typically not needed locally after download.
+
+Bonus advantage is that while aforementioned rnm/regex-rename ed/grep/sed-style
+tools do present some kind of "old -> new" info before enacting renames,
+those never bother to include trickier colorized inline diffs, which fancy diff-tools
+like delta_ can easily make (and using "delta" or "colordiff" is picked-up by default
+if those are somewhere in $PATH), so it kinda beats those at even non-interactive
+"one regexp-tweak at a time" usage.
+
+  Link: `dir-edit script in mk-fg/fgtk repo`_ (github) or `on codeberg`_, `in local git`_.
+
+
+.. _rnm: https://github.com/neurobin/rnm
+.. _regex-rename: https://github.com/igrek51/regex-rename
+.. _ed: https://en.wikipedia.org/wiki/Ed_(text_editor)
+.. _emacs in my case: https://github.com/mk-fg/emacs-setup
+.. _dir-edit: https://github.com/mk-fg/fgtk#hdr-dir-edit
+.. _delta: https://dandavison.github.io/delta/
+.. _dir-edit script in mk-fg/fgtk repo: https://github.com/mk-fg/fgtk#hdr-dir-edit
+.. _on codeberg: https://codeberg.org/mk-fg/fgtk#hdr-dir-edit
+.. _in local git: https://fraggod.net/code/git/fgtk/about/dir-edit
