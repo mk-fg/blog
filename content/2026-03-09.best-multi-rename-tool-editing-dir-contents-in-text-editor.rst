@@ -25,8 +25,8 @@ a small script to easily delegate mass file/dir renames to an $EDITOR (`emacs in
 case`_) - dir-edit_.
 
 You give it files/paths to use, or just run in whatever dir, and plaintext
-filename-per-line list opens, to do any number of search-replaces, multi-cursor edits,
-minor specific tweaks, etc. Any text editor is great for that.
+filename-per-line list opens, to do all sorts of search-replaces, cut/copy-and-pastes,
+multi-cursor edits, minor specific tweaks, etc. Any text editor is great for that.
 
 Tool either waits for $EDITOR to exit, or until file is modified (dir-inotify
 triggers for file and contents don't match), then prints a diff of old-to-new
