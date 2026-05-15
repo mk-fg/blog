@@ -1,0 +1,182 @@
+Blocking DDoS from scraper bots the easy way via HTTP-401 Basic Auth
+####################################################################
+
+:date: 2026-05-15 13:02
+:tags: sysadmin, web, rate-limiting
+
+
+Bot traffic on the internet was always comparatively high, with search engine
+scrapers and whatever odd research tools doing their thing, but that changed
+massively in recent few years with LLM-training-content-scaping bots.
+
+Those don't care about robots.txt and are designed to be unblockable, running on
+regular users' machines, faking browser user-agents and doing their thing from a
+giant massively-distributed IP pools by now (used to have somewhat blockable net
+ranges, but not anymore).
+
+This isn't a big deal for this blog for example, as there're only a few static
+pages, which these bots grab and go away reasonably quickly, but for local git
+repos this isn't the case - list of commits and various links there is effectively
+infinite, and these idiot bots want EVERY-THING!
+
+So what ends up happening is a never-ending stream of requests like this::
+
+  14.243.82.173 - - [15/May/2026:00:50:01 +0500]
+    "GET /code/git/.../pa-mixer.example.cfg?id=9537b82b... HTTP/1.1"
+    200 3516 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Safari/537.36" ...
+
+With specific bot pool typically doing this for hours or like a day at a time,
+sometimes at rates well above 100 requests per second, which is kinda nuts load,
+normally only seen by high-traffic commercial sites, not a random self-hosted git repo.
+
+Or it's more like a distributed denial of service (DDoS) attack, where no value
+is gained from it (incl. by whatever crap "AI" idiocy behind it), but resources
+are knocked off the internet one way or another, presumably with side-benefit
+that only way to look something up now will be going to those big-tech scrapers,
+for a crappy simulacra of the stuff they destroyed in the process of extraction,
+so dunno if DDoS aspect of it will go away anytime soon.
+
+Despite cgit_ that I use being super-efficient and handling the load,
+by May 2026 these scrapers even rack up a couple gigabytes of access.log
+files per day (!!!), so it got annoying enough for me at this point.
+
+.. _cgit: https://git.zx2c4.com/cgit/about/
+
+------
+
+There are few common ways of dealing with this crap:
+
+- Install Anubis_ tool, which runs a cpu-intensive challenge on clients via JS.
+- Set/check a cookie for all clients, e.g. via testcookie-nginx-module_ on HTTP level.
+- Detect bots somehow and serve them some "poisoned" content.
+- CAPTCHAs from Google/CloudFlare, or generated locally in some fashion.
+- Shutdown public access, requiring some auth, and rate-limit accounts/users (e.g. github).
+
+Don't like any JS mechanisms, as I tend to disable/limit it myself, and Anubis
+in particular looks a bit too high-maintenance for me, being like a whole complicated
+anti-spam system (and those rarely work well).
+It's a well-known and very common solution too, likely locked in an arms race
+with countermeasures.
+
+Training data "poisoning" is a variation on this, with some extra work towards
+making such scraping less lucrative and "fighting back" in a way, with its own
+spam-vs-ham arms race on top of bot-detection. Even more high-maintenance.
+
+Simple cookies - if still work - likely have their days numbered as these bots
+seem to be well-coordinated and well-funded, so probably advanced enough to do
+cookies or maybe some JS nowadays.
+
+So my thinking is to either shut public git down - which is an easy option,
+esp. given that I don't really consider myself part of "FOSS community" of any kind,
+sharing random projects doesn't benefit me in any meaningful way, and don't think
+there's anything of value lost by dropping all that off the internet anyhow.
+
+Or, alternatively, do something trivial low-maintenance that works, and an easy
+idea I had is something between remaining CAPTCHA and user authentication
+options - to put an HTTP-401 Basic Auth (which all browsers and tools like git
+still support thankfully), but only during those bot-onslaught hours every few
+days when it gets annoying, and just put login/pw right on http-401 error page
+where a human might see it without right credentials.
+
+.. _Anubis: https://anubis.techaro.lol/
+.. _testcookie-nginx-module: https://github.com/kyprizel/testcookie-nginx-module
+
+------
+
+First thing I did a while ago is to remove massive access/error logs that
+needlessly trash CPU and SSD erase-cycles (and make these logs useless anyway
+due to sheer size), starting with \/etc\/fstab::
+
+  tmpfs /run/nginx/temp-logs tmpfs size=50m,nodev,nosuid,uid=nginx,gid=nginx,mode=750
+
+Then put nginx_ info-level ``error_log`` and unfiltered ``access_log`` there,
+with separate logrotate-temp-nginx.service having ``size 5M`` + ``rotate 1`` +
+SIGUSR1 to nginx, and running often enough to handle high-spam-tides, to have more
+than enough logs for any kind of observability/debug purposes.
+
+.. _nginx: https://nginx.org/
+
+This actually doesn't mean that all logs have to go there, as e.g. ``error_log
+... warn`` doesn't get spammy from bots, and neither do ``access_log ... if=$log_bot_filter``
+if-filtered ones, with ``$log_bot_filter`` set as e.g.::
+
+  map "$status $request" $log_bot_filter {
+    "~*301 GET https?:" 0;
+    "~*[34]01 GET /code/git/" 0;
+    default 1;
+  }
+
+(where current bots often send proxy-like bogus full-URL requests,
+and 301/401 to git URLs are from bot-storm-auth thing described below)
+
+HTTP Basic Authentication is supported by nginx (or probably any httpd) natively::
+
+  location ~ ^/code/git(/.*)?$ {
+    include auth.bots-cgit.inc;
+    error_page 401 @bot-401;
+    ...<request-handling-options>
+  }
+
+  location @bot-401 {
+    try_files /bot-401.html =401;
+  }
+
+With ``auth.bots-cgit.inc`` something like this::
+
+  auth_basic "Skip auth and read error-401 page";
+  auth_basic_user_file auth.bots-cgit.secret;
+
+It's in a separate include-file to be easy to toggle on and off,
+as bot tides rise and fall, which can be done via somewhat trivial
+cron-check every few dozen minutes:
+
+.. code-block:: bash
+
+  #!/bin/bash
+  # log_format temp '$time_iso8601 $status $remote_addr :: $http_host :: $request_uri';
+  p_log=/run/nginx/temp-logs/access.log
+  rps_ddos=20 # min requests per second to enable http auth
+
+  # Check rotated log as well if new one is small-ish (~170B / line)
+  p_log_sz=$(stat -c%s $p_log 2>/dev/null || echo 0)
+  if [[ "$p_log_sz" -ge 2000000 || ! -e "$p_log".1 ]]
+    then cmd1="tail -qn 9000 $p_log" cmd2=cat
+    else cmd1="tail -qn 7000 $p_log.1 $p_log" cmd2='tail -qn 9000'; fi
+
+  read n ts < <( $cmd1 | $cmd2 | awk '
+    $NF!~/^\/code\/git/ {next} {n+=1} !ts {ts=$1} END {print n, ts}' )
+  [[ -n "$ts" ]] || exit 0 # no matched lines - odd but possible
+  rps=$(( $n / ( $(printf '%(%s)T' -1) - $(date +%s -d "$ts") ) ))
+
+  grep -q '^auth_basic' auth.bots-cgit.inc && auth_enabled=1 || auth_enabled=
+  if [[ "$rps" -ge "$rps_ddos" ]] # exit if auth_enabled is what it should be
+    then [[ -z "$auth_enabled" ]] || exit 0
+    else [[ -n "$auth_enabled" ]] || exit 0 ; fi
+
+  # ... otherwise enable/disable lines in auth.bots-cgit.inc and reload nginx config
+
+So that if these spammy bots go away eventually, either temporarily or when
+"AI bubble" bursts and operators go bust or maybe make them a bit smarter,
+then none of this would be annoying actual users or whatever other more well-behaved
+bots during quiet times, but remove or mitigate the need to maintain highload setup
+just for bot-nonsense.
+
+One last piece is a trivial bot-401.html placeholder-page and credentials in
+``auth.bots-cgit.secret`` file - these don't need to be fancy or secure.
+I've ended up making small script to generate and rotate login/pw in these files
+on a daily cronjob - nginx-auth-rotate_ - which keeps old auth credentials working
+for a while even after new ones are put into secrets/html files.
+
+Actual LLMs can probably be used to read http error-401 pages for such credentials,
+but doubt anyone'd bother adding that, if this specific workaround is used sparsely,
+and there's an easy fix for that going down the "CAPTCHA" route - put any silly riddle
+there that slop-generators will struggle with, like `"how many R letters are in a strawberry"`_ :)
+
+There's probably also a more sophisticated solution that first displays
+"use these login/pw" to browsers (humans) without auth or "seen the warning" cookie,
+to make such auth look less show-stopper for people who won't read error-401 page,
+but that's not a big concern for some random obscure web-git like mine, and doesn't
+seem worth bothering with when this basic solution works already.
+
+.. _nginx-auth-rotate: https://github.com/mk-fg/fgtk#hdr-nginx-auth-rotate
+.. _"how many R letters are in a strawberry": https://arxiv.org/html/2412.18626v1

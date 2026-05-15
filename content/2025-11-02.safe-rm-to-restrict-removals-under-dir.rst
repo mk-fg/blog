@@ -50,7 +50,7 @@ which supports using following simple pattern to avoid everything listed above:
 
   Error here will indicate that something changed since realpath() was used,
   and you either have to run it again (where realpath() will likely fail too),
-  or treat that as an special "file vanished" error.
+  or treat that as a special "file vanished" error.
 
 Afaik this should shutdown any symlink-related race-conditions, as openat2()
 ensures that realpath you check is the one you'll end up opening, with nothing
